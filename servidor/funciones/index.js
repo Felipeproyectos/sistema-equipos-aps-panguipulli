@@ -3,6 +3,7 @@
 import aprobarInspeccion from './aprobarInspeccion.js';
 import aprobarSolicitudRepuesto from './aprobarSolicitudRepuesto.js';
 import enviarAlertasCESFAM from './enviarAlertasCESFAM.js';
+import enviarCorreo from './enviarCorreo.js';
 import exportarBackup from './exportarBackup.js';
 import generarAlertasAutomaticas from './generarAlertasAutomaticas.js';
 import generarDocumentoPrueba from './generarDocumentoPrueba.js';
@@ -23,6 +24,7 @@ export const handlers = {
   aprobarInspeccion,
   aprobarSolicitudRepuesto,
   enviarAlertasCESFAM,
+  enviarCorreo,
   exportarBackup,
   generarAlertasAutomaticas,
   generarDocumentoPrueba,

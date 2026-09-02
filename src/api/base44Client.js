@@ -2,24 +2,32 @@ import { createClient } from '@base44/sdk';
 import { appParams } from '@/lib/app-params';
 import { isSimulandoActivo, MENSAJE_BLOQUEO_SIMULACION } from '@/lib/roleSimulator';
 import { clienteLocal } from '@/api/local/compat';
+import { clienteSupabase } from '@/api/clienteSupabase';
 import { PERMISOS } from '@/lib/permisos';
 
 const { appId, token, functionsVersion, appBaseUrl } = appParams;
 
-// Con VITE_MODO=local se corre sin Base44 ni Supabase: los datos salen del
-// respaldo, en memoria, y las funciones se ejecutan en el navegador.
-// Ver README-LOCAL.md. Todo lo de abajo (bloqueo de simulacion, soft delete)
-// aplica igual, porque envuelve al cliente sea cual sea.
+// El motor se elige aca y en ningun otro lado. Las ~214 llamadas de la app
+// entran por el Proxy de mas abajo, asi que cambiar de motor no toca ninguna
+// pantalla — todo lo que sigue (bloqueo de simulacion, solo lectura del
+// Monitor, borrado logico) vale igual sea cual sea.
+//
+//   VITE_MODO=local      -> datos en memoria, sin backend (README-LOCAL.md)
+//   VITE_MODO=supabase   -> Supabase + el servidor de Railway
+//   sin VITE_MODO        -> Base44, como estaba antes de migrar
 export const MODO_LOCAL = import.meta.env.VITE_MODO === 'local';
+export const MODO_SUPABASE = import.meta.env.VITE_MODO === 'supabase';
 
-const base44Raw = MODO_LOCAL ? clienteLocal : createClient({
-  appId,
-  token,
-  functionsVersion,
-  serverUrl: '',
-  requiresAuth: false,
-  appBaseUrl
-});
+const base44Raw = MODO_LOCAL ? clienteLocal
+  : MODO_SUPABASE ? clienteSupabase
+  : createClient({
+      appId,
+      token,
+      functionsVersion,
+      serverUrl: '',
+      requiresAuth: false,
+      appBaseUrl
+    });
 
 // ── Bloqueo centralizado de escrituras durante "Simular Rol" ────────────────
 // Solo Base del Sistema (super_admin) puede activar la simulación (ver

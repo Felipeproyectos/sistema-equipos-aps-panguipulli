@@ -37,6 +37,12 @@ python migracion/verificar_migracion.py backup-sistema.json
 
 Debe decir `908  908` y *"Sin perdidas"*.
 
+### Crear el bucket de archivos
+
+En Supabase → Storage → New bucket → nombre **`archivos`**, marcado como
+público. Ahí van las fotos de equipos, las boletas de compra y los PDF que
+suben las pantallas. Sin él, cada subida falla.
+
 ### Crear las cuentas de acceso
 
 Después de cargar los datos, una sola vez:
@@ -102,6 +108,22 @@ Debe responder `{"ok":true,"funciones":18,"tareas":[...]}`.
 ---
 
 ## 3. Frontend
+
+Necesita tres variables. Créalas como `.env.production` o cárgalas en el panel
+de tu hosting:
+
+```
+VITE_MODO=supabase
+VITE_SUPABASE_URL=https://xxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...          # la anon, NUNCA la service_role
+VITE_API_URL=https://TU-SERVICIO.up.railway.app
+```
+
+`VITE_MODO` elige el motor del cliente: `supabase` para producción, `local`
+para el modo de revisión, y sin valor vuelve a Base44.
+
+**Solo la anon key.** Todo lo que empieza con `VITE_` termina dentro del bundle
+que descarga cada usuario. La `service_role` va únicamente en Railway.
 
 ```bash
 npm install && npm run build
