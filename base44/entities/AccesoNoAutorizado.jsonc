@@ -1,0 +1,68 @@
+{
+  "name": "AccesoNoAutorizado",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "description": "Email de la cuenta que ingres\u00f3 o intent\u00f3 acceder"
+    },
+    "fecha_intento": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Fecha y hora del evento de acceso"
+    },
+    "user_agent": {
+      "type": "string",
+      "description": "Navegador/dispositivo utilizado"
+    },
+    "resultado": {
+      "type": "string",
+      "enum": [
+        "exitoso",
+        "no_autorizado",
+        "rechazado",
+        "bloqueado",
+        "pendiente"
+      ],
+      "description": "Resultado del intento de acceso"
+    },
+    "usuario_nombre": {
+      "type": "string",
+      "description": "Nombre del usuario (si el acceso fue exitoso)"
+    },
+    "rol": {
+      "type": "string",
+      "description": "Rol del usuario en la app (si el acceso fue exitoso)"
+    },
+    "notas": {
+      "type": "string",
+      "description": "Notas adicionales"
+    }
+  },
+  "required": [
+    "email",
+    "fecha_intento"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "super_admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "super_admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "super_admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "super_admin"
+      }
+    }
+  }
+}

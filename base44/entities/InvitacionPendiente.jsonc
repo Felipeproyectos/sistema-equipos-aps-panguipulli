@@ -1,0 +1,111 @@
+{
+  "name": "InvitacionPendiente",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "description": "Correo del usuario invitado (en min\u00fasculas)"
+    },
+    "rol_asignado": {
+      "type": "string",
+      "description": "Rol espec\u00edfico de la app que se aplicar\u00e1 cuando el usuario acepte la invitaci\u00f3n"
+    },
+    "centro_principal": {
+      "type": "string",
+      "description": "Centro principal a asignar (opcional)"
+    },
+    "invitado_por_email": {
+      "type": "string"
+    },
+    "invitado_por_nombre": {
+      "type": "string"
+    },
+    "aplicada": {
+      "type": "boolean",
+      "default": false,
+      "description": "True cuando el rol ya fue aplicado al usuario"
+    }
+  },
+  "required": [
+    "email",
+    "rol_asignado"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

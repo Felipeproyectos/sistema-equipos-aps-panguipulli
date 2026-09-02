@@ -1,0 +1,182 @@
+{
+  "name": "OrdenDeCompra",
+  "type": "object",
+  "properties": {
+    "numero_oc": {
+      "type": "string",
+      "description": "Identificador de la orden de compra"
+    },
+    "proveedor_id": {
+      "type": "string"
+    },
+    "proveedor_nombre": {
+      "type": "string"
+    },
+    "creado_por_email": {
+      "type": "string"
+    },
+    "creado_por_nombre": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "repuesto_nombre": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "number"
+          },
+          "precio_unitario": {
+            "type": "number"
+          },
+          "subtotal": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "\u00cdtems de la orden de compra"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "borrador",
+        "emitida",
+        "recibida",
+        "cancelada"
+      ],
+      "default": "emitida"
+    },
+    "total": {
+      "type": "number",
+      "default": 0
+    },
+    "fecha_emision": {
+      "type": "string",
+      "format": "date"
+    },
+    "fecha_entrega_estimada": {
+      "type": "string",
+      "format": "date"
+    },
+    "solicitud_repuesto_id": {
+      "type": "string",
+      "description": "Solicitud de repuesto que origin\u00f3 esta OC (opcional)"
+    },
+    "notas": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "numero_oc",
+    "estado"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "mecanico"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "monitor_corporativo"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "mecanico"
+          }
+        },
+        {
+          "created_by": "{{user.email}}"
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_taller"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        }
+      ]
+    }
+  }
+}

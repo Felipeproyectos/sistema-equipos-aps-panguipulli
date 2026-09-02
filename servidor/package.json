@@ -1,0 +1,22 @@
+{
+  "name": "equipos-aps-servidor",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@supabase/supabase-js": "^2.47.10",
+    "date-fns": "^3.6.0",
+    "hono": "^4.6.14",
+    "node-cron": "^4.6.0"
+  },
+  "imports": {
+    "#compat": "./base44compat.js"
+  }
+}

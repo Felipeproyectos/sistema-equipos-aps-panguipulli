@@ -1,0 +1,81 @@
+{
+  "name": "Centro",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre del centro principal"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "CESFAM",
+        "CECOSF"
+      ],
+      "description": "Tipo de centro"
+    },
+    "sucursales": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Lugares/sucursales dependientes del centro"
+    },
+    "emails_contacto": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Correos de contacto que recibir\u00e1n notificaciones de alertas"
+    }
+  },
+  "required": [
+    "nombre",
+    "tipo"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": null,
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

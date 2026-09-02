@@ -1,0 +1,71 @@
+{
+  "name": "Historial",
+  "type": "object",
+  "properties": {
+    "usuario_email": {
+      "type": "string",
+      "description": "Email del usuario que realiz\u00f3 la acci\u00f3n"
+    },
+    "usuario_nombre": {
+      "type": "string",
+      "description": "Nombre del usuario"
+    },
+    "usuario_rol": {
+      "type": "string",
+      "description": "Rol del usuario al momento de la acci\u00f3n"
+    },
+    "accion": {
+      "type": "string",
+      "enum": [
+        "crear",
+        "editar",
+        "eliminar"
+      ],
+      "description": "Tipo de acci\u00f3n realizada"
+    },
+    "entidad": {
+      "type": "string",
+      "description": "Tipo de entidad afectada"
+    },
+    "entidad_id": {
+      "type": "string",
+      "description": "ID del registro afectado"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripci\u00f3n legible de la acci\u00f3n"
+    },
+    "datos_anteriores": {
+      "type": "string",
+      "description": "JSON de los datos anteriores (en edici\u00f3n)"
+    }
+  },
+  "required": [
+    "usuario_email",
+    "accion",
+    "entidad",
+    "descripcion"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "super_admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "super_admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "super_admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "super_admin"
+      }
+    }
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "name": "RepuestoCritico",
+  "type": "object",
+  "properties": {
+    "equipo_id": {
+      "type": "string"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "neumaticos",
+        "frenos",
+        "bateria",
+        "filtros",
+        "sirena",
+        "luces"
+      ]
+    },
+    "marca_modelo": {
+      "type": "string"
+    },
+    "estado_label": {
+      "type": "string",
+      "enum": [
+        "operativo",
+        "revision_requerida",
+        "excelente",
+        "suficiente",
+        "critico",
+        "agotado"
+      ]
+    },
+    "vida_util_pct": {
+      "type": "number"
+    },
+    "stock_unidades": {
+      "type": "number"
+    },
+    "ultimo_cambio": {
+      "type": "string"
+    },
+    "proximo_mantenimiento": {
+      "type": "string"
+    },
+    "notas": {
+      "type": "string"
+    },
+    "modificado_por": {
+      "type": "string"
+    },
+    "fecha_modificacion": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "equipo_id",
+    "tipo"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "mecanico"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "monitor_corporativo"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "mecanico"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        }
+      ]
+    }
+  }
+}

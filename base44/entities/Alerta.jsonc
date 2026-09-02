@@ -1,0 +1,134 @@
+{
+  "name": "Alerta",
+  "type": "object",
+  "properties": {
+    "equipo_id": {
+      "type": "string"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "parche_vencido",
+        "parche_por_vencer",
+        "bateria_vencida",
+        "bateria_por_vencer",
+        "mantenimiento_requerido",
+        "equipo_fuera_servicio",
+        "revision_tecnica_vencida",
+        "revision_tecnica_por_vencer",
+        "permiso_circulacion_vencido",
+        "permiso_circulacion_por_vencer",
+        "certificacion_vencida",
+        "certificacion_por_vencer"
+      ]
+    },
+    "descripcion": {
+      "type": "string"
+    },
+    "nivel": {
+      "type": "string",
+      "enum": [
+        "critica",
+        "advertencia",
+        "info"
+      ],
+      "default": "advertencia"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "activa",
+        "resuelta"
+      ],
+      "default": "activa"
+    },
+    "centro": {
+      "type": "string"
+    },
+    "subsede": {
+      "type": "string"
+    },
+    "actividad_resolucion_id": {
+      "type": "string",
+      "description": "ID de la actividad que resuelve esta alerta"
+    },
+    "fecha_resolucion": {
+      "type": "string",
+      "format": "date"
+    },
+    "notificacion_enviada": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "equipo_id",
+    "tipo",
+    "nivel"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_salud"
+          }
+        }
+      ]
+    },
+    "read": true,
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_salud"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

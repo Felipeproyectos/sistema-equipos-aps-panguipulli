@@ -1,0 +1,160 @@
+{
+  "name": "HistorialMantenimiento",
+  "type": "object",
+  "properties": {
+    "equipo_id": {
+      "type": "string",
+      "description": "ID del equipo"
+    },
+    "fecha_inspeccion": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de la inspecci\u00f3n"
+    },
+    "tipo_mantenimiento": {
+      "type": "string",
+      "enum": [
+        "preventivo",
+        "correctivo",
+        "calibracion",
+        "inspeccion_rutinaria",
+        "mantenimiento_externo"
+      ],
+      "description": "Tipo de mantenimiento realizado"
+    },
+    "resultado": {
+      "type": "string",
+      "enum": [
+        "aprobado",
+        "aprobado_con_observaciones",
+        "rechazado"
+      ],
+      "default": "aprobado",
+      "description": "Resultado de la inspecci\u00f3n"
+    },
+    "pruebas_realizadas": {
+      "type": "string",
+      "description": "Descripci\u00f3n de las pruebas t\u00e9cnicas realizadas"
+    },
+    "observaciones": {
+      "type": "string",
+      "description": "Notas y observaciones de la revisi\u00f3n"
+    },
+    "tecnico_responsable": {
+      "type": "string",
+      "description": "Nombre del t\u00e9cnico que realiz\u00f3 el mantenimiento"
+    },
+    "proximo_mantenimiento": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha sugerida para pr\u00f3ximo mantenimiento"
+    },
+    "informe_url": {
+      "type": "string",
+      "description": "URL del informe de mantenimiento"
+    },
+    "cargado_por_email": {
+      "type": "string",
+      "description": "Email del usuario que carg\u00f3 esta entrada del historial"
+    },
+    "empresa_responsable": {
+      "type": "string",
+      "description": "Empresa o persona responsable de este mantenimiento"
+    }
+  },
+  "required": [
+    "equipo_id",
+    "fecha_inspeccion",
+    "tipo_mantenimiento",
+    "resultado"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        },
+        {
+          "data.cargado_por_email": "{{user.email}}"
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "mecanico"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "monitor_corporativo"
+          }
+        },
+        {
+          "data.cargado_por_email": "{{user.email}}"
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

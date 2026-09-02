@@ -1,0 +1,333 @@
+{
+  "name": "Equipo",
+  "type": "object",
+  "properties": {
+    "numero_inventario": {
+      "type": "string",
+      "description": "N\u00famero de inventario \u00fanico"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "dea",
+        "monitor_desfibrilador",
+        "ambulancia",
+        "monitor_multiparametros"
+      ],
+      "description": "Tipo de equipo m\u00e9dico"
+    },
+    "marca": {
+      "type": "string"
+    },
+    "modelo": {
+      "type": "string"
+    },
+    "numero_serie": {
+      "type": "string"
+    },
+    "anio_adquisicion": {
+      "type": "number"
+    },
+    "fecha_fabricacion": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de fabricaci\u00f3n del equipo"
+    },
+    "proveedor": {
+      "type": "string",
+      "description": "Empresa o persona que vendi\u00f3 el equipo"
+    },
+    "pais_origen": {
+      "type": "string",
+      "description": "Pa\u00eds de origen o fabricaci\u00f3n del equipo"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "operativo",
+        "mantenimiento",
+        "fuera_de_servicio"
+      ],
+      "default": "operativo"
+    },
+    "centro_principal": {
+      "type": "string",
+      "description": "Nombre del centro principal"
+    },
+    "subsede": {
+      "type": "string",
+      "description": "Subsede o lugar dependiente"
+    },
+    "ubicacion_especifica": {
+      "type": "string",
+      "description": "Ubicaci\u00f3n espec\u00edfica dentro del lugar"
+    },
+    "fecha_vencimiento_bateria": {
+      "type": "string",
+      "format": "date"
+    },
+    "patente": {
+      "type": "string",
+      "description": "Solo para ambulancias"
+    },
+    "valor": {
+      "type": "number"
+    },
+    "orden_compra_url": {
+      "type": "string"
+    },
+    "foto_url": {
+      "type": "string"
+    },
+    "usuarios_asignados": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Emails de usuarios con acceso"
+    },
+    "notas": {
+      "type": "string"
+    },
+    "conductor_responsable": {
+      "type": "string",
+      "description": "Conductor responsable (solo ambulancias)"
+    },
+    "estado_neumaticos": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "desgastado",
+        "requiere_cambio"
+      ],
+      "description": "Estado de los neum\u00e1ticos"
+    },
+    "estado_luces": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "falla_leve",
+        "falla_grave"
+      ],
+      "description": "Estado de las luces"
+    },
+    "estado_bateria_vehiculo": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "baja_carga",
+        "requiere_reemplazo"
+      ],
+      "description": "Estado de la bater\u00eda del veh\u00edculo"
+    },
+    "estado_sirena": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "falla_leve",
+        "falla_grave"
+      ],
+      "description": "Estado de la sirena"
+    },
+    "estado_revision_tecnica": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "en_gestion",
+        "pendiente",
+        "vencida"
+      ],
+      "description": "Estado de la revisi\u00f3n t\u00e9cnica"
+    },
+    "fecha_vencimiento_revision_tecnica": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de vencimiento de la revisi\u00f3n t\u00e9cnica"
+    },
+    "estado_permiso_circulacion": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "en_gestion",
+        "pendiente",
+        "vencido"
+      ],
+      "description": "Estado del permiso de circulaci\u00f3n"
+    },
+    "fecha_vencimiento_permiso_circulacion": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de vencimiento del permiso de circulaci\u00f3n"
+    },
+    "fecha_ultimo_informe_externo": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha del \u00faltimo informe de mantenimiento externo"
+    },
+    "url_ultimo_informe_externo": {
+      "type": "string",
+      "description": "URL del \u00faltimo informe de mantenimiento externo"
+    },
+    "responsable_carga_informe_externo": {
+      "type": "string",
+      "description": "Email del usuario que carg\u00f3 el informe externo"
+    },
+    "empresa_responsable_informe_externo": {
+      "type": "string",
+      "description": "Empresa o persona responsable del informe externo"
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Falso = eliminado l\u00f3gicamente (soft delete). Se conserva el registro para auditor\u00eda; no aparece en listados normales."
+    },
+    "proxima_revision_anual": {
+      "type": "string",
+      "format": "date",
+      "description": "Vencimiento de la certificaci\u00f3n anual externa. Es la fecha que dispara la alerta; sin ella el sistema no puede avisar que caduca."
+    },
+    "resultado_ultimo_informe_externo": {
+      "type": "string",
+      "enum": [
+        "aprobado",
+        "aprobado_con_observaciones",
+        "rechazado"
+      ],
+      "description": "Dictamen del t\u00e9cnico externo en la \u00faltima certificaci\u00f3n anual."
+    }
+  },
+  "required": [
+    "numero_inventario",
+    "tipo",
+    "marca",
+    "modelo",
+    "estado",
+    "centro_principal"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "$and": [
+            {
+              "user_condition": {
+                "role": "encargado_salud"
+              }
+            },
+            {
+              "data.centro_principal": "{{user.data.centro_principal}}"
+            }
+          ]
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "monitor_corporativo"
+          }
+        },
+        {
+          "$and": [
+            {
+              "user_condition": {
+                "role": "jefe_taller"
+              }
+            },
+            {
+              "data.tipo": "ambulancia"
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "user_condition": {
+                "role": "mecanico"
+              }
+            },
+            {
+              "data.tipo": "ambulancia"
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "user_condition": {
+                "role": "encargado_compras_taller"
+              }
+            },
+            {
+              "data.tipo": "ambulancia"
+            }
+          ]
+        },
+        {
+          "data.centro_principal": "{{user.data.centro_principal}}"
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "$and": [
+            {
+              "user_condition": {
+                "role": "encargado_salud"
+              }
+            },
+            {
+              "data.centro_principal": "{{user.data.centro_principal}}"
+            }
+          ]
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

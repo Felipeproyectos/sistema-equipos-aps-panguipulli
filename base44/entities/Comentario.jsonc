@@ -1,0 +1,83 @@
+{
+  "name": "Comentario",
+  "type": "object",
+  "properties": {
+    "equipo_id": {
+      "type": "string",
+      "description": "ID del equipo sobre el que se comenta (ambulancia, DEA, monitor, etc.)"
+    },
+    "equipo_label": {
+      "type": "string",
+      "description": "Descripci\u00f3n legible del equipo, para no depender de un join"
+    },
+    "orden_trabajo_id": {
+      "type": "string",
+      "description": "ID de la Orden de Trabajo asociada, si el comentario nace desde Taller"
+    },
+    "mensaje": {
+      "type": "string",
+      "description": "Contenido de la nota, pregunta o respuesta"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "nota",
+        "pregunta",
+        "respuesta"
+      ],
+      "default": "nota",
+      "description": "Tipo de mensaje dentro del hilo"
+    },
+    "autor_email": {
+      "type": "string"
+    },
+    "autor_nombre": {
+      "type": "string"
+    },
+    "autor_rol": {
+      "type": "string",
+      "description": "Rol de quien escribi\u00f3, para mostrar la insignia (Monitor Corporativo, Jefe de Taller, Encargado Salud...)"
+    }
+  },
+  "required": [
+    "equipo_id",
+    "mensaje"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "monitor_corporativo"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        }
+      ]
+    },
+    "read": true,
+    "update": {
+      "user_condition": {
+        "role": "super_admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "super_admin"
+      }
+    }
+  }
+}

@@ -1,0 +1,176 @@
+{
+  "name": "Actividad",
+  "type": "object",
+  "properties": {
+    "equipo_id": {
+      "type": "string"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "otros",
+        "mantenimiento_preventivo",
+        "mantenimiento_correctivo",
+        "error_calibracion",
+        "inspeccion",
+        "traslado",
+        "inspeccion_semanal",
+        "inspeccion_anual",
+        "incidente"
+      ]
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "usuario_email": {
+      "type": "string"
+    },
+    "usuario_nombre": {
+      "type": "string"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "centro_origen": {
+      "type": "string"
+    },
+    "subsede_origen": {
+      "type": "string"
+    },
+    "centro_destino": {
+      "type": "string"
+    },
+    "subsede_destino": {
+      "type": "string"
+    },
+    "alerta_id": {
+      "type": "string"
+    },
+    "archivo_url": {
+      "type": "string"
+    },
+    "tipo_incidente": {
+      "type": "string",
+      "enum": [
+        "falla_mecanica",
+        "accidente",
+        "otros"
+      ],
+      "description": "Tipo espec\u00edfico de incidente (solo para tipo=incidente)"
+    },
+    "ambulancia_operativa": {
+      "type": "boolean",
+      "description": "Indica si la ambulancia qued\u00f3 operativa tras el incidente",
+      "default": true
+    }
+  },
+  "required": [
+    "equipo_id",
+    "tipo",
+    "fecha"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "$and": [
+            {
+              "user_condition": {
+                "role": "encargado_salud"
+              }
+            },
+            {
+              "data.centro_origen": "{{user.data.centro_principal}}"
+            }
+          ]
+        },
+        {
+          "data.usuario_email": "{{user.email}}"
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "$and": [
+            {
+              "user_condition": {
+                "role": "encargado_salud"
+              }
+            },
+            {
+              "data.centro_origen": "{{user.data.centro_principal}}"
+            }
+          ]
+        },
+        {
+          "data.usuario_email": "{{user.email}}"
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "$and": [
+            {
+              "user_condition": {
+                "role": "encargado_salud"
+              }
+            },
+            {
+              "data.centro_origen": "{{user.data.centro_principal}}"
+            }
+          ]
+        },
+        {
+          "data.usuario_email": "{{user.email}}"
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "name": "ConsumoRepuesto",
+  "type": "object",
+  "properties": {
+    "repuesto_id": {
+      "type": "string",
+      "description": "ID del repuesto consumido"
+    },
+    "repuesto_nombre": {
+      "type": "string"
+    },
+    "cantidad": {
+      "type": "number",
+      "default": 1
+    },
+    "precio_unitario": {
+      "type": "number",
+      "default": 0
+    },
+    "subtotal": {
+      "type": "number",
+      "default": 0
+    },
+    "tipo_vehiculo": {
+      "type": "string",
+      "enum": [
+        "corporativo",
+        "externo"
+      ],
+      "default": "corporativo"
+    },
+    "equipo_id": {
+      "type": "string",
+      "description": "ID del equipo/veh\u00edculo corporativo (opcional)"
+    },
+    "equipo_label": {
+      "type": "string",
+      "description": "Descripci\u00f3n legible del veh\u00edculo"
+    },
+    "patente": {
+      "type": "string"
+    },
+    "marca_modelo": {
+      "type": "string"
+    },
+    "consumido_por_email": {
+      "type": "string"
+    },
+    "consumido_por_nombre": {
+      "type": "string"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "origen": {
+      "type": "string",
+      "enum": [
+        "consumo_directo",
+        "solicitud_aprobada"
+      ],
+      "default": "consumo_directo"
+    }
+  },
+  "required": [
+    "repuesto_id",
+    "repuesto_nombre",
+    "cantidad",
+    "tipo_vehiculo"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_taller"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "monitor_corporativo"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "mecanico"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        }
+      ]
+    }
+  }
+}

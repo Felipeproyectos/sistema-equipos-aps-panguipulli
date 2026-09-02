@@ -1,0 +1,137 @@
+{
+  "name": "Proveedor",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre o raz\u00f3n social del proveedor"
+    },
+    "rut": {
+      "type": "string",
+      "description": "RUT del proveedor"
+    },
+    "rubro": {
+      "type": "string",
+      "enum": [
+        "repuestos",
+        "neumaticos",
+        "lubricantes",
+        "servicio_tecnico",
+        "insumos_medicos",
+        "otros"
+      ],
+      "description": "Rubro principal del proveedor. 'insumos_medicos' es para proveedores de parches, bater\u00edas y consumibles de salud (gestionados por Encargado Compras Salud); el resto son de Taller."
+    },
+    "contacto_nombre": {
+      "type": "string",
+      "description": "Nombre de la persona de contacto"
+    },
+    "telefono": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "direccion": {
+      "type": "string"
+    },
+    "ciudad": {
+      "type": "string"
+    },
+    "web": {
+      "type": "string",
+      "description": "Sitio web del proveedor"
+    },
+    "notas": {
+      "type": "string"
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "nombre",
+    "rubro"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_salud"
+          }
+        }
+      ]
+    },
+    "read": true,
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_salud"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        }
+      ]
+    }
+  }
+}

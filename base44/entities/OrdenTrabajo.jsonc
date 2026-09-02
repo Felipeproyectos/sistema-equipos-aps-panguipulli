@@ -1,0 +1,300 @@
+{
+  "name": "OrdenTrabajo",
+  "type": "object",
+  "properties": {
+    "numero_ot": {
+      "type": "string",
+      "description": "N\u00famero identificador de la orden de trabajo"
+    },
+    "equipo_id": {
+      "type": "string",
+      "description": "ID del equipo asociado (si es corporativo)"
+    },
+    "equipo_label": {
+      "type": "string",
+      "description": "Descripci\u00f3n legible del equipo o veh\u00edculo"
+    },
+    "patente": {
+      "type": "string"
+    },
+    "marca_modelo": {
+      "type": "string",
+      "description": "Marca y modelo del veh\u00edculo (para activos externos)"
+    },
+    "tipo_activo": {
+      "type": "string",
+      "enum": [
+        "corporativo",
+        "externo"
+      ],
+      "default": "corporativo",
+      "description": "Indica si el activo pertenece a la corporaci\u00f3n o es externo"
+    },
+    "prioridad": {
+      "type": "string",
+      "enum": [
+        "alta",
+        "media",
+        "baja"
+      ],
+      "default": "media"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "asignada",
+        "en_proceso",
+        "pausada",
+        "en_revision",
+        "completada",
+        "cancelada"
+      ],
+      "default": "pendiente"
+    },
+    "problema_reportado": {
+      "type": "string",
+      "description": "Descripci\u00f3n del problema reportado"
+    },
+    "diagnostico": {
+      "type": "string",
+      "description": "Diagn\u00f3stico t\u00e9cnico realizado por el taller"
+    },
+    "origen": {
+      "type": "string",
+      "enum": [
+        "bitacora",
+        "solicitud_directa",
+        "inspeccion"
+      ],
+      "default": "solicitud_directa",
+      "description": "Origen de la orden de trabajo"
+    },
+    "inspeccion_id": {
+      "type": "string",
+      "description": "ID de la inspecci\u00f3n que origin\u00f3 la OT (si aplica)"
+    },
+    "reportado_por_email": {
+      "type": "string"
+    },
+    "reportado_por_nombre": {
+      "type": "string"
+    },
+    "supervisor_email": {
+      "type": "string",
+      "description": "Email del supervisor que valid\u00f3 la OT"
+    },
+    "supervisor_nombre": {
+      "type": "string"
+    },
+    "mecanico_email": {
+      "type": "string",
+      "description": "Email del mec\u00e1nico asignado"
+    },
+    "mecanico_nombre": {
+      "type": "string"
+    },
+    "horas_estimadas": {
+      "type": "number"
+    },
+    "horas_reales": {
+      "type": "number"
+    },
+    "total_mano_obra": {
+      "type": "number",
+      "default": 0
+    },
+    "total_repuestos": {
+      "type": "number",
+      "default": 0
+    },
+    "total": {
+      "type": "number",
+      "default": 0
+    },
+    "repuestos_utilizados": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "repuesto_id": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "number"
+          },
+          "precio_unitario": {
+            "type": "number"
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "proveedor_nombre": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "stock",
+              "compra_directa"
+            ],
+            "default": "stock",
+            "description": "stock = tomado del inventario; compra_directa = comprado y pagado directamente por el Jefe de Taller"
+          },
+          "descripcion": {
+            "type": "string",
+            "description": "Descripci\u00f3n del repuesto comprado directamente"
+          },
+          "boleta_url": {
+            "type": "string",
+            "description": "URL de la imagen de la boleta o factura (respaldo del reembolso)"
+          },
+          "foto_repuesto_url": {
+            "type": "string",
+            "description": "URL de la foto del repuesto comprado"
+          },
+          "precio_total": {
+            "type": "number",
+            "default": 0,
+            "description": "Monto total pagado (para reembolso)"
+          },
+          "pagado_por_email": {
+            "type": "string"
+          },
+          "pagado_por_nombre": {
+            "type": "string"
+          },
+          "fecha_compra": {
+            "type": "string",
+            "format": "date"
+          },
+          "estado_reembolso": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "reembolsado"
+            ],
+            "default": "pendiente",
+            "description": "Estado del reembolso solicitado por el Jefe de Taller"
+          }
+        }
+      },
+      "description": "Lista de repuestos utilizados en la reparaci\u00f3n"
+    },
+    "linea_tiempo": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "evento": {
+            "type": "string"
+          },
+          "usuario_email": {
+            "type": "string"
+          },
+          "usuario_nombre": {
+            "type": "string"
+          },
+          "notas": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Registro cronol\u00f3gico de eventos de la OT"
+    },
+    "fecha_asignacion": {
+      "type": "string",
+      "format": "date"
+    },
+    "fecha_inicio": {
+      "type": "string",
+      "format": "date"
+    },
+    "fecha_fin": {
+      "type": "string",
+      "format": "date"
+    },
+    "notas_cierre": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "numero_ot",
+    "equipo_label",
+    "tipo_activo",
+    "prioridad",
+    "estado"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "mecanico"
+          }
+        }
+      ]
+    },
+    "read": true,
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "mecanico"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,240 @@
+{
+  "name": "SolicitudRepuestoSalud",
+  "type": "object",
+  "properties": {
+    "numero_solicitud": {
+      "type": "string",
+      "description": "Identificador de la solicitud de insumo m\u00e9dico"
+    },
+    "solicitante_email": {
+      "type": "string",
+      "description": "Email del Encargado de Salud que solicita"
+    },
+    "solicitante_nombre": {
+      "type": "string"
+    },
+    "repuesto_nombre": {
+      "type": "string",
+      "description": "Nombre del insumo m\u00e9dico solicitado"
+    },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "parches",
+        "baterias",
+        "electrodos",
+        "insumos_medicos",
+        "otros"
+      ],
+      "default": "insumos_medicos",
+      "description": "Categor\u00eda del insumo de salud"
+    },
+    "equipo_label": {
+      "type": "string",
+      "description": "Equipo m\u00e9dico asociado (DEA, monitor, etc.) \u2014 opcional, texto libre"
+    },
+    "cantidad": {
+      "type": "number",
+      "default": 1
+    },
+    "urgencia": {
+      "type": "string",
+      "enum": [
+        "alta",
+        "media",
+        "baja"
+      ],
+      "default": "media"
+    },
+    "motivo": {
+      "type": "string",
+      "description": "Justificaci\u00f3n de la solicitud"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "aprobada",
+        "rechazada",
+        "comprada",
+        "recibida"
+      ],
+      "default": "aprobada",
+      "description": "Flujo: aprobada (pendiente de compra) \u2192 comprada (encargado compras salud) \u2192 recibida (lleg\u00f3 a bodega)"
+    },
+    "aprobador_email": {
+      "type": "string"
+    },
+    "aprobador_nombre": {
+      "type": "string"
+    },
+    "fecha_aprobacion": {
+      "type": "string",
+      "format": "date"
+    },
+    "comentario_aprobador": {
+      "type": "string"
+    },
+    "fecha_solicitud": {
+      "type": "string",
+      "format": "date"
+    },
+    "fecha_compra": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha en que el Encargado de Compras de Salud ejecut\u00f3 la compra"
+    },
+    "proveedor_compra_nombre": {
+      "type": "string",
+      "description": "Proveedor al que se compr\u00f3 el insumo"
+    },
+    "precio_total_compra": {
+      "type": "number",
+      "default": 0,
+      "description": "Monto total pagado en la compra"
+    },
+    "comprado_por_email": {
+      "type": "string"
+    },
+    "comprado_por_nombre": {
+      "type": "string"
+    },
+    "fecha_recepcion_bodega": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha en que el insumo lleg\u00f3 a bodega"
+    },
+    "recibido_por_email": {
+      "type": "string"
+    },
+    "recibido_por_nombre": {
+      "type": "string"
+    },
+    "observaciones_compra": {
+      "type": "string",
+      "description": "Notas del Encargado de Compras de Salud sobre la compra o recepci\u00f3n"
+    },
+    "linea_tiempo": {
+      "type": "array",
+      "description": "Registro cronol\u00f3gico del seguimiento de la compra (reportes de avance y cambios de estado)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "evento": {
+            "type": "string",
+            "description": "Tipo de evento: 'Reporte de avance', 'Compra ejecutada', 'Recibida en bodega', etc."
+          },
+          "usuario_email": {
+            "type": "string"
+          },
+          "usuario_nombre": {
+            "type": "string"
+          },
+          "notas": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "repuesto_nombre",
+    "cantidad",
+    "estado"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_salud"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_salud"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "monitor_corporativo"
+          }
+        },
+        {
+          "created_by": "{{user.email}}"
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_compras_salud"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

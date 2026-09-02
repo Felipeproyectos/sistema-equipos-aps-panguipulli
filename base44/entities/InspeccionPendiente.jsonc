@@ -1,0 +1,169 @@
+{
+  "name": "InspeccionPendiente",
+  "type": "object",
+  "properties": {
+    "tipo_formulario": {
+      "type": "string",
+      "enum": [
+        "inspeccion_semanal",
+        "turno_chofer",
+        "inspeccion_diaria",
+        "inspeccion_anual"
+      ],
+      "description": "Tipo de formulario enviado"
+    },
+    "equipo_id": {
+      "type": "string",
+      "description": "ID del equipo"
+    },
+    "equipo_label": {
+      "type": "string",
+      "description": "Descripci\u00f3n legible del equipo"
+    },
+    "conductor": {
+      "type": "string",
+      "description": "Nombre del conductor o responsable"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "km_inicial": {
+      "type": "number"
+    },
+    "combustible": {
+      "type": "string"
+    },
+    "observaciones": {
+      "type": "string",
+      "description": "Observaciones completas del formulario"
+    },
+    "datos_json": {
+      "type": "string",
+      "description": "JSON con todos los datos del formulario serializado"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "aprobado",
+        "rechazado"
+      ],
+      "default": "pendiente"
+    },
+    "revisor_email": {
+      "type": "string"
+    },
+    "revisor_nombre": {
+      "type": "string"
+    },
+    "fecha_revision": {
+      "type": "string",
+      "format": "date"
+    },
+    "nota_revision": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tipo_formulario",
+    "equipo_id",
+    "fecha"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "monitor_corporativo"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "jefe_taller"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "mecanico"
+          }
+        },
+        {
+          "created_by_id": "{{user.id}}"
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "super_admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "encargado_salud"
+          }
+        }
+      ]
+    }
+  }
+}
