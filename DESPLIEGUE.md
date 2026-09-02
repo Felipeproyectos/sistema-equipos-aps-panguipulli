@@ -37,6 +37,37 @@ python migracion/verificar_migracion.py backup-sistema.json
 
 Debe decir `908  908` y *"Sin perdidas"*.
 
+### Crear las cuentas de acceso
+
+Después de cargar los datos, una sola vez:
+
+```bash
+export SUPABASE_URL=https://xxxx.supabase.co
+export SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+python migracion/crear_usuarios_auth.py --clave salud2026              # ensayo
+python migracion/crear_usuarios_auth.py --clave salud2026 --confirmar  # de verdad
+```
+
+Crea una cuenta en Supabase Auth por cada fila de `usuario`, escribe su
+`auth_id` y deja `force_password_reset = true`, para que la app le exija cambiar
+la clave la primera vez. Es re-ejecutable: si una cuenta ya existe, solo la
+re-enlaza.
+
+**La clave genérica es una llave maestra mientras dure.** Cualquiera que la sepa
+entra como cualquier usuario que todavía no la haya cambiado. Tres cosas que
+achican la ventana:
+
+- que no viaje por un grupo de WhatsApp
+- crear las cuentas **por tandas**, un CESFAM a la vez, avisando ese mismo día
+- revisar a los pocos días quién no ha entrado y desactivarlo
+
+Para ver quién sigue con la clave genérica:
+
+```sql
+select email, full_name, role from usuario where force_password_reset;
+```
+
 ---
 
 ## 2. Railway — las funciones
