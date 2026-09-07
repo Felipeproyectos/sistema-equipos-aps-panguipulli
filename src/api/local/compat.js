@@ -20,6 +20,11 @@ const almacen = new Map(Object.entries(structuredClone(datos)));
 // nadie (admin, mecanico, y los dos de compras). Viven aparte del respaldo:
 // regenerar datos.json no los pisa, y no entran a la migracion.
 function sembrarPrueba() {
+  // Fuera del modo local, vite.config.js cambia datos-prueba.json por el
+  // vacio ({}) para no llevar datos reales al bundle publico. base44Client.js
+  // importa este archivo sin condicion (para el modo local), asi que esta
+  // funcion igual se ejecuta al cargar el modulo — sin nada que sembrar.
+  if (!prueba.User) return;
   for (const [entidad, filas] of Object.entries(prueba)) {
     if (entidad.startsWith('_')) continue;
     const tabla = tablaDe(entidad);
