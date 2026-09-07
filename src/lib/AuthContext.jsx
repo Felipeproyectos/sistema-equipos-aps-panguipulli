@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { base44, MODO_LOCAL, fijarRolActual } from '@/api/base44Client';
+import { base44, MODO_LOCAL, MODO_SUPABASE, fijarRolActual } from '@/api/base44Client';
 import { appParams } from '@/lib/app-params';
 import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 
@@ -38,10 +38,21 @@ export const AuthProvider = ({ children }) => {
       await checkUserAuth();
       return;
     }
+
+    // En modo Supabase tampoco hay plataforma Base44 que consultar: la
+    // sesión vive en Supabase Auth, no en /api/apps/public. Revisarla directo
+    // evita pegarle a un endpoint que no existe en este despliegue.
+    if (MODO_SUPABASE) {
+      setAppPublicSettings({});
+      setIsLoadingPublicSettings(false);
+      await checkUserAuth();
+      return;
+    }
+
     try {
       setIsLoadingPublicSettings(true);
       setAuthError(null);
-      
+
       // First, check app public settings (with token if available)
       // This will tell us if auth is required, user not registered, etc.
       const appClient = createAxiosClient({
@@ -133,7 +144,14 @@ export const AuthProvider = ({ children }) => {
       if (!currentUser || !currentUser.email) {
         setIsLoadingAuth(false);
         setIsAuthenticated(false);
-        setAuthError({ type: 'auth_required', message: 'Authentication required' });
+        // En Supabase, "sin perfil" con sesión activa es distinto de "sin
+        // sesión": la cuenta de auth.users existe pero no hay fila en
+        // `usuario` enlazada (ver auth_id en 03_policies.sql).
+        if (MODO_SUPABASE && await base44.auth.isAuthenticated()) {
+          setAuthError({ type: 'user_not_registered', message: 'Tu cuenta no está vinculada a un perfil del sistema' });
+        } else {
+          setAuthError({ type: 'auth_required', message: 'Authentication required' });
+        }
         return;
       }
 
