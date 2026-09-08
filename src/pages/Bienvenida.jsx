@@ -1,7 +1,25 @@
 import { useEffect, useState } from "react";
 import { base44, MODO_SUPABASE } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Loader2, Mail, Lock, Eye, EyeOff, LogIn, ShieldCheck, Info } from "lucide-react";
+
+import fondo from "@/assets/login/fondo-panguipulli.jpg";
+import logoAreaSalud from "@/assets/login/area-salud.png";
+import cesfamPanguipulli from "@/assets/login/cesfam-panguipulli.png";
+import cesfamConaripe from "@/assets/login/cesfam-conaripe.png";
+import cesfamChoshuenco from "@/assets/login/cesfam-choshuenco.png";
+
+// Los tres CESFAM de la comuna. Si mañana hay logo de un CECOSF o de la posta,
+// se agrega aca y la fila se reacomoda sola.
+const CENTROS = [
+  { src: cesfamPanguipulli, alt: "CESFAM Panguipulli" },
+  { src: cesfamConaripe, alt: "CESFAM Coñaripe" },
+  { src: cesfamChoshuenco, alt: "CESFAM Choshuenco" },
+];
+
+const AZUL = "#1b63b0";
+const AZUL_OSCURO = "#16549a";
+const MARINO = "#0b2138";
 
 function redirigirSegunRol(user) {
   window.location.replace(user?.role === "monitor_corporativo" ? "/MonitorCorporativo" : "/Dashboard");
@@ -10,13 +28,16 @@ function redirigirSegunRol(user) {
 export default function Bienvenida() {
   const navigate = useNavigate();
   const [checking, setChecking] = useState(true);
-  const [logoUrl, setLogoUrl] = useState(null);
 
   // ── Login por correo/clave (modo Supabase) ─────────────────────────────────
   const [email, setEmail] = useState("");
   const [clave, setClave] = useState("");
+  const [verClave, setVerClave] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
+  // El enlace de "olvidaste tu clave" no manda correos: la reposicion la hace
+  // el Departamento de Informatica a mano (ver DESPLIEGUE.md). Solo avisa.
+  const [verAyudaClave, setVerAyudaClave] = useState(false);
 
   // Cambio de clave obligatorio (usuarios recién migrados, ver DESPLIEGUE.md)
   const [usuarioLogueado, setUsuarioLogueado] = useState(null);
@@ -24,12 +45,6 @@ export default function Bienvenida() {
   const [nuevaClave2, setNuevaClave2] = useState("");
   const [cambiandoClave, setCambiandoClave] = useState(false);
   const [errorClave, setErrorClave] = useState(null);
-
-  useEffect(() => {
-    base44.entities.AppConfig.list().then((list) => {
-      if (list.length > 0 && list[0].logo_url) setLogoUrl(list[0].logo_url);
-    }).catch(() => {});
-  }, []);
 
   useEffect(() => {
     base44.auth.isAuthenticated().then((authed) => {
@@ -46,7 +61,7 @@ export default function Bienvenida() {
   }, [navigate]);
 
   const handleLogin = () => {
-    // Tras login, redirigir según rol (el Layout ajustará si es monitor_corporativo)
+    // Modo local / Base44: la plataforma resuelve el ingreso.
     base44.auth.redirectToLogin("/Dashboard");
   };
 
@@ -91,166 +106,236 @@ export default function Bienvenida() {
     }
   };
 
+  const fondoPantalla = {
+    backgroundColor: "#0a1c2e",
+    backgroundImage:
+      "linear-gradient(180deg, rgba(7,20,34,0.60) 0%, rgba(7,20,34,0.45) 45%, rgba(7,20,34,0.80) 100%), url(" + fondo + ")",
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundAttachment: "fixed",
+  };
+
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "linear-gradient(135deg, #1a3a5c 0%, #0d2137 100%)" }}>
+      <div className="min-h-screen flex items-center justify-center" style={fondoPantalla}>
         <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
       </div>
     );
   }
 
+  const claseCampo =
+    "w-full pl-12 pr-4 py-3.5 rounded-xl border-[1.5px] border-gray-200 bg-slate-50 text-[15px] text-slate-800 " +
+    "placeholder:text-slate-400 transition focus:outline-none focus:bg-white focus:border-[#1b63b0] focus:ring-4 focus:ring-[#1b63b0]/15";
+
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
-      style={{ background: "linear-gradient(135deg, #1a3a5c 0%, #0d2137 100%)" }}
-    >
-      <div className="absolute top-0 left-0 w-96 h-96 rounded-full" style={{ background: "rgba(255,255,255,0.08)", transform: "translate(-40%, -40%)" }} />
-      <div className="absolute bottom-0 right-0 w-96 h-96 rounded-full" style={{ background: "rgba(255,255,255,0.08)", transform: "translate(40%, 40%)" }} />
-
-      <div className="relative z-10 flex flex-col items-center w-full px-4" style={{ maxWidth: 420 }}>
-        <div
-          className="bg-white w-full flex flex-col items-center px-10 py-10 gap-5"
-          style={{ borderRadius: 24, boxShadow: "0 20px 60px rgba(0,0,0,0.35), 0 4px 16px rgba(0,0,0,0.15)" }}
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4 py-7" style={fondoPantalla}>
+      <main
+        className="w-full grid md:grid-cols-[42fr_58fr] overflow-hidden bg-white"
+        style={{ maxWidth: 1000, borderRadius: 22, boxShadow: "0 32px 80px rgba(3,14,26,0.5), 0 4px 14px rgba(3,14,26,0.3)" }}
+      >
+        {/* ── Panel institucional ── */}
+        <aside
+          className="relative flex md:flex-col items-center md:items-stretch md:justify-center gap-5 px-8 py-8 md:px-10 md:py-12 text-white"
+          style={{ background: "linear-gradient(165deg, #123c66 0%, " + MARINO + " 62%, #081a2c 100%)" }}
         >
-          <div className="flex items-center justify-center" style={{ width: 100, height: 100 }}>
-            {logoUrl ? (
-              <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" onError={(e) => { e.target.style.display = "none"; }} />
-            ) : (
-              <div style={{ fontSize: 40 }}>🏥</div>
-            )}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(340px 280px at 88% 6%, rgba(255,255,255,0.10), transparent 70%), " +
+                "radial-gradient(300px 300px at -10% 100%, rgba(74,163,63,0.22), transparent 70%)",
+            }}
+          />
+          <div className="relative z-10 self-start bg-white rounded-2xl px-4 py-3 shadow-xl">
+            <img src={logoAreaSalud} alt="Área Salud - Corporación Municipal de Panguipulli" className="h-16 md:h-24 w-auto block" />
           </div>
-
-          <div className="text-center">
-            <h1 className="font-bold tracking-tight mb-1" style={{ color: "#1a3a5c", fontSize: 18 }}>
-              Sistema de Gestión de Equipo Vitales - Corporación Municipal Panguipulli
+          <div className="relative z-10">
+            <h1 className="text-[15px] leading-snug text-white/80 font-semibold m-0">
+              Sistema de Gestión de
+              <strong className="block text-white font-bold text-2xl md:text-[29px] leading-tight mt-0.5">Equipos Vitales</strong>
             </h1>
-            <p className="text-gray-500 text-sm">Sistema para calidad y seguridad del paciente</p>
+            <div className="rounded-sm my-3" style={{ width: 52, height: 3, background: "#f0a92b" }} />
+            <p className="m-0 text-[15px] leading-snug text-white/75">
+              Corporación Municipal
+              <br />
+              de Panguipulli
+            </p>
           </div>
+          <p className="relative z-10 hidden md:flex gap-3 items-start mt-6 text-[13.5px] leading-snug text-white/70">
+            <ShieldCheck className="w-[18px] h-[18px] flex-none mt-0.5" style={{ color: "#4aa33f" }} />
+            Sistema para la calidad y seguridad del paciente
+          </p>
+        </aside>
 
-          <div className="w-full h-px bg-gray-100" />
-
+        {/* ── Panel de acceso ── */}
+        <section className="flex flex-col px-7 py-8 md:px-11 md:pt-11 md:pb-7">
           {usuarioLogueado ? (
-            <>
-              <div className="text-center">
-                <h2 className="text-gray-700 text-base font-medium">Cambia tu clave</h2>
-                <p className="text-gray-400 text-sm mt-0.5">Es tu primer ingreso: elige una clave nueva</p>
-              </div>
-              <form onSubmit={handleCambiarClave} className="w-full flex flex-col gap-3">
-                <input
-                  type="password"
-                  placeholder="Nueva clave"
-                  value={nuevaClave}
-                  onChange={(e) => setNuevaClave(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  autoFocus
-                  required
-                />
-                <input
-                  type="password"
-                  placeholder="Repite la nueva clave"
-                  value={nuevaClave2}
-                  onChange={(e) => setNuevaClave2(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  required
-                />
-                {errorClave && <p className="text-red-500 text-xs text-center">{errorClave}</p>}
+            <div>
+              <h2 className="m-0 mb-1 text-2xl md:text-[27px] font-bold leading-tight" style={{ color: MARINO }}>
+                Cambia tu clave
+              </h2>
+              <p className="m-0 mb-6 text-[15px] text-slate-500">Es tu primer ingreso: elige una clave nueva.</p>
+              <form onSubmit={handleCambiarClave} className="flex flex-col gap-3.5">
+                <label className="relative flex items-center">
+                  <Lock className="absolute left-4 w-[19px] h-[19px] text-slate-400 pointer-events-none" />
+                  <input
+                    type="password"
+                    placeholder="Nueva clave"
+                    value={nuevaClave}
+                    onChange={(e) => setNuevaClave(e.target.value)}
+                    className={claseCampo}
+                    autoComplete="new-password"
+                    autoFocus
+                    required
+                  />
+                </label>
+                <label className="relative flex items-center">
+                  <Lock className="absolute left-4 w-[19px] h-[19px] text-slate-400 pointer-events-none" />
+                  <input
+                    type="password"
+                    placeholder="Repite la nueva clave"
+                    value={nuevaClave2}
+                    onChange={(e) => setNuevaClave2(e.target.value)}
+                    className={claseCampo}
+                    autoComplete="new-password"
+                    required
+                  />
+                </label>
+                <ul className="m-0 pl-5 text-[13px] leading-relaxed text-slate-500">
+                  <li>Mínimo 8 caracteres</li>
+                  <li>Distinta de la clave de entrega</li>
+                </ul>
+                {errorClave && <p className="m-0 text-red-500 text-[13px]">{errorClave}</p>}
                 <button
                   type="submit"
                   disabled={cambiandoClave}
-                  className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl font-semibold text-white transition-all duration-200 hover:opacity-90 active:scale-95 disabled:opacity-60"
-                  style={{ background: "#1a3a5c", boxShadow: "0 4px 14px rgba(26,58,92,0.4)" }}
+                  className="mt-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-semibold text-[16px] text-white transition hover:brightness-95 active:scale-[0.99] disabled:opacity-60"
+                  style={{ background: AZUL, boxShadow: "0 8px 20px rgba(27,99,176,0.32)" }}
                 >
                   {cambiandoClave && <Loader2 className="w-4 h-4 animate-spin" />}
                   Guardar y entrar
                 </button>
               </form>
-            </>
+            </div>
           ) : (
-            <>
-              <div className="text-center">
-                <h2 className="text-gray-700 text-base font-medium">Bienvenido/a</h2>
-                <p className="text-gray-400 text-sm mt-0.5">Inicia sesión para acceder al sistema</p>
-              </div>
+            <div>
+              <h2 className="m-0 mb-1 text-2xl md:text-[27px] font-bold leading-tight" style={{ color: MARINO }}>
+                Bienvenido/a
+              </h2>
+              <p className="m-0 mb-6 text-[15px] text-slate-500">Inicia sesión para acceder al sistema</p>
 
               {MODO_SUPABASE ? (
-                <form onSubmit={handleEntrarConClave} className="w-full flex flex-col gap-3">
-                  <input
-                    type="email"
-                    placeholder="Correo"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    autoFocus
-                    required
-                  />
-                  <input
-                    type="password"
-                    placeholder="Clave"
-                    value={clave}
-                    onChange={(e) => setClave(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    required
-                  />
-                  {error && <p className="text-red-500 text-xs text-center">{error}</p>}
+                <form onSubmit={handleEntrarConClave} className="flex flex-col gap-3.5">
+                  <label className="relative flex items-center">
+                    <Mail className="absolute left-4 w-[19px] h-[19px] text-slate-400 pointer-events-none" />
+                    <input
+                      type="email"
+                      placeholder="Correo"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className={claseCampo}
+                      autoComplete="username"
+                      autoFocus
+                      required
+                    />
+                  </label>
+
+                  <label className="relative flex items-center">
+                    <Lock className="absolute left-4 w-[19px] h-[19px] text-slate-400 pointer-events-none" />
+                    <input
+                      type={verClave ? "text" : "password"}
+                      placeholder="Clave"
+                      value={clave}
+                      onChange={(e) => setClave(e.target.value)}
+                      className={claseCampo + " pr-12"}
+                      autoComplete="current-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVerClave((v) => !v)}
+                      aria-label={verClave ? "Ocultar la clave" : "Mostrar la clave"}
+                      className="absolute right-2 p-2 rounded-lg text-slate-400 hover:text-[#1b63b0] transition"
+                    >
+                      {verClave ? <EyeOff className="w-[19px] h-[19px]" /> : <Eye className="w-[19px] h-[19px]" />}
+                    </button>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setVerAyudaClave((v) => !v)}
+                    aria-expanded={verAyudaClave}
+                    className="self-end text-[13.5px] font-semibold border-b border-transparent hover:border-current"
+                    style={{ color: AZUL }}
+                  >
+                    ¿Olvidaste tu clave?
+                  </button>
+
+                  {verAyudaClave && (
+                    <p
+                      className="m-0 flex gap-2.5 items-start px-4 py-3 rounded-xl text-[13.5px] leading-snug"
+                      style={{ color: "#1d4b7d", background: "#eaf2fa", border: "1px solid #cfe0f1" }}
+                    >
+                      <Info className="w-[17px] h-[17px] flex-none mt-0.5" style={{ color: AZUL }} />
+                      Para restablecer tu clave, contáctate con el administrador del sistema — Departamento de Informática y
+                      Telecomunicaciones.
+                    </p>
+                  )}
+
+                  {error && <p className="m-0 text-red-500 text-[13px] text-center">{error}</p>}
+
                   <button
                     type="submit"
                     disabled={enviando}
-                    className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl font-semibold text-white transition-all duration-200 hover:opacity-90 active:scale-95 disabled:opacity-60"
-                    style={{ background: "#1a3a5c", boxShadow: "0 4px 14px rgba(26,58,92,0.4)" }}
+                    className="mt-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-semibold text-[16px] text-white transition hover:brightness-95 active:scale-[0.99] disabled:opacity-60"
+                    style={{ background: AZUL, boxShadow: "0 8px 20px rgba(27,99,176,0.32)" }}
                   >
-                    {enviando && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Iniciar Sesión
+                    {enviando ? <Loader2 className="w-[19px] h-[19px] animate-spin" /> : <LogIn className="w-[19px] h-[19px]" />}
+                    Iniciar sesión
                   </button>
                 </form>
               ) : (
-                <>
-                  <button
-                    onClick={handleLogin}
-                    className="w-full flex items-center justify-center gap-3 py-3 px-6 rounded-xl font-semibold text-white transition-all duration-200 hover:opacity-90 active:scale-95"
-                    style={{ background: "#1a3a5c", boxShadow: "0 4px 14px rgba(26,58,92,0.4)" }}
-                  >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#ffffff"/>
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#ffffff"/>
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#ffffff"/>
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#ffffff"/>
-                    </svg>
-                    Iniciar Sesión con Google
-                  </button>
-
-                  <div className="w-full flex items-center gap-3">
-                    <div className="flex-1 h-px bg-gray-200" />
-                    <span className="text-gray-400 text-xs">o</span>
-                    <div className="flex-1 h-px bg-gray-200" />
-                  </div>
-
-                  <button
-                    onClick={handleLogin}
-                    className="w-full flex items-center justify-center gap-3 py-3 px-6 rounded-xl font-semibold text-white transition-all duration-200 hover:opacity-90 active:scale-95"
-                    style={{ background: "#1a3a5c", boxShadow: "0 4px 14px rgba(26,58,92,0.4)" }}
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                    Iniciar Sesión con Correo
-                  </button>
-                </>
+                <button
+                  onClick={handleLogin}
+                  className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-semibold text-[16px] text-white transition hover:brightness-95 active:scale-[0.99]"
+                  style={{ background: AZUL, boxShadow: "0 8px 20px rgba(27,99,176,0.32)" }}
+                >
+                  <LogIn className="w-[19px] h-[19px]" />
+                  Iniciar sesión
+                </button>
               )}
-
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                Acceso exclusivo para personal autorizado
-              </div>
-            </>
+            </div>
           )}
-        </div>
 
-        <p className="mt-6 text-center" style={{ color: "rgba(147,197,253,0.7)", fontSize: 12 }}>
-          Elaborado por Departamento de Informática - Corporación Municipal Panguipulli © 2026
-        </p>
-      </div>
+          <p className="flex items-center gap-3 mt-6 mb-0 text-[12.5px] text-slate-400">
+            <span className="flex-1 h-px bg-gray-200" />
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <Lock className="w-3.5 h-3.5" />
+              Acceso exclusivo para personal autorizado
+            </span>
+            <span className="flex-1 h-px bg-gray-200" />
+          </p>
+
+          <div className="mt-auto pt-6">
+            <p className="m-0 mb-3 text-center text-[10.5px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Centros de salud de la comuna
+            </p>
+            <ul className="flex items-center justify-center gap-6 md:gap-8 m-0 p-0 list-none">
+              {CENTROS.map((c) => (
+                <li key={c.alt}>
+                  <img src={c.src} alt={c.alt} title={c.alt} className="h-14 md:h-[74px] w-auto opacity-90 transition hover:opacity-100" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      </main>
+
+      <p className="m-0 text-center text-[12.5px] leading-relaxed text-white/55" style={{ maxWidth: 520 }}>
+        Elaborado por el Departamento de Informática y Telecomunicaciones
+        <br />
+        Corporación Municipal de Panguipulli © 2026
+      </p>
     </div>
   );
 }
