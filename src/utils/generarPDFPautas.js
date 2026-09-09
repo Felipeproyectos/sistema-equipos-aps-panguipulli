@@ -113,7 +113,14 @@ function danosHtml(danos) {
 function hoja(insp, indice, total) {
   let datos = {};
   try { datos = insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { datos = {}; }
-  const equipo = datos.equipo || {};
+  // `centro_resuelto` lo calcula la pantalla contra la tabla Equipo. La foto
+  // congelada en datos_json puede traer el centro vacio si el vehiculo todavia
+  // no estaba asignado cuando se envio la pauta.
+  const equipo = {
+    ...(datos.equipo || {}),
+    centro_principal: insp.centro_resuelto || datos.equipo?.centro_principal || "",
+    subsede: insp.subsede_resuelta || datos.equipo?.subsede || "",
+  };
 
   const tipoKey = insp.tipo_formulario === "inspeccion_rutinaria" ? "inspeccion_diaria" : insp.tipo_formulario;
   const titulo = TIPO_LABEL[insp.tipo_formulario] || insp.tipo_formulario || "Pauta";
@@ -241,6 +248,11 @@ export function _selfCheck() {
   const diaria = { ...semanal, id: "2", tipo_formulario: "inspeccion_diaria",
     datos_json: JSON.stringify({ equipo: {}, exterior: { neumaticos: { estado: "incorrecto" } } }) };
   const rota = { id: "3", tipo_formulario: "turno_chofer", datos_json: "{no es json" };
+
+  const congelada = { ...semanal, centro_resuelto: "CESFAM Coñaripe",
+    datos_json: JSON.stringify({ equipo: { tipo: "ambulancia", centro_principal: "", subsede: "" } }) };
+  console.assert(hoja(congelada, 1, 1).includes("CESFAM Coñaripe"),
+    "centro vacio en datos_json debe caer al resuelto por equipo_id");
 
   const h1 = hoja(semanal, 1, 3);
   console.assert(h1.includes("Pauta Semanal") && h1.includes("1 falla(s)"), "semanal: falla no contada");

@@ -14,11 +14,25 @@ function centrosPermitidos(user) {
   return set.size ? [...set] : null;
 }
 
-function centroDeInspeccion(insp) {
-  try {
-    const datos = insp.datos_json ? JSON.parse(insp.datos_json) : {};
-    return datos.equipo?.centro_principal || "";
-  } catch { return ""; }
+// El centro que muestra una pauta salia unicamente de la foto del equipo que
+// guardarInspeccionPendiente congela dentro de datos_json al momento de enviarla.
+// Si el vehiculo todavia no tenia centro asignado, esa foto guarda "" y queda
+// asi para siempre: 27 pautas del NISSAN NAVARA (GKWL.46-3) aparecian en
+// "Sin centro" aunque el equipo hoy figura en CESFAM Coñaripe.
+//
+// Ahora se resuelve contra la tabla Equipo por equipo_id, y la foto queda como
+// respaldo — asi se arreglan tambien las pautas ya enviadas, sin migrar datos.
+function centroDeInspeccion(insp, equiposPorId = {}) {
+  let datos = {};
+  try { datos = insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { datos = {}; }
+  const equipoActual = equiposPorId[insp.equipo_id];
+  return datos.equipo?.centro_principal || equipoActual?.centro_principal || "";
+}
+
+function subsedeDeInspeccion(insp, equiposPorId = {}) {
+  let datos = {};
+  try { datos = insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { datos = {}; }
+  return datos.equipo?.subsede || equiposPorId[insp.equipo_id]?.subsede || "";
 }
 import {
   CheckCircle, XCircle, ChevronDown, ChevronUp, ClipboardCheck, Car, MapPin, User, Calendar,
@@ -202,7 +216,13 @@ function InspeccionCard({ insp, onActualizar }) {
     try { return insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { return {}; }
   })();
 
-  const equipo = datos.equipo || {};
+  // Un solo lugar donde el centro queda resuelto: la cabecera, el detalle
+  // expandido y el PDF muestran todos lo mismo.
+  const equipo = {
+    ...(datos.equipo || {}),
+    centro_principal: insp.centro_resuelto || datos.equipo?.centro_principal || "",
+    subsede: insp.subsede_resuelta || datos.equipo?.subsede || "",
+  };
   const horaRegistro = datos.hora_registro;
 
   const handleAccion = async (accion) => {
@@ -472,10 +492,25 @@ export default function RevisionInspecciones() {
   // en vez de traer las mas recientes y despues filtrar en pantalla.
   const cargar = useCallback(async () => {
     setLoading(true);
-    const data = filtro === "todos"
-      ? await base44.entities.InspeccionPendiente.list("-created_date", 500)
-      : await base44.entities.InspeccionPendiente.filter({ estado: filtro }, "-created_date", 500);
-    setInspecciones(data);
+    try {
+      const [data, equipos] = await Promise.all([
+        filtro === "todos"
+          ? base44.entities.InspeccionPendiente.list("-created_date", 500)
+          : base44.entities.InspeccionPendiente.filter({ estado: filtro }, "-created_date", 500),
+        base44.entities.Equipo.list("-created_date", 500).catch(() => []),
+      ]);
+      const porId = Object.fromEntries((equipos || []).map(e => [e.id, e]));
+      // El centro se resuelve una vez, aca: agrupacion, permisos, tarjeta y PDF
+      // leen todos el mismo campo y no pueden discrepar entre si.
+      setInspecciones((data || []).map(i => ({
+        ...i,
+        centro_resuelto: centroDeInspeccion(i, porId),
+        subsede_resuelta: subsedeDeInspeccion(i, porId),
+      })));
+    } catch (e) {
+      console.error("No se pudieron cargar las inspecciones:", e);
+      setInspecciones([]);
+    }
     setLoading(false);
   }, [filtro]);
 
@@ -485,7 +520,7 @@ export default function RevisionInspecciones() {
 
   const permitidos = centrosPermitidos(user);
   const enAlcance = permitidos
-    ? inspecciones.filter(i => permitidos.includes(centroDeInspeccion(i)))
+    ? inspecciones.filter(i => permitidos.includes(i.centro_resuelto))
     : inspecciones;
   const filtradas = enAlcance
     .filter(i => filtro === "todos" || i.estado === filtro)
@@ -494,11 +529,7 @@ export default function RevisionInspecciones() {
 
   // Agrupar por centro principal
   const porCentro = filtradas.reduce((acc, insp) => {
-    let centro = "Sin centro";
-    try {
-      const datos = insp.datos_json ? JSON.parse(insp.datos_json) : {};
-      centro = datos.equipo?.centro_principal || "Sin centro";
-    } catch {}
+    const centro = insp.centro_resuelto || "Sin centro";
     if (!acc[centro]) acc[centro] = [];
     acc[centro].push(insp);
     return acc;
