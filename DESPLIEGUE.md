@@ -153,6 +153,50 @@ protocolo de Base44. Ese es el trabajo que queda, junto con la autenticación.
 
 ---
 
+## Claves de Supabase: formato nuevo (`sb_publishable_` / `sb_secret_`)
+
+Supabase reemplazó las claves con formato JWT (`eyJ...`) por dos nuevas:
+`sb_publishable_...` para el navegador y `sb_secret_...` para el servidor. Al
+activar las nuevas, **las JWT viejas dejan de funcionar** y todo lo que siga
+usándolas responde `Invalid API key`.
+
+Hay que cambiarlas en los **dos** servicios, no en uno:
+
+| Servicio Railway | Variable | Clave |
+|---|---|---|
+| frontend | `VITE_SUPABASE_ANON_KEY` | `sb_publishable_...` |
+| servidor (funciones) | `SUPABASE_ANON_KEY` | `sb_publishable_...` |
+| servidor (funciones) | `SUPABASE_SERVICE_ROLE_KEY` | `sb_secret_...` |
+
+El frontend hay que **reconstruirlo** después de cambiarla: las `VITE_*` se
+hornean dentro del bundle en tiempo de compilación, no se leen al arrancar.
+
+Para comprobar que el servidor quedó bien:
+
+```bash
+curl -s -X POST https://<servidor>.up.railway.app/functions/getPublicAmbulances -H 'content-type: application/json' -d '{}'
+```
+
+Si responde `{"error":"Invalid API key"}`, todavía tiene las claves viejas — y
+con eso no funciona ni la bitácora pública, ni aprobar pautas, ni el monitor.
+
+## Caché del navegador: `public/serve.json`
+
+El frontend lo sirve `serve -s dist`, que por defecto manda `index.html` con
+ETag pero **sin `Cache-Control`**. El navegador lo cachea por heurística, se
+queda apuntando al bundle anterior — que sí está cacheado como inmutable, por
+el hash en el nombre — y la persona sigue ejecutando una versión vieja aunque
+el despliegue ya haya cambiado.
+
+Con las claves migradas eso deja de ser una molestia y pasa a ser un bloqueo:
+el bundle viejo lleva la clave JWT deshabilitada y el login responde
+`Invalid API key`. `public/serve.json` lo corrige — `no-cache` para el HTML,
+inmutable para `assets/**`, que llevan hash. Vite copia `public/` a `dist/`,
+que es donde `serve` busca ese archivo.
+
+JSON no admite comentarios y `serve` rechaza las claves extra (`$schema`, `//`),
+por eso la explicación vive acá y no dentro del archivo.
+
 ## Cuidado con el repositorio
 
 `migracion/02_datos.sql`, `src/api/local/datos.json` y `.env.demo` están en el
