@@ -133,6 +133,27 @@ const auth = {
   // Sin esto no habia forma de que entraran — la pantalla de ingreso solo
   // ofrecia correo+clave. El destino tiene que estar en la lista de Redirect
   // URLs del proyecto (Authentication -> URL Configuration).
+  // El Site URL del proyecto apunta a otra aplicacion (carrera.apscolab.com) y
+  // es un valor unico para todo el proyecto: cambiarlo romperia la recuperacion
+  // de esa otra app. Se manda `redirectTo` explicito, que gana sobre el Site URL
+  // siempre que este en la lista de Redirect URLs.
+  enviarCorreoRecuperacion: async (email) => {
+    const { error } = await cliente().auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/`,
+    });
+    if (error) throw new Error(error.message);
+  },
+
+  // Supabase avisa con PASSWORD_RECOVERY cuando la sesion viene de un enlace de
+  // recuperacion. Sin escucharlo, quien entra por ese enlace pasa directo al
+  // Dashboard sin fijar clave nueva — y queda dentro sin saber cual es la suya.
+  alRecuperarClave: (alDetectar) => {
+    const { data } = cliente().auth.onAuthStateChange((evento) => {
+      if (evento === 'PASSWORD_RECOVERY') alDetectar();
+    });
+    return () => data?.subscription?.unsubscribe();
+  },
+
   entrarConGoogle: async () => {
     const { error } = await cliente().auth.signInWithOAuth({
       provider: 'google',

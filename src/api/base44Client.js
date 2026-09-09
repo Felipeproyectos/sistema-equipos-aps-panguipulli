@@ -178,12 +178,36 @@ const entitiesProxy = new Proxy(base44Raw.entities || {}, {
   },
 });
 
+// Simular Rol bloqueaba TODAS las funciones de backend, y varias pantallas se
+// alimentan solo de ellas: el Monitor Corporativo entero sale de getMonitorData,
+// y los equipos del Dashboard de getEquiposPorCentro. Simulando, esas llamadas
+// se rechazaban y la pantalla mostraba 0 equipos, 0 alertas y 0 ordenes — o sea
+// que la simulacion no servia para lo unico que se usa: mirar como ve el sistema
+// otro perfil.
+//
+// El punto de la simulacion es que no se pueda ESCRIBIR, no que no se pueda
+// leer. Estas cuatro son de solo lectura (verificado: cero create/update/delete
+// en servidor/funciones/) y ademas aplican su propio filtro por rol y centro en
+// el servidor, que es justo lo que se quiere ver al simular. Lista explicita a
+// proposito: lo que no este aca sigue bloqueado.
+const FUNCIONES_DE_SOLO_LECTURA = new Set([
+  'getMonitorData',
+  'getEquiposPorCentro',
+  'getUsuariosPorCentro',
+  'getPublicAmbulances',
+]);
+
 const functionsProxy = base44Raw.functions
   ? new Proxy(base44Raw.functions, {
       get(target, prop, receiver) {
         const valor = Reflect.get(target, prop, receiver);
         if (prop === 'invoke' && typeof valor === 'function') {
-          return bloquearSiSimulando(valor.bind(target), 'functions.invoke');
+          const invocar = valor.bind(target);
+          const bloqueada = bloquearSiSimulando(invocar, 'functions.invoke');
+          return (nombre, ...resto) =>
+            FUNCIONES_DE_SOLO_LECTURA.has(nombre)
+              ? invocar(nombre, ...resto)
+              : bloqueada(nombre, ...resto);
         }
         return typeof valor === 'function' ? valor.bind(target) : valor;
       },

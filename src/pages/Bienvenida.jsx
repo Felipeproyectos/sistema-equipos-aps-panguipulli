@@ -38,6 +38,7 @@ export default function Bienvenida() {
   // El enlace de "olvidaste tu clave" no manda correos: la reposicion la hace
   // el Departamento de Informatica a mano (ver DESPLIEGUE.md). Solo avisa.
   const [verAyudaClave, setVerAyudaClave] = useState(false);
+  const [avisoRecuperacion, setAvisoRecuperacion] = useState(null);
 
   // Cambio de clave obligatorio (usuarios recién migrados, ver DESPLIEGUE.md)
   const [usuarioLogueado, setUsuarioLogueado] = useState(null);
@@ -47,22 +48,63 @@ export default function Bienvenida() {
   const [errorClave, setErrorClave] = useState(null);
 
   useEffect(() => {
+    // Llegar por enlace de recuperación abre sesión igual que un ingreso normal,
+    // así que sin esto se pasaba de largo al Dashboard sin fijar clave nueva.
+    const dejarDeEscuchar = base44.auth.alRecuperarClave?.(() => {
+      base44.auth.me().then((u) => {
+        if (u) { setUsuarioLogueado(u); setChecking(false); }
+      }).catch(() => {});
+    });
+
     base44.auth.isAuthenticated().then((authed) => {
       if (authed) {
         // Si hay sesión activa, verificar rol para redirigir al inicio correcto
         base44.auth.me().then((u) => {
-          if (u) redirigirSegunRol(u);
-          else setChecking(false); // sesión sin perfil enlazado: mostrar login
+          if (!u) { setChecking(false); return; }   // sesión sin perfil enlazado
+          // El cambio de clave obligatorio se revisaba solo al entrar con
+          // correo+clave. Quien llegaba con sesión ya abierta —enlace de
+          // recuperación, Google, pestaña vieja— se lo saltaba.
+          if (u.force_password_reset) { setUsuarioLogueado(u); setChecking(false); }
+          else redirigirSegunRol(u);
         }).catch(() => window.location.replace("/Dashboard"));
       } else {
         setChecking(false);
       }
     });
+
+    return dejarDeEscuchar;
   }, [navigate]);
 
   const handleLogin = () => {
     // Modo local / Base44: la plataforma resuelve el ingreso.
     base44.auth.redirectToLogin("/Dashboard");
+  };
+
+  // Antes esto solo desplegaba un cartel diciendo "contacta a Informatica".
+  // El correo lleva `redirectTo` a este mismo sitio, asi que el enlace vuelve
+  // aca y no a la otra aplicacion que tiene el Site URL del proyecto.
+  const handleRecuperarClave = async () => {
+    const correo = email.trim();
+    if (!correo) {
+      setVerAyudaClave(true);
+      setError("Escribe tu correo arriba y vuelve a tocar el enlace.");
+      return;
+    }
+    setError(null);
+    setAvisoRecuperacion(null);
+    setEnviando(true);
+    try {
+      await base44.auth.enviarCorreoRecuperacion(correo);
+      setAvisoRecuperacion(`Enviamos un enlace a ${correo}. Revisa también la carpeta de spam. Al abrirlo podrás crear una clave nueva.`);
+      // Supabase responde OK aunque el correo no salga — no delata si la cuenta
+      // existe. Mientras el proyecto no tenga SMTP propio, el envio es limitado,
+      // asi que la via de Informatica queda siempre a la vista.
+      setVerAyudaClave(true);
+    } catch (err) {
+      setError(err.message || "No se pudo enviar el correo de recuperación");
+      setVerAyudaClave(true);
+    }
+    setEnviando(false);
   };
 
   const handleEntrarConGoogle = async () => {
@@ -274,13 +316,23 @@ export default function Bienvenida() {
 
                   <button
                     type="button"
-                    onClick={() => setVerAyudaClave((v) => !v)}
-                    aria-expanded={verAyudaClave}
+                    onClick={handleRecuperarClave}
+                    disabled={enviando}
                     className="self-end text-[13.5px] font-semibold border-b border-transparent hover:border-current"
                     style={{ color: AZUL }}
                   >
                     ¿Olvidaste tu clave?
                   </button>
+
+                  {avisoRecuperacion && (
+                    <p
+                      className="m-0 flex gap-2.5 items-start px-4 py-3 rounded-xl text-[13.5px] leading-snug"
+                      style={{ color: "#166534", background: "#f0fdf4", border: "1px solid #bbf7d0" }}
+                    >
+                      <Info className="w-[17px] h-[17px] flex-none mt-0.5" style={{ color: "#16a34a" }} />
+                      {avisoRecuperacion}
+                    </p>
+                  )}
 
                   {verAyudaClave && (
                     <p
@@ -288,8 +340,7 @@ export default function Bienvenida() {
                       style={{ color: "#1d4b7d", background: "#eaf2fa", border: "1px solid #cfe0f1" }}
                     >
                       <Info className="w-[17px] h-[17px] flex-none mt-0.5" style={{ color: AZUL }} />
-                      Para restablecer tu clave, contáctate con el administrador del sistema — Departamento de Informática y
-                      Telecomunicaciones.
+                      Si el correo no llega, contáctate con el Departamento de Informática y Telecomunicaciones.
                     </p>
                   )}
 
