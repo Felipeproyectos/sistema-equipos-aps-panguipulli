@@ -128,6 +128,18 @@ const auth = {
     const yo = await me();
     if (yo) await entities.User.update(yo.id, { force_password_reset: false });
   },
+  // Las cuentas creadas con Google (provider_type = social) NO tienen clave:
+  // signInWithPassword siempre responde "Invalid login credentials" con ellas.
+  // Sin esto no habia forma de que entraran — la pantalla de ingreso solo
+  // ofrecia correo+clave. El destino tiene que estar en la lista de Redirect
+  // URLs del proyecto (Authentication -> URL Configuration).
+  entrarConGoogle: async () => {
+    const { error } = await cliente().auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/Dashboard` },
+    });
+    if (error) throw new Error(error.message);
+  },
   entrarConClave: async (email, clave) => {
     const { error } = await cliente().auth.signInWithPassword({ email, password: clave });
     if (error) throw new Error(error.message);
