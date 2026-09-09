@@ -14,16 +14,31 @@ function centrosPermitidos(user) {
   return set.size ? [...set] : null;
 }
 
-function centroDeInspeccion(insp) {
-  try {
-    const datos = insp.datos_json ? JSON.parse(insp.datos_json) : {};
-    return datos.equipo?.centro_principal || "";
-  } catch { return ""; }
+// El centro que muestra una pauta salia unicamente de la foto del equipo que
+// guardarInspeccionPendiente congela dentro de datos_json al momento de enviarla.
+// Si el vehiculo todavia no tenia centro asignado, esa foto guarda "" y queda
+// asi para siempre: 27 pautas del NISSAN NAVARA (GKWL.46-3) aparecian en
+// "Sin centro" aunque el equipo hoy figura en CESFAM Coñaripe.
+//
+// Ahora se resuelve contra la tabla Equipo por equipo_id, y la foto queda como
+// respaldo — asi se arreglan tambien las pautas ya enviadas, sin migrar datos.
+function centroDeInspeccion(insp, equiposPorId = {}) {
+  let datos = {};
+  try { datos = insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { datos = {}; }
+  const equipoActual = equiposPorId[insp.equipo_id];
+  return datos.equipo?.centro_principal || equipoActual?.centro_principal || "";
+}
+
+function subsedeDeInspeccion(insp, equiposPorId = {}) {
+  let datos = {};
+  try { datos = insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { datos = {}; }
+  return datos.equipo?.subsede || equiposPorId[insp.equipo_id]?.subsede || "";
 }
 import {
   CheckCircle, XCircle, ChevronDown, ChevronUp, ClipboardCheck, Car, MapPin, User, Calendar,
-  Fuel, Gauge, Zap, Wrench, Package, FileText, AlertCircle
+  Fuel, Gauge, Zap, Wrench, Package, FileText, AlertCircle, Printer
 } from "lucide-react";
+import { generarPDFPautas } from "@/utils/generarPDFPautas";
 
 const TIPO_LABEL = {
   inspeccion_semanal: "Pauta Semanal",
@@ -44,6 +59,20 @@ const ESTADO_CFG = {
   aprobado: { label: "Aprobado", color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0" },
   rechazado: { label: "Rechazado", color: "#DC2626", bg: "#FEF2F2", border: "#FECACA" },
 };
+
+function imprimirPautas(lista, toast) {
+  if (!lista.length) {
+    toast({ title: "No hay pautas para imprimir", variant: "destructive" });
+    return;
+  }
+  if (!generarPDFPautas(lista)) {
+    toast({
+      title: "El navegador bloqueó la ventana",
+      description: "Permite las ventanas emergentes de este sitio y vuelve a intentarlo.",
+      variant: "destructive",
+    });
+  }
+}
 
 function formatFecha(fechaStr) {
   if (!fechaStr) return "-";
@@ -187,7 +216,13 @@ function InspeccionCard({ insp, onActualizar }) {
     try { return insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { return {}; }
   })();
 
-  const equipo = datos.equipo || {};
+  // Un solo lugar donde el centro queda resuelto: la cabecera, el detalle
+  // expandido y el PDF muestran todos lo mismo.
+  const equipo = {
+    ...(datos.equipo || {}),
+    centro_principal: insp.centro_resuelto || datos.equipo?.centro_principal || "",
+    subsede: insp.subsede_resuelta || datos.equipo?.subsede || "",
+  };
   const horaRegistro = datos.hora_registro;
 
   const handleAccion = async (accion) => {
@@ -312,9 +347,17 @@ function InspeccionCard({ insp, onActualizar }) {
               </div>
             )}
           </div>
-          <button className="text-slate-400 hover:text-slate-600 flex-shrink-0 mt-1">
-            {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0 mt-1">
+            <button
+              title="Imprimir esta pauta en PDF"
+              onClick={(e) => { e.stopPropagation(); imprimirPautas([insp], toast); }}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50">
+              <Printer className="w-4 h-4" />
+            </button>
+            <button className="text-slate-400 hover:text-slate-600">
+              {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -439,6 +482,8 @@ export default function RevisionInspecciones() {
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState("pendiente");
   const [centroSeleccionado, setCentroSeleccionado] = useState("todos");
+  const [tipoSeleccionado, setTipoSeleccionado] = useState("todos");
+  const { toast } = useToast();
 
   // Antes: list("-created_date", 100) sobre 259 registros. Las inspecciones
   // pendientes mas viejas caian fuera del corte por fecha y no habia forma de
@@ -447,10 +492,25 @@ export default function RevisionInspecciones() {
   // en vez de traer las mas recientes y despues filtrar en pantalla.
   const cargar = useCallback(async () => {
     setLoading(true);
-    const data = filtro === "todos"
-      ? await base44.entities.InspeccionPendiente.list("-created_date", 500)
-      : await base44.entities.InspeccionPendiente.filter({ estado: filtro }, "-created_date", 500);
-    setInspecciones(data);
+    try {
+      const [data, equipos] = await Promise.all([
+        filtro === "todos"
+          ? base44.entities.InspeccionPendiente.list("-created_date", 500)
+          : base44.entities.InspeccionPendiente.filter({ estado: filtro }, "-created_date", 500),
+        base44.entities.Equipo.list("-created_date", 500).catch(() => []),
+      ]);
+      const porId = Object.fromEntries((equipos || []).map(e => [e.id, e]));
+      // El centro se resuelve una vez, aca: agrupacion, permisos, tarjeta y PDF
+      // leen todos el mismo campo y no pueden discrepar entre si.
+      setInspecciones((data || []).map(i => ({
+        ...i,
+        centro_resuelto: centroDeInspeccion(i, porId),
+        subsede_resuelta: subsedeDeInspeccion(i, porId),
+      })));
+    } catch (e) {
+      console.error("No se pudieron cargar las inspecciones:", e);
+      setInspecciones([]);
+    }
     setLoading(false);
   }, [filtro]);
 
@@ -460,24 +520,25 @@ export default function RevisionInspecciones() {
 
   const permitidos = centrosPermitidos(user);
   const enAlcance = permitidos
-    ? inspecciones.filter(i => permitidos.includes(centroDeInspeccion(i)))
+    ? inspecciones.filter(i => permitidos.includes(i.centro_resuelto))
     : inspecciones;
-  const filtradas = enAlcance.filter(i => filtro === "todos" || i.estado === filtro);
+  const filtradas = enAlcance
+    .filter(i => filtro === "todos" || i.estado === filtro)
+    .filter(i => tipoSeleccionado === "todos" || i.tipo_formulario === tipoSeleccionado);
   const pendientes = enAlcance.filter(i => i.estado === "pendiente").length;
 
   // Agrupar por centro principal
   const porCentro = filtradas.reduce((acc, insp) => {
-    let centro = "Sin centro";
-    try {
-      const datos = insp.datos_json ? JSON.parse(insp.datos_json) : {};
-      centro = datos.equipo?.centro_principal || "Sin centro";
-    } catch {}
+    const centro = insp.centro_resuelto || "Sin centro";
     if (!acc[centro]) acc[centro] = [];
     acc[centro].push(insp);
     return acc;
   }, {});
   const centrosOrdenados = Object.keys(porCentro).sort((a, b) => a.localeCompare(b, "es"));
   const centrosAMostrar = centroSeleccionado === "todos" ? centrosOrdenados : centrosOrdenados.filter(c => c === centroSeleccionado);
+  // Lo que se imprime en masa es exactamente lo que se está viendo, en el mismo
+  // orden: filtros de estado, tipo y centro ya aplicados.
+  const paraImprimir = centrosAMostrar.flatMap(c => porCentro[c]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 lg:p-8">
@@ -493,6 +554,33 @@ export default function RevisionInspecciones() {
             )}
           </div>
           <p className="text-sm text-slate-500">Revisa y aprueba los formularios enviados desde la bitácora pública antes de sincronizarlos al sistema.</p>
+        </div>
+
+        {/* Reporte diario / semanal: se elige el tipo y se imprime todo junto */}
+        <div className="flex flex-wrap items-center gap-2 mb-5 p-3 rounded-2xl bg-white" style={{ border: "1px solid #E2E8F0" }}>
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wide mr-1">Reporte</span>
+          {[
+            { value: "todos", label: "Todas" },
+            { value: "inspeccion_diaria", label: "Diarias" },
+            { value: "inspeccion_semanal", label: "Semanales" },
+            { value: "turno_chofer", label: "Turnos" },
+          ].map(t => (
+            <button key={t.value} onClick={() => setTipoSeleccionado(t.value)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={tipoSeleccionado === t.value
+                ? { background: "#1D4ED8", color: "white" }
+                : { background: "#F8FAFC", color: "#64748B", border: "1px solid #E2E8F0" }}>
+              {t.label}
+            </button>
+          ))}
+          <button
+            onClick={() => imprimirPautas(paraImprimir, toast)}
+            disabled={paraImprimir.length === 0}
+            className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white disabled:opacity-40"
+            style={{ background: "#0F172A" }}>
+            <Printer className="w-4 h-4" />
+            Imprimir {paraImprimir.length} pauta{paraImprimir.length === 1 ? "" : "s"} en PDF
+          </button>
         </div>
 
         {/* Filtros */}

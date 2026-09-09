@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { base44, MODO_LOCAL, MODO_SUPABASE, fijarRolActual } from '@/api/base44Client';
+import { base44, MODO_LOCAL, MODO_SUPABASE, fijarUsuarioActual, registrarIngreso } from '@/api/base44Client';
 import { appParams } from '@/lib/app-params';
 import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 
@@ -157,8 +157,16 @@ export const AuthProvider = ({ children }) => {
 
       setUser(currentUser);
       // El cliente necesita el rol para bloquear escrituras del Monitor
-      // Corporativo en todas las pantallas (ver base44Client.js).
-      fijarRolActual(currentUser.role);
+      // Corporativo en todas las pantallas, y la identidad para firmar cada
+      // escritura en la auditoria (ver base44Client.js).
+      fijarUsuarioActual(currentUser);
+      // Deja el ingreso anotado en Auditoria — el propio incluido.
+      registrarIngreso({
+        email: currentUser.email,
+        nombre: currentUser.full_name,
+        rol: currentUser.role,
+        resultado: 'exitoso',
+      });
       setIsAuthenticated(true);
       setIsLoadingAuth(false);
     } catch (error) {

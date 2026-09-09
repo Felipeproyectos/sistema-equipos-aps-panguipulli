@@ -31,8 +31,8 @@ export default function Auditoria() {
 
   useEffect(() => {
     Promise.all([
-      base44.entities.AccesoNoAutorizado.list("-fecha_intento", 200),
-      base44.entities.Historial.list("-fecha", 200),
+      base44.entities.AccesoNoAutorizado.list("-fecha_intento", 300),
+      base44.entities.Historial.list("-created_date", 300),
     ]).then(([a, h]) => {
       setAccesos(a || []);
       setAcciones(h || []);
@@ -153,7 +153,7 @@ function IngresosTab({ accesos, filtro, setFiltro }) {
                   <div className="flex items-center gap-2">
                     <Clock className="w-3 h-3 text-slate-400" />
                     <span className="text-xs text-slate-400">
-                      {a.fecha_intento ? format(new Date(a.fecha_intento), "d MMM yyyy · HH:mm", { locale: es }) : "—"}
+                      {a.fecha_intento ? format(new Date(a.fecha_intento), "d MMM yyyy · HH:mm:ss", { locale: es }) : "—"}
                     </span>
                   </div>
                   {a.user_agent && (
@@ -218,10 +218,13 @@ function AccionesTab({ acciones, filtro, setFiltro, conteoPorRol }) {
                     {a.usuario_rol && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{roleLabel(a.usuario_rol)}</span>
                     )}
+                    {a.entidad && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-50 text-slate-400 border border-slate-100">{a.entidad}</span>
+                    )}
                     <span className="text-xs text-slate-400">{a.usuario_nombre || a.usuario_email}</span>
                     <Clock className="w-3 h-3 text-slate-400" />
                     <span className="text-xs text-slate-400">
-                      {a.fecha ? format(new Date(a.fecha), "d MMM yyyy · HH:mm", { locale: es }) : "—"}
+                      {a.created_date ? format(new Date(a.created_date), "d MMM yyyy · HH:mm:ss", { locale: es }) : "—"}
                     </span>
                   </div>
                 </div>

@@ -4,6 +4,7 @@ import { isSimulandoActivo, MENSAJE_BLOQUEO_SIMULACION } from '@/lib/roleSimulat
 import { clienteLocal } from '@/api/local/compat';
 import { clienteSupabase } from '@/api/clienteSupabase';
 import { PERMISOS } from '@/lib/permisos';
+import { describir, debeAuditarse } from '@/lib/auditoria';
 
 const { appId, token, functionsVersion, appBaseUrl } = appParams;
 
@@ -47,7 +48,56 @@ const METODOS_ESCRITURA = new Set([
 // las pantallas y no haya que acordarse en cada una.
 const ENTIDADES_QUE_EL_MONITOR_SI_ESCRIBE = new Set(['Comentario']);
 let rolActual = null;
+let usuarioActual = null;
 export function fijarRolActual(rol) { rolActual = rol; }
+
+// ── Auditoria ───────────────────────────────────────────────────────────────
+// Quien esta operando, para poder firmar cada escritura. Lo fija AuthContext
+// apenas resuelve la sesion.
+export function fijarUsuarioActual(user) {
+  usuarioActual = user || null;
+  rolActual = user?.role ?? null;
+}
+
+// La auditoria nunca puede hacer fallar la operacion que audita: si el insert
+// se cae (policy, red, tabla), se anota en consola y la app sigue.
+function auditar(entidad, metodo, args, resultado) {
+  if (!usuarioActual || !debeAuditarse(entidad)) return;
+  try {
+    const fila = describir(entidad, metodo, args, resultado);
+    base44Raw.entities.Historial.create({
+      usuario_email: usuarioActual.email || '',
+      usuario_nombre: usuarioActual.full_name || '',
+      usuario_rol: usuarioActual.role || '',
+      ...fila,
+    }).catch((e) => console.warn('No se pudo auditar:', e?.message));
+  } catch (e) {
+    console.warn('No se pudo auditar:', e?.message);
+  }
+}
+
+// Deja constancia de un ingreso al sistema (exitoso o no). Una fila por
+// sesion del navegador, no una por cada F5.
+export async function registrarIngreso({ email, nombre, rol, resultado, notas }) {
+  const marca = `ingreso:${email}:${resultado}`;
+  try {
+    if (sessionStorage.getItem(marca)) return;
+    sessionStorage.setItem(marca, '1');
+  } catch { /* modo privado: se registra igual */ }
+  try {
+    await base44Raw.entities.AccesoNoAutorizado.create({
+      email: email || '',
+      usuario_nombre: nombre || '',
+      rol: rol || '',
+      resultado: resultado || 'exitoso',
+      fecha_intento: new Date().toISOString(),
+      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+      notas: notas || '',
+    });
+  } catch (e) {
+    console.warn('No se pudo registrar el ingreso:', e?.message);
+  }
+}
 
 // Solo aplica a escrituras de ENTIDADES. Las funciones de backend quedan
 // fuera a proposito: cada una valida el rol por su cuenta, y varias son de
@@ -72,7 +122,7 @@ function ocultarInactivos(resultado) {
   return Array.isArray(resultado) ? resultado.filter((item) => item?.activo !== false) : resultado;
 }
 
-function bloquearSiSimulando(fn, contexto, entidad) {
+function bloquearSiSimulando(fn, contexto, entidad, metodo) {
   return (...args) => {
     if (monitorNoPuedeEscribir(entidad)) {
       return Promise.reject(new Error(`${MENSAJE_SOLO_LECTURA} (${contexto})`));
@@ -80,7 +130,13 @@ function bloquearSiSimulando(fn, contexto, entidad) {
     if (isSimulandoActivo()) {
       return Promise.reject(new Error(`${MENSAJE_BLOQUEO_SIMULACION} (${contexto})`));
     }
-    return fn(...args);
+    const salida = fn(...args);
+    // Solo se audita lo que efectivamente se guardo: si la promesa se rechaza,
+    // no hubo cambio que registrar.
+    if (metodo && entidad !== undefined) {
+      return Promise.resolve(salida).then((r) => { auditar(String(entidad), metodo, args, r); return r; });
+    }
+    return salida;
   };
 }
 
@@ -89,7 +145,8 @@ function envolverEntidad(entidad, nombre) {
     get(target, prop, receiver) {
       const valor = Reflect.get(target, prop, receiver);
       if (typeof valor === 'function' && METODOS_ESCRITURA.has(prop)) {
-        return bloquearSiSimulando(valor.bind(target), `${String(nombre)}.${String(prop)}`, nombre);
+        const metodo = ['create', 'update', 'delete'].includes(prop) ? prop : null;
+        return bloquearSiSimulando(valor.bind(target), `${String(nombre)}.${String(prop)}`, nombre, metodo);
       }
       if (
         typeof valor === 'function' &&

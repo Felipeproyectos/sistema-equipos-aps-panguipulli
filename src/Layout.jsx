@@ -7,7 +7,6 @@ import { getNavItemsForRole } from "@/lib/navPermissions";
 import MobileNav from "@/components/MobileNav";
 import RoleSimulator from "@/components/RoleSimulator";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
-import useDarkMode from "@/hooks/useDarkMode";
 import { roleLabel } from "@/lib/roles";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
@@ -21,7 +20,6 @@ export default function Layout({ children, currentPageName }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [appConfig, setAppConfig] = useState(null);
   const location = useLocation();
-  useDarkMode();
   const { toast } = useToast();
 
   // Cierre automático de sesión tras 30 minutos de inactividad.
@@ -75,9 +73,9 @@ export default function Layout({ children, currentPageName }) {
       `}</style>
 
       {/* Sidebar Desktop */}
-      <aside className="hidden lg:flex flex-col w-64 min-h-screen" style={{ background: "linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)" }}>
+      <aside className="hidden lg:flex flex-col w-64 h-screen sticky top-0 flex-shrink-0" style={{ background: "linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)" }}>
         {/* Logo */}
-        <div className="flex items-center gap-3 px-6 py-7 border-b border-white/10">
+        <div className="flex items-center gap-3 px-6 py-7 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center justify-center overflow-hidden flex-shrink-0" style={appConfig?.logo_url ? { width: 64, height: 64 } : { width: 36, height: 36, background: "rgba(255,255,255,0.2)", borderRadius: 12 }}>
             {appConfig?.logo_url ?
             <img src={appConfig.logo_url} alt="logo" className="w-full h-full object-contain" /> :
@@ -91,7 +89,7 @@ export default function Layout({ children, currentPageName }) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-6 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-3 py-6 space-y-1">
           {visibleItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPageName === item.page;
@@ -110,7 +108,7 @@ export default function Layout({ children, currentPageName }) {
 
         {/* User */}
         {user &&
-        <div className="px-4 py-5 border-t border-white/10">
+        <div className="px-4 py-5 border-t border-white/10 flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: "rgba(255,255,255,0.2)" }}>
                 {user.full_name?.charAt(0) || user.email?.charAt(0)}
@@ -167,7 +165,7 @@ export default function Layout({ children, currentPageName }) {
       }
 
       {/* Main */}
-      <main className="flex-1 overflow-auto" style={{ overscrollBehavior: "none", WebkitOverflowScrolling: "touch" }}>
+      <main className="flex-1 min-w-0">
         <div className="lg:hidden h-16" />
         {children}
         {/* Bottom padding so content isn't hidden behind mobile nav */}

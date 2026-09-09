@@ -5,6 +5,7 @@ import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import PageNotFound from './lib/PageNotFound';
+import ErrorBoundary from './lib/ErrorBoundary';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import { useState, useEffect } from 'react';
@@ -47,7 +48,7 @@ const PageWrapper = ({ children }) => (
     transition={{ duration: 0.22, ease: "easeInOut" }}
     style={{ width: "100%" }}
   >
-    {children}
+    <ErrorBoundary>{children}</ErrorBoundary>
   </motion.div>
 );
 
