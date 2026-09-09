@@ -1,4 +1,5 @@
 import { format, parseISO } from "date-fns";
+import { etiquetaEquipo } from "@/utils/etiquetaEquipo";
 
 const ESTADO_STYLES = {
   pendiente: { bg: "#fef9c3", color: "#ca8a04", label: "PENDIENTE" },
@@ -74,7 +75,7 @@ export function generarPDFOrdenTrabajo(ot) {
     <div>
       <div style="font-size:9.5px;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em">Orden de Trabajo de Taller</div>
       <div style="font-size:17px;font-weight:800;color:white;margin-top:2px">${ot.numero_ot}</div>
-      <div style="font-size:9.5px;color:rgba(255,255,255,0.7);margin-top:3px">${ot.equipo_label || "—"}${ot.patente ? ` · ${ot.patente}` : ""}</div>
+      <div style="font-size:9.5px;color:rgba(255,255,255,0.7);margin-top:3px">${etiquetaEquipo(ot.equipo_label, ot.patente)}</div>
     </div>
     <div style="text-align:right;color:rgba(255,255,255,0.8);font-size:9px;line-height:1.7">
       Corporación Municipal de Panguipulli<br/>Módulo de Taller<br/>Generado: ${format(hoy, "dd/MM/yyyy")} a las ${format(hoy, "HH:mm")} hrs

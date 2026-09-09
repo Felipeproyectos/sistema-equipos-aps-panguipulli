@@ -119,7 +119,7 @@ export default function Repuestos() {
           </button>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-4">
           {CATEGORIAS.map(c => (
             <button key={c.value} onClick={() => setFiltro(c.value)}
               className="px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all"

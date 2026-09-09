@@ -15,6 +15,7 @@ import ReporteAvance from "@/components/taller/ReporteAvance";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { isSimulandoActivo, getEffectiveNavRole, MENSAJE_BLOQUEO_SIMULACION } from "@/lib/roleSimulator";
+import { etiquetaEquipo } from "@/utils/etiquetaEquipo";
 
 // Convierte una fecha ISO a valor local para input datetime-local
 function toLocalInput(fecha) {
@@ -246,7 +247,7 @@ export default function OrdenTrabajoDetalle() {
               </div>
               <div className="flex items-center gap-1.5">
                 <Car className="w-4 h-4 text-slate-300" />
-                <span className="text-sm font-semibold text-white">{ot.equipo_label}{ot.patente ? ` · ${ot.patente}` : ""}</span>
+                <span className="text-sm font-semibold text-white">{etiquetaEquipo(ot.equipo_label, ot.patente)}</span>
               </div>
             </div>
             {ot.estado === "completada" && (

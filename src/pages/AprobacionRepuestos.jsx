@@ -151,7 +151,7 @@ export default function AprobacionRepuestos() {
 
       <div className="max-w-6xl mx-auto px-4 lg:px-10 pb-10">
         {/* Filtros */}
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-4">
           {FILTROS.map(f => (
             <button key={f.value} onClick={() => setFiltro(f.value)}
               className="px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all"

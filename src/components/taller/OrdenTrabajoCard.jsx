@@ -5,6 +5,7 @@ import { createPageUrl } from "@/utils";
 import { Wrench, Car, Clock, User, ChevronRight, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
+import { etiquetaEquipo } from "@/utils/etiquetaEquipo";
 
 const ESTADO_CFG = {
   pendiente: { label: "Pendiente", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A" },
@@ -74,7 +75,7 @@ export default function OrdenTrabajoCard({ ot, onActualizar, onEditar, puedeCerr
             <div className="flex items-center gap-1.5 mb-1">
               <Car className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
               <span className="text-sm font-semibold text-blue-700 truncate">
-                {ot.equipo_label}{ot.patente ? ` · ${ot.patente}` : ""}
+                {etiquetaEquipo(ot.equipo_label, ot.patente)}
               </span>
             </div>
             <p className="text-xs text-slate-600 line-clamp-1">{ot.problema_reportado || "Sin descripción"}</p>

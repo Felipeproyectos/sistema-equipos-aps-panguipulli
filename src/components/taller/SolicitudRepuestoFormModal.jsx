@@ -2,6 +2,7 @@ import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Loader2, X } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { etiquetaEquipo } from "@/utils/etiquetaEquipo";
 
 const CATS = ["neumaticos", "frenos", "bateria", "filtros", "lubricantes", "electrico", "sirena", "luces", "otros"];
 
@@ -84,7 +85,7 @@ export default function SolicitudRepuestoFormModal({ open, onClose, onGuardar, u
               <select className={input} value={form.orden_trabajo_id} onChange={e => set("orden_trabajo_id", e.target.value)}>
                 <option value="">Selecciona el vehículo en taller…</option>
                 {ordenesActivas.map(o => (
-                  <option key={o.id} value={o.id}>{o.numero_ot} · {o.equipo_label}{o.patente ? ` · ${o.patente}` : ""}</option>
+                  <option key={o.id} value={o.id}>{o.numero_ot} · {etiquetaEquipo(o.equipo_label, o.patente)}</option>
                 ))}
               </select>
               <p className="text-[11px] text-slate-400 mt-1">Vincula la solicitud a la orden donde se usarán los repuestos.</p>

@@ -100,7 +100,7 @@ export default function OrdenesTrabajo() {
 
       {/* Filtros + Lista */}
       <div className="max-w-6xl mx-auto px-4 lg:px-10 pb-10 space-y-4">
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex flex-wrap gap-2">
           {FILTROS.map(f => (
             <button key={f.value} onClick={() => setFiltro(f.value)}
               className="px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all"

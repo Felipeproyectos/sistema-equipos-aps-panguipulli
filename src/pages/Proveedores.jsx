@@ -94,7 +94,7 @@ export default function Proveedores() {
               className="w-full bg-white rounded-xl pl-10 pr-4 py-2.5 text-sm border border-slate-200" />
           </div>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-4">
           {RUBROS.map(r => (
             <button key={r.value} onClick={() => setFiltro(r.value)}
               className="px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all"

@@ -169,10 +169,10 @@ export default function Usuarios() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 lg:px-10 pb-10">
+      <div className="max-w-6xl mx-auto px-4 lg:px-10 pt-4 lg:pt-6 pb-10">
         {/* Tabs de área */}
         {TABS.length > 1 && (
-          <div className="grid gap-2 mb-4 -mt-2" style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0,1fr))` }}>
+          <div className="grid gap-2 mb-4" style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0,1fr))` }}>
             {TABS.map(t => {
               const Icon = t.icon;
               const active = tab === t.v;
@@ -213,7 +213,7 @@ export default function Usuarios() {
             <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
               <Building2 className="w-3.5 h-3.5" /> Filtrar por centro
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setCentroFiltro("todos")}
                 className="px-3.5 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all"

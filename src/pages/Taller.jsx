@@ -148,7 +148,7 @@ export default function Taller() {
         {/* Columna principal: Órdenes de Trabajo */}
         <div className="lg:col-span-2 space-y-4">
           {/* Filtros */}
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex flex-wrap gap-2">
             {FILTROS.map(f => (
               <button key={f.value} onClick={() => setFiltro(f.value)}
                 className="px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all"
