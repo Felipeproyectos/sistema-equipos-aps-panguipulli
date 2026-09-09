@@ -65,18 +65,26 @@ export default function MonitorCorporativo() {
   const { user: currentUser } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
   const [equipoSeleccionado, setEquipoSeleccionado] = useState("");
   const [selSeguimiento, setSelSeguimiento] = useState(null);
   const [selSeguimientoSalud, setSelSeguimientoSalud] = useState(null);
   const containerRef = useRef(null);
 
+  // Todo el tablero sale de getMonitorData. Si esa llamada falla y el error se
+  // traga en silencio, la pantalla muestra 0 equipos, 0 alertas y 0 órdenes —
+  // indistinguible de "todo en orden". En un sistema de equipamiento crítico
+  // eso es peor que no mostrar nada: alguien puede concluir que no hay alertas
+  // activas cuando en realidad no se sabe. Se guarda el fallo y se avisa.
   const fetchData = useCallback(async () => {
+    let fallo = null;
     const [res, centros, solicitudesCompra, solicitudesCompraSalud] = await Promise.all([
-      base44.functions.invoke('getMonitorData').catch(() => ({ data: {} })),
+      base44.functions.invoke('getMonitorData').catch((e) => { fallo = e; return { data: {} }; }),
       getCentrosEstructura().catch(() => []),
       base44.entities.SolicitudRepuesto.list("-created_date", 100).catch(() => []),
       base44.entities.SolicitudRepuestoSalud.list("-created_date", 100).catch(() => []),
     ]);
+    setErrorCarga(fallo ? (fallo.message || "No se pudo contactar al servidor") : null);
     const d = res.data || {};
     setData({
       equipos: d.equipos || [],
@@ -189,6 +197,24 @@ export default function MonitorCorporativo() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 lg:px-10 mt-4 lg:mt-6 pb-10 space-y-6 relative z-10">
+
+        {/* Los ceros de abajo solo son reales si los datos llegaron. */}
+        {errorCarga && (
+          <div className="rounded-2xl px-4 py-3 flex items-start gap-3"
+            style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}>
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "#DC2626" }} />
+            <div>
+              <p className="text-sm font-bold" style={{ color: "#B91C1C" }}>
+                No se pudieron cargar los datos del monitor
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: "#DC2626" }}>
+                Los números que ves abajo están en cero porque falló la consulta al servidor,
+                no porque no haya equipos, alertas ni órdenes. No tomes decisiones con esta
+                pantalla hasta que se recupere. — {errorCarga}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* KPIs Globales */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
