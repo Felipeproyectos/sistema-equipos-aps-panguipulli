@@ -13,6 +13,7 @@ import OrdenTrabajoFormModal from "@/components/taller/OrdenTrabajoFormModal";
 import SolicitudRepuestoModule from "@/components/taller/SolicitudRepuestoModule";
 import HistorialSolicitudesModal from "@/components/taller/HistorialSolicitudesModal";
 import { useAuth } from "@/lib/AuthContext";
+import { esVehiculo } from "@/lib/centros";
 import { getEffectiveNavRole, isSimulandoActivo } from "@/lib/roleSimulator";
 
 const FILTROS = [
@@ -44,7 +45,7 @@ export default function Taller() {
     ]);
     setOrdenes(ots);
     setRepuestos(reps);
-    setEquipos(eqs.filter(e => e.tipo === "ambulancia"));
+    setEquipos(eqs.filter(e => esVehiculo(e.tipo)));
   }, []);
 
   useEffect(() => {

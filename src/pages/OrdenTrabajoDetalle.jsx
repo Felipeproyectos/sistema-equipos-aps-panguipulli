@@ -8,6 +8,7 @@ import {
   Stethoscope, Lock, FileDown
 } from "lucide-react";
 import { generarPDFOrdenTrabajo } from "@/utils/generarPDFOrdenTrabajo";
+import { normalizarTipoActivo, etiquetaTipoActivo } from "@/lib/centros";
 import LineaTiempo from "@/components/taller/LineaTiempo";
 import RepuestosUtilizados from "@/components/taller/RepuestosUtilizados";
 import ComentariosOT from "@/components/taller/ComentariosOT";
@@ -241,9 +242,17 @@ export default function OrdenTrabajoDetalle() {
                 <h1 className="text-xl lg:text-3xl font-bold text-white">{ot.numero_ot}</h1>
                 <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: estado.bg, color: estado.color }}>{estado.label}</span>
                 <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: prio.bg, color: prio.color }}>Prioridad {prio.label}</span>
-                {ot.tipo_activo === "externo" && (
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-200">Externo</span>
-                )}
+                {(() => {
+                  const catOT = normalizarTipoActivo(ot.tipo_activo);
+                  const estilo = {
+                    salud: "bg-red-500/20 text-red-200",
+                    corporativo: "bg-blue-500/20 text-blue-200",
+                    externo: "bg-purple-500/20 text-purple-200",
+                  }[catOT] || "bg-blue-500/20 text-blue-200";
+                  return (
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${estilo}`}>{etiquetaTipoActivo(catOT)}</span>
+                  );
+                })()}
               </div>
               <div className="flex items-center gap-1.5">
                 <Car className="w-4 h-4 text-slate-300" />

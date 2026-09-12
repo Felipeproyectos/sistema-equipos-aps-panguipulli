@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Loader2, X, Truck, Package } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
+import { TIPOS_VEHICULO } from "@/lib/centros";
 
 export default function ConsumoDirectoModal({ repuesto, user, onClose, onConsumido }) {
   const [cantidad, setCantidad] = useState(1);
@@ -24,9 +25,9 @@ export default function ConsumoDirectoModal({ repuesto, user, onClose, onConsumi
     setMarcaModelo("");
     setObservaciones("");
     setLoadingEquipos(true);
-    base44.entities.Equipo.filter({ tipo: "ambulancia" }, "-created_date", 200)
+    base44.entities.Equipo.list("-created_date", 500)
       .then((list) => {
-        const activos = (list || []).filter((e) => e.activo !== false);
+        const activos = (list || []).filter((e) => e.activo !== false && TIPOS_VEHICULO.includes(e.tipo));
         setEquipos(activos);
         if (activos.length > 0) setEquipoId(activos[0].id);
       })

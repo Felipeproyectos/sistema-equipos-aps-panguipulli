@@ -1,19 +1,25 @@
 import { differenceInDays, parseISO } from "date-fns";
-import { AlertTriangle, Zap, Activity, Car, Monitor, MapPin, Hash } from "lucide-react";
+import { AlertTriangle, Zap, Activity, Car, Monitor, MapPin, Hash, Truck, Bus } from "lucide-react";
 import { TIPOS_EQUIPO, ESTADOS_EQUIPO } from "@/lib/centros";
 
 const TIPO_ICONS = {
   dea: Zap,
   monitor_desfibrilador: Activity,
   ambulancia: Car,
-  monitor_multiparametros: Monitor
+  monitor_multiparametros: Monitor,
+  camioneta: Truck,
+  furgon: Bus,
+  camion_3_4: Truck
 };
 
 const TIPO_COLORS = {
   dea: { icon: "#2563EB", bg: "#EFF6FF" },
   monitor_desfibrilador: { icon: "#7C3AED", bg: "#F5F3FF" },
   ambulancia: { icon: "#DC2626", bg: "#FEF2F2" },
-  monitor_multiparametros: { icon: "#0891B2", bg: "#ECFEFF" }
+  monitor_multiparametros: { icon: "#0891B2", bg: "#ECFEFF" },
+  camioneta: { icon: "#0F766E", bg: "#F0FDFA" },
+  furgon: { icon: "#B45309", bg: "#FFFBEB" },
+  camion_3_4: { icon: "#475569", bg: "#F1F5F9" }
 };
 
 export default function EquipoCard({ equipo, parches, onClick, onEdit }) {
