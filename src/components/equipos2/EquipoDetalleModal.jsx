@@ -6,7 +6,7 @@ import {
   Hash, Gauge, FileText, Shield, CheckCircle, Clock, ArrowLeft,
   Loader2, ExternalLink, Printer, ChevronDown
 } from "lucide-react";
-import { TIPOS_EQUIPO, ESTADOS_EQUIPO } from "@/lib/centros";
+import { TIPOS_EQUIPO, ESTADOS_EQUIPO, resolverUbicacion } from "@/lib/centros";
 import { esRolTaller, ROLES } from "@/lib/roles";
 import RepuestosTab from "./RepuestosTab";
 import ChecklistPlano from "./ChecklistPlano";
@@ -185,6 +185,7 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
 ══════════════════════════════════════════════ */
 function InfoTab({ equipo }) {
   const hoy = new Date();
+  const ubicacion = resolverUbicacion(equipo.centro_principal, equipo.subsede);
   const esAmbulancia = equipo.tipo === "ambulancia";
   const [ultimaSemanal, setUltimaSemanal] = useState(null);
 
@@ -259,8 +260,8 @@ function InfoTab({ equipo }) {
             <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full opacity-20" style={{ background: "white" }} />
             <p className="text-xs text-blue-200 uppercase tracking-widest mb-1">Ubicación Actual</p>
             <p className="text-white font-bold text-base leading-tight">
-              {equipo.centro_principal}
-              {equipo.subsede && <span className="block text-blue-200 text-sm font-medium">{equipo.subsede}</span>}
+              {ubicacion.centro}
+              {ubicacion.subsede && <span className="block text-blue-200 text-sm font-medium">{ubicacion.subsede}</span>}
             </p>
             {equipo.ubicacion_especifica && (
               <p className="text-blue-200 text-xs mt-1.5 flex items-center gap-1">

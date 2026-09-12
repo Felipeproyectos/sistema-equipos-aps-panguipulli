@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
@@ -7,7 +7,7 @@ import { getNavItemsForRole } from "@/lib/navPermissions";
 import MobileNav from "@/components/MobileNav";
 import RoleSimulator from "@/components/RoleSimulator";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
-import { roleLabel } from "@/lib/roles";
+import { roleLabel, ROLES } from "@/lib/roles";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import useInactivityLogout from "@/hooks/useInactivityLogout";
@@ -43,12 +43,24 @@ export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
 
   // Redirigir al Monitor Corporativo a usuarios con rol exclusivo de visualización
-  // (solo aplica al rol real, no a la simulación del super_admin)
+  // (solo aplica al rol real, no a la simulación del super_admin).
+  //
+  // Antes rebotaba desde CUALQUIER pantalla distinta del Monitor, incluidas las
+  // que su propia navegación le ofrece: "Reportes" aparecía en su menú y al
+  // hacer clic volvía al Monitor, así que el rol quedaba encerrado en una sola
+  // pantalla de KPIs. Ahora solo se rebota lo que su rol no tiene permitido —
+  // la lista sale de la misma matriz de navegación, para que menú y acceso no
+  // puedan volver a contradecirse.
+  const paginasPermitidasMonitor = useMemo(
+    () => new Set(getNavItemsForRole(ROLES.MONITOR_CORPORATIVO).map(i => i.page)),
+    []
+  );
+
   useEffect(() => {
-    if (user?.role === "monitor_corporativo" && currentPageName !== "MonitorCorporativo") {
+    if (user?.role === ROLES.MONITOR_CORPORATIVO && !paginasPermitidasMonitor.has(currentPageName)) {
       navigate("/MonitorCorporativo", { replace: true });
     }
-  }, [user, currentPageName, navigate]);
+  }, [user, currentPageName, navigate, paginasPermitidasMonitor]);
 
   // Escuchar cambios del simulador para refrescar la nav
   const [, forceUpdate] = useState(0);

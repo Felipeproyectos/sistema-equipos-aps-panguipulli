@@ -1,6 +1,6 @@
 import { differenceInDays, parseISO } from "date-fns";
 import { AlertTriangle, Zap, Activity, Car, Monitor, MapPin, Hash } from "lucide-react";
-import { TIPOS_EQUIPO, ESTADOS_EQUIPO } from "@/lib/centros";
+import { TIPOS_EQUIPO, ESTADOS_EQUIPO, resolverUbicacion } from "@/lib/centros";
 
 const TIPO_ICONS = {
   dea: Zap,
@@ -22,6 +22,9 @@ export default function EquipoCard({ equipo, parches, onClick, onEdit }) {
   const tipoLabel = TIPOS_EQUIPO.find(t => t.value === equipo.tipo)?.label || equipo.tipo;
   const Icon = TIPO_ICONS[equipo.tipo] || Monitor;
   const iconStyle = TIPO_COLORS[equipo.tipo] || { icon: "#2563EB", bg: "#EFF6FF" };
+  // Los CECOSF y la Corporación son subsedes de un CESFAM, aunque la ficha
+  // todavía los tenga guardados como centro principal.
+  const ubicacion = resolverUbicacion(equipo.centro_principal, equipo.subsede);
 
   const parchesAlerta = parches.filter(p => {
     if (!p.fecha_vencimiento) return false;
@@ -82,8 +85,8 @@ export default function EquipoCard({ equipo, parches, onClick, onEdit }) {
           <div className="flex items-start gap-2 text-xs text-slate-500">
             <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0 mt-0.5" />
             <span>
-              {equipo.centro_principal}
-              {equipo.subsede && <span className="text-slate-400"> › {equipo.subsede}</span>}
+              {ubicacion.centro}
+              {ubicacion.subsede && <span className="text-slate-400"> › {ubicacion.subsede}</span>}
               {equipo.ubicacion_especifica && (
                 <span className="block text-slate-400">{equipo.ubicacion_especifica}</span>
               )}
