@@ -6,6 +6,7 @@ import { Wrench, Car, Clock, User, ChevronRight, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { etiquetaEquipo } from "@/utils/etiquetaEquipo";
+import { CATEGORIAS_ACTIVO_TALLER, normalizarTipoActivo } from "@/lib/centros";
 
 const ESTADO_CFG = {
   pendiente: { label: "Pendiente", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A" },
@@ -68,9 +69,12 @@ export default function OrdenTrabajoCard({ ot, onActualizar, onEditar, puedeCerr
               <p className="font-bold text-slate-800 text-sm">{ot.numero_ot}</p>
               <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: estado.bg, color: estado.color }}>{estado.label}</span>
               <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: prio.bg, color: prio.color }}>{prio.label}</span>
-              {ot.tipo_activo === "externo" && (
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700">Externo</span>
-              )}
+              {(() => {
+                const cat = CATEGORIAS_ACTIVO_TALLER.find(c => c.value === normalizarTipoActivo(ot.tipo_activo)) || CATEGORIAS_ACTIVO_TALLER[0];
+                return (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: cat.bg, color: cat.color }}>{cat.label}</span>
+                );
+              })()}
             </div>
             <div className="flex items-center gap-1.5 mb-1">
               <Car className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />

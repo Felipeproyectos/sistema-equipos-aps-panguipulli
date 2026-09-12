@@ -120,7 +120,7 @@ export default async function (req) {
           equipo_id: inspeccion.equipo_id,
           equipo_label: equipoLabel,
           patente: equipo.patente || '',
-          tipo_activo: 'corporativo',
+          tipo_activo: ['camioneta', 'furgon', 'camion_3_4'].includes(equipo.tipo) ? 'corporativo' : 'salud',
           prioridad,
           estado: 'pendiente',
           problema_reportado: `Fallas detectadas en inspección (${inspeccion.tipo_formulario}):\n${fallasDetalle.join('\n')}\n\nObservaciones: ${inspeccion.observaciones || ''}`,

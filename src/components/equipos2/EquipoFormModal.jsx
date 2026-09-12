@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { X, Upload, Loader2 } from "lucide-react";
-import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO } from "@/lib/centros";
+import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO, esVehiculo } from "@/lib/centros";
 
 export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
   // Pueden elegir cualquier centro: super_admin y admin. El encargado de salud
@@ -126,7 +126,7 @@ export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
             <input className={inputCls} placeholder="Ej: Sala de Urgencias, Morbilidad..." value={form.ubicacion_especifica} onChange={e => set("ubicacion_especifica", e.target.value)} />
           </div>
 
-          {form.tipo === "ambulancia" && (<>
+          {esVehiculo(form.tipo) && (<>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-semibold text-slate-600 block mb-1">Patente</label>

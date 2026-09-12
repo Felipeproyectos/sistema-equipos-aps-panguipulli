@@ -110,8 +110,59 @@ export const TIPOS_EQUIPO = [
   { value: "dea", label: "DEA" },
   { value: "monitor_desfibrilador", label: "Monitor Desfibrilador" },
   { value: "ambulancia", label: "Ambulancia" },
-  { value: "monitor_multiparametros", label: "Monitor Multiparámetros" }
+  { value: "monitor_multiparametros", label: "Monitor Multiparámetros" },
+  { value: "camioneta", label: "Camioneta" },
+  { value: "furgon", label: "Furgón" },
+  { value: "camion_3_4", label: "Camión 3/4" }
 ];
+
+/* ──────────────────────────────────────────────────────────────
+   Categorías de activos del Taller Mecánico
+   - salud: flota clínica (ambulancias)
+   - corporativo: flota administrativa/operativa (camionetas, furgones, camiones 3/4)
+   - externo: vehículo de otra entidad, se registra manualmente en la OT
+   ────────────────────────────────────────────────────────────── */
+export const TIPOS_VEHICULO_SALUD = ["ambulancia"];
+
+export const TIPOS_VEHICULO_CORPORATIVO = ["camioneta", "furgon", "camion_3_4"];
+
+export const TIPOS_VEHICULO = [...TIPOS_VEHICULO_SALUD, ...TIPOS_VEHICULO_CORPORATIVO];
+
+export const CATEGORIAS_ACTIVO_TALLER = [
+  { value: "salud", label: "Salud", descripcion: "Ambulancias", color: "#DC2626", bg: "#FEF2F2" },
+  { value: "corporativo", label: "Corporativo", descripcion: "Camionetas, furgones, camiones 3/4", color: "#2563EB", bg: "#EFF6FF" },
+  { value: "externo", label: "Externo", descripcion: "Vehículo de otra entidad", color: "#7C3AED", bg: "#F5F3FF" }
+];
+
+/** ¿El tipo de equipo corresponde a un vehículo (cualquier categoría interna)? */
+export function esVehiculo(tipo) {
+  return TIPOS_VEHICULO.includes(tipo);
+}
+
+/** Categoría de taller ("salud" | "corporativo") a partir del tipo de equipo. */
+export function categoriaActivoPorTipo(tipo) {
+  if (TIPOS_VEHICULO_SALUD.includes(tipo)) return "salud";
+  if (TIPOS_VEHICULO_CORPORATIVO.includes(tipo)) return "corporativo";
+  return null;
+}
+
+/**
+ * Normaliza el tipo_activo de una OT.
+ * Compatibilidad: las OT antiguas de ambulancias quedaron guardadas como
+ * "corporativo"; si el equipo asociado es de flota salud se reclasifican.
+ */
+export function normalizarTipoActivo(tipoActivo, equipo) {
+  if (tipoActivo === "externo") return "externo";
+  const porEquipo = equipo ? categoriaActivoPorTipo(equipo.tipo) : null;
+  if (porEquipo) return porEquipo;
+  if (tipoActivo === "salud" || tipoActivo === "corporativo") return tipoActivo;
+  return "salud";
+}
+
+/** Etiqueta legible de la categoría de activo. */
+export function etiquetaTipoActivo(tipoActivo) {
+  return CATEGORIAS_ACTIVO_TALLER.find(c => c.value === tipoActivo)?.label || "Corporativo";
+}
 
 export const TIPOS_ACTIVIDAD = [
   { value: "cambio_parches", label: "Cambio de Parches" },

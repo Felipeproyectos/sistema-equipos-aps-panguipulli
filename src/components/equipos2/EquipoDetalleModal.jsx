@@ -6,7 +6,7 @@ import {
   Hash, Gauge, FileText, Shield, CheckCircle, Clock, ArrowLeft,
   Loader2, ExternalLink, Printer, ChevronDown
 } from "lucide-react";
-import { TIPOS_EQUIPO, ESTADOS_EQUIPO, resolverUbicacion } from "@/lib/centros";
+import { TIPOS_EQUIPO, ESTADOS_EQUIPO, esVehiculo, resolverUbicacion } from "@/lib/centros";
 import { esRolTaller, ROLES } from "@/lib/roles";
 import RepuestosTab from "./RepuestosTab";
 import ChecklistPlano from "./ChecklistPlano";
@@ -20,7 +20,7 @@ import TallerTab from "./TallerTab";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { generarPDFEquipo } from "@/utils/generarPDFEquipo";
 
-const TIPO_ICONS = { dea: Zap, monitor_desfibrilador: Activity, ambulancia: Car, monitor_multiparametros: Monitor };
+const TIPO_ICONS = { dea: Zap, monitor_desfibrilador: Activity, ambulancia: Car, monitor_multiparametros: Monitor, camioneta: Car, furgon: Car, camion_3_4: Car };
 
 export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, onDeleted, user, onActividadCreada }) {
   const [actividades, setActividades] = useState([]);
@@ -41,7 +41,7 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
   const estado = ESTADOS_EQUIPO.find(e => e.value === equipo.estado) || ESTADOS_EQUIPO[0];
   const tipoLabel = TIPOS_EQUIPO.find(t => t.value === equipo.tipo)?.label || equipo.tipo;
   const Icon = TIPO_ICONS[equipo.tipo] || Monitor;
-  const esAmbulancia = equipo.tipo === "ambulancia";
+  const esVehiculoFlota = esVehiculo(equipo.tipo);
 
   useEffect(() => {
     base44.entities.Actividad.filter({ equipo_id: equipo.id }, "-created_date", 100).then(setActividades).catch(() => {});
@@ -76,8 +76,8 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
     { key: "info", label: "Información", icon: Info },
     { key: "mantenimiento", label: "Mantenimiento Externo", icon: Wrench },
     { key: "inspecciones", label: "Mantenimiento Interno", icon: ClipboardCheck },
-    ...(!esAmbulancia && !sinParches ? [{ key: "parches", label: "Parches", icon: Package }] : []),
-    ...(esAmbulancia ? [
+    ...(!esVehiculoFlota && !sinParches ? [{ key: "parches", label: "Parches", icon: Package }] : []),
+    ...(esVehiculoFlota ? [
       { key: "taller", label: "Taller", icon: Hammer },
       ...(puedeVerRepuestos ? [{ key: "repuestos", label: "Repuestos", icon: Gauge }] : []),
       { key: "bitacora", label: "Bitácora", icon: BookOpen }
@@ -185,6 +185,7 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
 ══════════════════════════════════════════════ */
 function InfoTab({ equipo }) {
   const hoy = new Date();
+  const esVehiculoFlota = esVehiculo(equipo.tipo);
   const ubicacion = resolverUbicacion(equipo.centro_principal, equipo.subsede);
   const esAmbulancia = equipo.tipo === "ambulancia";
   const [ultimaSemanal, setUltimaSemanal] = useState(null);
@@ -228,7 +229,7 @@ function InfoTab({ equipo }) {
           ) : (
             <div className="w-full flex items-center justify-center" style={{ minHeight: 200, background: "linear-gradient(135deg,#EFF6FF,#E0E7FF)" }}>
               <div className="text-center">
-                {equipo.tipo === "ambulancia" ? <Car className="w-16 h-16 text-blue-200 mx-auto mb-2" /> : <Monitor className="w-16 h-16 text-blue-200 mx-auto mb-2" />}
+                {esVehiculo(equipo.tipo) ? <Car className="w-16 h-16 text-blue-200 mx-auto mb-2" /> : <Monitor className="w-16 h-16 text-blue-200 mx-auto mb-2" />}
                 <p className="text-xs text-slate-400">Sin imagen registrada</p>
               </div>
             </div>
@@ -272,8 +273,8 @@ function InfoTab({ equipo }) {
         </div>
       </div>
 
-      {/* Legal docs (ambulancia) */}
-      {esAmbulancia && (
+      {/* Documentos legales (vehículos) */}
+      {esVehiculoFlota && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
             { label: "Permiso de Circulación", icon: Shield, estado: equipo.estado_permiso_circulacion, fecha: equipo.fecha_vencimiento_permiso_circulacion },

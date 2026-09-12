@@ -138,6 +138,7 @@ export function estaEnAlcanceDeCentro(user, registro) {
 }
 
 const EQUIPOS_MEDICOS = ["dea", "monitor_desfibrilador", "monitor_multiparametros"];
+const VEHICULOS = ["ambulancia", "camioneta", "furgon", "camion_3_4"];
 
 /**
  * ¿El usuario puede ver este Equipo?
@@ -149,8 +150,8 @@ export function puedeVerEquipo(user, equipo) {
   if (!user || !equipo) return false;
   if (esSuperAdmin(user.role) || user.role === ROLES.ADMIN || esMonitorCorporativo(user.role)) return true;
 
-  if (equipo.tipo === "ambulancia") {
-    if (esRolTaller(user.role)) return true; // Taller necesita ver ambulancias para las OT
+  if (VEHICULOS.includes(equipo.tipo)) {
+    if (esRolTaller(user.role)) return true; // Taller necesita ver la flota para las OT
     if (esRolSalud(user.role)) return estaEnAlcanceDeCentro(user, equipo);
     return false;
   }

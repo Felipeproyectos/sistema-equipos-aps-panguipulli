@@ -1,10 +1,43 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { X, Wrench, Car, Building2 } from "lucide-react";
+import { X, Wrench, Car, Building2, HeartPulse } from "lucide-react";
+import {
+  TIPOS_VEHICULO_SALUD,
+  TIPOS_VEHICULO_CORPORATIVO,
+  categoriaActivoPorTipo,
+  normalizarTipoActivo,
+} from "@/lib/centros";
+
+const CATEGORIAS = [
+  {
+    value: "salud",
+    label: "Salud",
+    ayuda: "Ambulancias de la red asistencial",
+    icon: HeartPulse,
+    activo: "bg-red-600 text-white",
+    tipos: TIPOS_VEHICULO_SALUD,
+  },
+  {
+    value: "corporativo",
+    label: "Corporativo",
+    ayuda: "Camionetas, furgones y camiones 3/4",
+    icon: Building2,
+    activo: "bg-blue-600 text-white",
+    tipos: TIPOS_VEHICULO_CORPORATIVO,
+  },
+  {
+    value: "externo",
+    label: "Externo",
+    ayuda: "Vehículo de otra entidad",
+    icon: Car,
+    activo: "bg-purple-600 text-white",
+    tipos: [],
+  },
+];
 
 export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipos, editando, user }) {
   const [form, setForm] = useState({
-    tipo_activo: "corporativo",
+    tipo_activo: "salud",
     equipo_id: "",
     equipo_label: "",
     patente: "",
@@ -19,8 +52,9 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
 
   useEffect(() => {
     if (editando) {
+      const equipoOT = (equipos || []).find(e => e.id === editando.equipo_id);
       setForm({
-        tipo_activo: editando.tipo_activo || "corporativo",
+        tipo_activo: normalizarTipoActivo(editando.tipo_activo, equipoOT),
         equipo_id: editando.equipo_id || "",
         equipo_label: editando.equipo_label || "",
         patente: editando.patente || "",
@@ -32,18 +66,41 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
       });
     } else {
       setForm({
-        tipo_activo: "corporativo", equipo_id: "", equipo_label: "",
+        tipo_activo: "salud", equipo_id: "", equipo_label: "",
         patente: "", marca_modelo: "", problema_reportado: "",
         diagnostico: "", prioridad: "media", origen: "solicitud_directa",
       });
     }
     setError("");
-  }, [editando, open]);
+  }, [editando, open, equipos]);
+
+  const categoria = CATEGORIAS.find(c => c.value === form.tipo_activo) || CATEGORIAS[0];
+  const esExterno = form.tipo_activo === "externo";
+
+  const equiposFiltrados = useMemo(
+    () => (equipos || []).filter(e => categoriaActivoPorTipo(e.tipo) === form.tipo_activo),
+    [equipos, form.tipo_activo]
+  );
 
   if (!open) return null;
 
+  const cambiarCategoria = (valor) => {
+    setForm(f => {
+      if (f.tipo_activo === valor) return f;
+      return {
+        ...f,
+        tipo_activo: valor,
+        equipo_id: "",
+        equipo_label: "",
+        patente: "",
+        marca_modelo: "",
+      };
+    });
+    setError("");
+  };
+
   const handleEquipoChange = (id) => {
-    const eq = equipos.find(e => e.id === id);
+    const eq = (equipos || []).find(e => e.id === id);
     setForm(f => ({
       ...f,
       equipo_id: id,
@@ -55,15 +112,20 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
 
   const handleSubmit = async () => {
     if (!form.problema_reportado.trim()) { setError("Debe describir el problema reportado."); return; }
-    if (form.tipo_activo === "corporativo" && !form.equipo_id) { setError("Seleccione un equipo corporativo."); return; }
-    if (form.tipo_activo === "externo" && !form.patente.trim()) { setError("Ingrese la patente del activo externo."); return; }
+    if (!esExterno && !form.equipo_id) {
+      setError(form.tipo_activo === "salud"
+        ? "Seleccione una ambulancia."
+        : "Seleccione un vehículo corporativo.");
+      return;
+    }
+    if (esExterno && !form.patente.trim()) { setError("Ingrese la patente del activo externo."); return; }
 
     setSaving(true);
     try {
       const numero_ot = editando?.numero_ot || `OT-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
-      const label = form.tipo_activo === "corporativo"
-        ? form.equipo_label
-        : `${form.marca_modelo || "Vehículo externo"} · ${form.patente}`;
+      const label = esExterno
+        ? `${form.marca_modelo || "Vehículo externo"} · ${form.patente}`
+        : form.equipo_label;
 
       const base = {
         ...form,
@@ -75,6 +137,7 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
 
       if (editando) {
         await base44.entities.OrdenTrabajo.update(editando.id, {
+          tipo_activo: form.tipo_activo,
           problema_reportado: form.problema_reportado,
           diagnostico: form.diagnostico,
           prioridad: form.prioridad,
@@ -116,31 +179,41 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
           {/* Tipo de activo */}
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Tipo de Activo</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setForm(f => ({ ...f, tipo_activo: "corporativo" }))}
-                className={`py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${form.tipo_activo === "corporativo" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>
-                <Building2 className="w-4 h-4" /> Corporativo
-              </button>
-              <button onClick={() => setForm(f => ({ ...f, tipo_activo: "externo" }))}
-                className={`py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${form.tipo_activo === "externo" ? "bg-purple-600 text-white" : "bg-slate-100 text-slate-600"}`}>
-                <Car className="w-4 h-4" /> Externo
-              </button>
+            <div className="grid grid-cols-3 gap-2">
+              {CATEGORIAS.map(cat => {
+                const Icon = cat.icon;
+                const activa = form.tipo_activo === cat.value;
+                return (
+                  <button key={cat.value} onClick={() => cambiarCategoria(cat.value)}
+                    className={`py-3 px-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all ${activa ? cat.activo : "bg-slate-100 text-slate-600"}`}>
+                    <Icon className="w-4 h-4 flex-shrink-0" /> {cat.label}
+                  </button>
+                );
+              })}
             </div>
+            <p className="text-[11px] text-slate-400 mt-1.5">{categoria.ayuda}</p>
           </div>
 
           {/* Selector de equipo */}
-          {form.tipo_activo === "corporativo" ? (
+          {!esExterno ? (
             <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Equipo / Vehículo</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                {form.tipo_activo === "salud" ? "Ambulancia" : "Equipo / Vehículo"}
+              </label>
               <select value={form.equipo_id} onChange={e => handleEquipoChange(e.target.value)}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm">
                 <option value="">Seleccionar equipo...</option>
-                {equipos.map(eq => (
+                {equiposFiltrados.map(eq => (
                   <option key={eq.id} value={eq.id}>
                     {eq.marca} {eq.modelo}{eq.patente ? ` · ${eq.patente}` : ""}{eq.centro_principal ? ` (${eq.centro_principal})` : ""}
                   </option>
                 ))}
               </select>
+              {equiposFiltrados.length === 0 && (
+                <p className="text-[11px] text-amber-600 font-semibold mt-1.5">
+                  No hay vehículos registrados en esta categoría. Regístrelos en el módulo Equipos.
+                </p>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">

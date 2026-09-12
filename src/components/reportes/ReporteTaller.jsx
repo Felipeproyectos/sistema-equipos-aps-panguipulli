@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Wrench, Loader2, FileText, Clock, DollarSign, Package, User } from "lucide-react";
 import { format, differenceInDays, parseISO } from "date-fns";
+import { esVehiculo } from "@/lib/centros";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts";
@@ -24,15 +25,15 @@ export default function ReporteTaller() {
       base44.entities.Repuesto.list().catch(() => []),
       base44.entities.Equipo.list().catch(() => []),
     ]).then(([ot, rep, eq]) => {
-      const ambulancias = eq.filter(e => e.tipo === "ambulancia");
-      const idsAmbulancias = new Set(ambulancias.map(a => a.id));
-      // Solo OT de vehículos: ambulancias corporativas o activos externos
+      const vehiculos = eq.filter(e => esVehiculo(e.tipo));
+      const idsVehiculos = new Set(vehiculos.map(v => v.id));
+      // Solo OT de vehículos: flota salud, flota corporativa o activos externos
       const ordenesVehiculos = ot.filter(o =>
-        o.tipo_activo === "externo" || (o.equipo_id && idsAmbulancias.has(o.equipo_id))
+        o.tipo_activo === "externo" || (o.equipo_id && idsVehiculos.has(o.equipo_id))
       );
       setOrdenes(ordenesVehiculos);
       setRepuestos(rep);
-      setEquipos(ambulancias);
+      setEquipos(vehiculos);
       setLoading(false);
     });
   }, []);

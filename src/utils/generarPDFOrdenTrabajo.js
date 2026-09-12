@@ -86,7 +86,7 @@ export function generarPDFOrdenTrabajo(ot) {
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
     <span style="padding:5px 12px;border-radius:7px;background:${est.bg};color:${est.color};font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em">${est.label}</span>
     <span style="padding:5px 12px;border-radius:7px;background:#eff6ff;color:#2563eb;font-size:9px;font-weight:700;text-transform:uppercase">Prioridad ${PRIORIDAD_LABEL[ot.prioridad] || ot.prioridad || "—"}</span>
-    <span style="padding:5px 12px;border-radius:7px;background:#f5f3ff;color:#7c3aed;font-size:9px;font-weight:700;text-transform:uppercase">${ot.tipo_activo === "externo" ? "Vehículo Externo" : "Vehículo Corporativo"}</span>
+    <span style="padding:5px 12px;border-radius:7px;background:#f5f3ff;color:#7c3aed;font-size:9px;font-weight:700;text-transform:uppercase">${{ externo: "Vehículo Externo", salud: "Vehículo Salud", corporativo: "Vehículo Corporativo" }[ot.tipo_activo] || "Vehículo Corporativo"}</span>
   </div>
 
   <!-- DATOS GENERALES -->
