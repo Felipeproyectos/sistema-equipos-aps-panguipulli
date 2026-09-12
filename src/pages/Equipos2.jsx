@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { Monitor, Plus, Search, Filter, RefreshCw } from "lucide-react";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
-import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO } from "@/lib/centros";
+import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO, resolverUbicacion } from "@/lib/centros";
 import EquipoCard from "@/components/equipos2/EquipoCard";
 import EquipoFormModal from "@/components/equipos2/EquipoFormModal";
 import EquipoDetalleModal from "@/components/equipos2/EquipoDetalleModal";
@@ -85,15 +85,18 @@ export default function Equipos2() {
   const elegirCentro = (nombre) => { setCentroSeleccionado(nombre); setSubsedeSeleccionada(null); };
 
   const equiposFiltrados = equipos.filter(e => {
-    if (centrosPermitidos && !centrosPermitidos.includes(e.centro_principal)) return false;
+    // Un equipo cargado con un CECOSF como centro principal pertenece al CESFAM
+    // del que depende: se ubica ahí aunque su ficha todavía diga otra cosa.
+    const ubic = resolverUbicacion(e.centro_principal, e.subsede);
+    if (centrosPermitidos && !centrosPermitidos.includes(ubic.centro)) return false;
     if (centroSeleccionado) {
-      const enCentro = e.centro_principal === centroSeleccionado;
-      const enSubsede = subsedesDelCentro.includes(e.subsede);
+      const enCentro = ubic.centro === centroSeleccionado;
+      const enSubsede = subsedesDelCentro.includes(ubic.subsede);
       if (!enCentro && !enSubsede) return false;
     }
     // SIN_SUBSEDE = el equipo esta en el centro base, no en una posta/CECOSF.
-    if (subsedeSeleccionada === SIN_SUBSEDE) { if (e.subsede) return false; }
-    else if (subsedeSeleccionada && e.subsede !== subsedeSeleccionada) return false;
+    if (subsedeSeleccionada === SIN_SUBSEDE) { if (ubic.subsede) return false; }
+    else if (subsedeSeleccionada && ubic.subsede !== subsedeSeleccionada) return false;
     if (filtroEstado !== "todos" && e.estado !== filtroEstado) return false;
     if (filtroTipo !== "todos" && e.tipo !== filtroTipo) return false;
     if (busqueda) {
@@ -101,7 +104,7 @@ export default function Equipos2() {
       return (e.numero_inventario || "").toLowerCase().includes(b) ||
         (e.marca || "").toLowerCase().includes(b) ||
         (e.modelo || "").toLowerCase().includes(b) ||
-        (e.subsede || "").toLowerCase().includes(b);
+        (ubic.subsede || "").toLowerCase().includes(b);
     }
     return true;
   });

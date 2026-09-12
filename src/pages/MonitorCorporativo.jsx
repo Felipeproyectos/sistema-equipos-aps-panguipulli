@@ -3,7 +3,8 @@ import { base44 } from "@/api/base44Client";
 import {
   Monitor, AlertTriangle, ClipboardCheck, ClipboardList, Activity,
   Wrench, Package, CheckCircle2, TrendingUp, BarChart3,
-  ShieldCheck, RefreshCw, Heart, Stethoscope, ShoppingCart
+  ShieldCheck, RefreshCw, Heart, Stethoscope, ShoppingCart,
+  Car, Search, Hash, MapPin, Eye
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar,
@@ -11,11 +12,13 @@ import {
 } from "recharts";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { differenceInDays, parseISO } from "date-fns";
+import { differenceInDays, parseISO, format } from "date-fns";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import KpiCard from "@/components/monitor/KpiCard";
 import CentroBreakdown from "@/components/monitor/CentroBreakdown";
-import { getCentrosEstructura } from "@/lib/centros";
+import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO } from "@/lib/centros";
+import { getNavItemsForRole } from "@/lib/navPermissions";
+import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import ComentariosEquipo from "@/components/monitor/ComentariosEquipo";
 import SeguimientoCompraModal from "@/components/taller/SeguimientoCompraModal";
 import { MessageCircle } from "lucide-react";
@@ -27,11 +30,16 @@ const ESTADO_EQUIPO_COLORS = {
   fuera_de_servicio: "#dc2626",
 };
 
+// "en_revision" es un estado real del taller (ReporteAvance lo escribe cuando
+// el mecanico termina y lo manda al Jefe de Taller). El Monitor no lo tenia en
+// esta tabla, asi que esas OT no aparecian en el grafico ni en ningun KPI: se
+// perdian entre "en proceso" y "completada".
 const OT_ESTADO_LABELS = {
   pendiente: "Pendiente",
   asignada: "Asignada",
   en_proceso: "En Proceso",
   pausada: "Pausada",
+  en_revision: "En Revisión",
   completada: "Completada",
   cancelada: "Cancelada",
 };
@@ -40,9 +48,26 @@ const OT_ESTADO_COLORS = {
   asignada: "#2563eb",
   en_proceso: "#7c3aed",
   pausada: "#64748b",
+  en_revision: "#0891b2",
   completada: "#16a34a",
   cancelada: "#dc2626",
 };
+
+// Una OT sigue viva mientras no este cerrada.
+const OT_ESTADOS_ABIERTOS = ["pendiente", "asignada", "en_proceso", "pausada", "en_revision"];
+
+const OT_PRIORIDAD = {
+  baja: { label: "Baja", color: "#64748b", bg: "#f1f5f9" },
+  media: { label: "Media", color: "#2563eb", bg: "#eff6ff" },
+  alta: { label: "Alta", color: "#d97706", bg: "#fffbeb" },
+  critica: { label: "Crítica", color: "#dc2626", bg: "#fef2f2" },
+};
+
+const FILTROS_OT = [
+  { value: "abiertas", label: "Abiertas" },
+  ...Object.keys(OT_ESTADO_LABELS).map(k => ({ value: k, label: OT_ESTADO_LABELS[k] })),
+  { value: "todas", label: "Todas" },
+];
 
 const ALERTA_TIPO_LABELS = {
   parche_vencido: "Parche vencido",
@@ -67,6 +92,11 @@ export default function MonitorCorporativo() {
   const [loading, setLoading] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
   const [equipoSeleccionado, setEquipoSeleccionado] = useState("");
+  const [busquedaEquipo, setBusquedaEquipo] = useState("");
+  const [filtroTipoEquipo, setFiltroTipoEquipo] = useState("todos");
+  const [filtroEstadoEquipo, setFiltroEstadoEquipo] = useState("todos");
+  const [busquedaOT, setBusquedaOT] = useState("");
+  const [filtroEstadoOT, setFiltroEstadoOT] = useState("abiertas");
   const [selSeguimiento, setSelSeguimiento] = useState(null);
   const [selSeguimientoSalud, setSelSeguimientoSalud] = useState(null);
   const containerRef = useRef(null);
@@ -124,6 +154,10 @@ export default function MonitorCorporativo() {
 
     const otPendientes = ordenes.filter(o => o.estado === "pendiente");
     const otEnProceso = ordenes.filter(o => ["asignada", "en_proceso"].includes(o.estado));
+    // "En gestion" es todo lo que no esta cerrado: sumar solo pendientes + en
+    // proceso dejaba fuera las pausadas y las que esperan revision del Jefe de
+    // Taller, que son justamente las que conviene mirar.
+    const otAbiertas = ordenes.filter(o => OT_ESTADOS_ABIERTOS.includes(o.estado));
     const otCompletadas = ordenes.filter(o => o.estado === "completada");
     const otPorInspeccion = ordenes.filter(o => o.origen === "inspeccion");
     const stockBajo = repuestos.filter(r => (r.stock_actual || 0) <= (r.stock_minimo || 0));
@@ -151,7 +185,7 @@ export default function MonitorCorporativo() {
     return {
       operativos, enMantenimiento, fueraServicio, ambulancias, deas,
       parchesVencidos, alertasCriticas,
-      otPendientes, otEnProceso, otCompletadas, otPorInspeccion,
+      otPendientes, otEnProceso, otAbiertas, otCompletadas, otPorInspeccion,
       stockBajo, valorInventario, totalCostoOT, proveedoresActivos,
       estadoEquiposData, otEstadosData, alertasPorTipo,
     };
@@ -160,10 +194,51 @@ export default function MonitorCorporativo() {
   const {
     operativos, enMantenimiento, fueraServicio, ambulancias, deas,
     parchesVencidos, alertasCriticas,
-    otPendientes, otEnProceso, otCompletadas, otPorInspeccion,
+    otPendientes, otEnProceso, otAbiertas, otCompletadas, otPorInspeccion,
     stockBajo, valorInventario, totalCostoOT, proveedoresActivos,
     estadoEquiposData, otEstadosData, alertasPorTipo,
   } = kpis;
+
+  // ── Listados ──────────────────────────────────────────────────────────────
+  // El Monitor solo tenia contadores y graficos: veia "12 equipos" y "5 OT en
+  // gestion", pero no CUALES. Y como el rol esta confinado a esta pantalla
+  // (ver Layout.jsx), no habia ningun otro lugar donde mirarlos. Estos dos
+  // listados son la misma informacion que ya llegaba de getMonitorData, ahora
+  // visible; siguen siendo de solo lectura.
+  const equiposFiltrados = useMemo(() => {
+    const q = busquedaEquipo.trim().toLowerCase();
+    return equipos.filter(e => {
+      if (filtroTipoEquipo !== "todos" && e.tipo !== filtroTipoEquipo) return false;
+      if (filtroEstadoEquipo !== "todos" && e.estado !== filtroEstadoEquipo) return false;
+      if (!q) return true;
+      return [e.marca, e.modelo, e.patente, e.numero_serie, e.centro_principal, e.subsede, e.ubicacion_especifica]
+        .some(v => String(v || "").toLowerCase().includes(q));
+    });
+  }, [equipos, busquedaEquipo, filtroTipoEquipo, filtroEstadoEquipo]);
+
+  const ordenesFiltradas = useMemo(() => {
+    const q = busquedaOT.trim().toLowerCase();
+    return ordenes.filter(o => {
+      if (filtroEstadoOT === "abiertas") { if (!OT_ESTADOS_ABIERTOS.includes(o.estado)) return false; }
+      else if (filtroEstadoOT !== "todas" && o.estado !== filtroEstadoOT) return false;
+      if (!q) return true;
+      return [o.numero_ot, o.equipo_label, o.patente, o.marca_modelo, o.mecanico_nombre, o.mecanico_email, o.problema_reportado]
+        .some(v => String(v || "").toLowerCase().includes(q));
+    });
+  }, [ordenes, busquedaOT, filtroEstadoOT]);
+
+  // Layout rebota al Monitor Corporativo fuera de las pantallas que su rol no
+  // tiene permitidas, asi que enlazar a ellas desde aqui era un callejon sin
+  // salida: el clic volvia a esta misma pagina. Se enlaza solo lo alcanzable.
+  const paginasAlcanzables = useMemo(
+    () => new Set(getNavItemsForRole(getEffectiveNavRole(currentUser?.role)).map(i => i.page)),
+    [currentUser?.role]
+  );
+
+  const tiposPresentes = useMemo(() => {
+    const vistos = [...new Set(equipos.map(e => e.tipo).filter(Boolean))];
+    return vistos.map(t => ({ value: t, label: TIPOS_EQUIPO.find(x => x.value === t)?.label || t }));
+  }, [equipos]);
 
   if (loading || !data) return (
     <div className="flex items-center justify-center min-h-screen">
@@ -220,7 +295,7 @@ export default function MonitorCorporativo() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
           <KpiCard label="Equipos Totales" value={equipos.length} icon={Monitor} color="#6d28d9" bg="#f5f3ff" sub={`${ambulancias.length} ambulancias · ${deas.length} DEA`} />
           <KpiCard label="Alertas Activas" value={alertas.length} icon={AlertTriangle} color="#dc2626" bg="#fee2e2" sub={`${alertasCriticas.length} críticas`} />
-          <KpiCard label="OT en Gestión" value={otPendientes.length + otEnProceso.length} icon={Wrench} color="#d97706" bg="#fffbeb" sub={`${otCompletadas.length} completadas`} />
+          <KpiCard label="OT en Gestión" value={otAbiertas.length} icon={Wrench} color="#d97706" bg="#fffbeb" sub={`${otCompletadas.length} completadas`} />
           <KpiCard label="Inventario Repuestos" value={repuestos.length} icon={Package} color="#4f46e5" bg="#e0e7ff" sub={`${stockBajo.length} con stock bajo`} />
         </div>
 
@@ -282,13 +357,57 @@ export default function MonitorCorporativo() {
               <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
                 <ClipboardList className="w-4 h-4 text-amber-600" /> Pendientes Salud
               </h3>
-              <FilaPendiente icon={ClipboardCheck} color="#d97706" label="Bitácoras por revisar" valor={inspecciones.length} to="RevisionInspecciones" />
-              <FilaPendiente icon={ClipboardList} color="#2563eb" label="Solicitudes pendientes" valor={solicitudes.length} to="SolicitudesV2" />
-              <FilaPendiente icon={AlertTriangle} color="#dc2626" label="Alertas activas" valor={alertas.length} to="AlertasV2" />
-              <FilaPendiente icon={Heart} color="#dc2626" label="Parches vencidos" valor={parchesVencidos.length} to="Equipos2" />
+              <FilaPendiente icon={ClipboardCheck} color="#d97706" label="Bitácoras por revisar" valor={inspecciones.length} to="RevisionInspecciones" alcanzables={paginasAlcanzables} />
+              <FilaPendiente icon={ClipboardList} color="#2563eb" label="Solicitudes pendientes" valor={solicitudes.length} to="SolicitudesV2" alcanzables={paginasAlcanzables} />
+              <FilaPendiente icon={AlertTriangle} color="#dc2626" label="Alertas activas" valor={alertas.length} to="AlertasV2" alcanzables={paginasAlcanzables} />
+              <FilaPendiente icon={Heart} color="#dc2626" label="Parches vencidos" valor={parchesVencidos.length} to="Equipos2" ancla="#equipos" alcanzables={paginasAlcanzables} />
             </div>
           </div>
         </SeccionArea>
+
+        {/* ===== EQUIPOS REGISTRADOS (listado, solo lectura) ===== */}
+        <div id="equipos" style={{ scrollMarginTop: 16 }}>
+          <SeccionArea
+            titulo="Equipos Registrados"
+            subtitulo={`${equiposFiltrados.length} de ${equipos.length} equipos · Solo lectura`}
+            icon={Monitor} color="#0f766e" bg="#f0fdfa">
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  value={busquedaEquipo}
+                  onChange={(e) => setBusquedaEquipo(e.target.value)}
+                  placeholder="Buscar por marca, modelo, patente, serie o centro..."
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-200"
+                />
+              </div>
+              <select value={filtroTipoEquipo} onChange={(e) => setFiltroTipoEquipo(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-200">
+                <option value="todos">Todos los tipos</option>
+                {tiposPresentes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <select value={filtroEstadoEquipo} onChange={(e) => setFiltroEstadoEquipo(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-200">
+                <option value="todos">Todos los estados</option>
+                {ESTADOS_EQUIPO.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+              </select>
+            </div>
+            {equiposFiltrados.length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
+                <Monitor className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                <p className="text-slate-400 text-sm">
+                  {equipos.length === 0
+                    ? "No hay equipos registrados (o no se pudieron cargar)."
+                    : "Ningún equipo coincide con el filtro."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[30rem] overflow-y-auto pr-1">
+                {equiposFiltrados.map(eq => <EquipoFila key={eq.id} equipo={eq} />)}
+              </div>
+            )}
+          </SeccionArea>
+        </div>
 
         {/* ===== ÁREA TALLER ===== */}
         <SeccionArea
@@ -343,9 +462,11 @@ export default function MonitorCorporativo() {
                   <span className="text-xs font-bold text-slate-700">Proveedores Activos</span>
                   <span className="text-lg font-bold text-violet-700">{proveedoresActivos.length}</span>
                 </div>
-                <Link to={createPageUrl("Proveedores")} className="block text-xs text-violet-600 font-semibold mt-2 hover:underline">
-                  Ver directorio →
-                </Link>
+                {paginasAlcanzables.has("Proveedores") && (
+                  <Link to={createPageUrl("Proveedores")} className="block text-xs text-violet-600 font-semibold mt-2 hover:underline">
+                    Ver directorio →
+                  </Link>
+                )}
               </div>
             </div>
             {/* Stock bajo */}
@@ -374,6 +495,53 @@ export default function MonitorCorporativo() {
             </div>
           </div>
         </SeccionArea>
+
+        {/* ===== ÓRDENES DE TRABAJO (listado, solo lectura) ===== */}
+        <div id="ordenes" style={{ scrollMarginTop: 16 }}>
+          <SeccionArea
+            titulo="Órdenes de Trabajo"
+            subtitulo={`${ordenesFiltradas.length} de ${ordenes.length} órdenes · Solo lectura`}
+            icon={ClipboardList} color="#7c3aed" bg="#f5f3ff">
+            <div className="flex flex-col sm:flex-row gap-2 mb-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  value={busquedaOT}
+                  onChange={(e) => setBusquedaOT(e.target.value)}
+                  placeholder="Buscar por N° de OT, vehículo, patente, mecánico o falla..."
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {FILTROS_OT.map(f => (
+                <button key={f.value} onClick={() => setFiltroEstadoOT(f.value)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all"
+                  style={filtroEstadoOT === f.value
+                    ? { background: "#7c3aed", color: "white" }
+                    : { background: "white", color: "#64748b", border: "1px solid #e2e8f0" }}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {ordenesFiltradas.length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
+                <Wrench className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                <p className="text-slate-400 text-sm">
+                  {ordenes.length === 0
+                    ? "No hay órdenes de trabajo registradas (o no se pudieron cargar)."
+                    : "Ninguna orden coincide con el filtro."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[30rem] overflow-y-auto pr-1">
+                {ordenesFiltradas.map(ot => (
+                  <OrdenFila key={ot.id} ot={ot} verDetalle={paginasAlcanzables.has("Taller") || paginasAlcanzables.has("OrdenesTrabajo")} />
+                ))}
+              </div>
+            )}
+          </SeccionArea>
+        </div>
 
         {/* ===== SOLICITUDES DE COMPRA DE TALLER ===== */}
         <SeccionArea
@@ -554,14 +722,94 @@ function SeccionArea({ titulo, subtitulo, icon: Icon, color, bg, children }) {
   );
 }
 
-function FilaPendiente({ icon: Icon, color, label, valor, to }) {
-  return (
-    <Link to={createPageUrl(to)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors">
+// `to` solo se enlaza si el rol que mira puede abrir esa pantalla; si no, la
+// fila queda como dato (o baja al listado de esta misma pagina con `ancla`).
+function FilaPendiente({ icon: Icon, color, label, valor, to, ancla, alcanzables }) {
+  const contenido = (
+    <>
       <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: color + "15" }}>
         <Icon className="w-4 h-4" style={{ color }} />
       </div>
       <span className="text-xs text-slate-600 flex-1">{label}</span>
       <span className="text-sm font-bold" style={{ color }}>{valor}</span>
-    </Link>
+    </>
+  );
+  const cls = "flex items-center gap-3 p-2 rounded-xl transition-colors";
+
+  if (to && alcanzables?.has(to)) {
+    return <Link to={createPageUrl(to)} className={`${cls} hover:bg-slate-50`}>{contenido}</Link>;
+  }
+  if (ancla) {
+    return <a href={ancla} className={`${cls} hover:bg-slate-50`}>{contenido}</a>;
+  }
+  return <div className={cls}>{contenido}</div>;
+}
+
+
+/* ══════════════════════════════════════════════
+   Filas de los listados (solo lectura)
+══════════════════════════════════════════════ */
+function EquipoFila({ equipo }) {
+  const estado = ESTADOS_EQUIPO.find(e => e.value === equipo.estado) || ESTADOS_EQUIPO[0];
+  const tipoLabel = TIPOS_EQUIPO.find(t => t.value === equipo.tipo)?.label || equipo.tipo || "—";
+  const Icon = equipo.patente ? Car : Monitor;
+  const ubicacion = [equipo.centro_principal, equipo.subsede, equipo.ubicacion_especifica].filter(Boolean).join(" / ");
+
+  return (
+    <div className="bg-white rounded-2xl p-3.5 flex items-center gap-3" style={{ boxShadow: "0 4px 14px rgba(15,45,107,0.06)" }}>
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: estado.bg }}>
+        <Icon className="w-5 h-5" style={{ color: estado.color }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="font-bold text-slate-800 text-sm truncate">{equipo.marca} {equipo.modelo}</p>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{tipoLabel}</span>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap mt-0.5 text-[11px] text-slate-400">
+          {equipo.patente && <span className="flex items-center gap-1"><Hash className="w-3 h-3" />{equipo.patente}</span>}
+          {!equipo.patente && equipo.numero_serie && <span className="flex items-center gap-1"><Hash className="w-3 h-3" />{equipo.numero_serie}</span>}
+          {ubicacion && <span className="flex items-center gap-1 truncate"><MapPin className="w-3 h-3 flex-shrink-0" />{ubicacion}</span>}
+        </div>
+      </div>
+      <span className="text-[11px] font-bold px-2 py-1 rounded-full flex-shrink-0" style={{ background: estado.bg, color: estado.color }}>
+        {estado.label}
+      </span>
+    </div>
+  );
+}
+
+function OrdenFila({ ot, verDetalle }) {
+  const color = OT_ESTADO_COLORS[ot.estado] || "#64748b";
+  const label = OT_ESTADO_LABELS[ot.estado] || ot.estado || "—";
+  const prio = OT_PRIORIDAD[ot.prioridad] || OT_PRIORIDAD.media;
+  const fecha = ot.created_date ? format(parseISO(ot.created_date), "dd-MM-yyyy") : "";
+  const vehiculo = ot.equipo_label || ot.marca_modelo || "Sin vehículo asociado";
+
+  return (
+    <div className="bg-white rounded-2xl p-3.5 flex items-center gap-3" style={{ boxShadow: "0 4px 14px rgba(15,45,107,0.06)" }}>
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: color + "15" }}>
+        <Wrench className="w-5 h-5" style={{ color }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="font-bold text-slate-800 text-sm">{ot.numero_ot || "OT"}</p>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: color + "15", color }}>{label}</span>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: prio.bg, color: prio.color }}>{prio.label}</span>
+        </div>
+        <p className="text-xs text-slate-600 truncate mt-0.5">{vehiculo}{ot.patente ? ` · ${ot.patente}` : ""}</p>
+        <div className="flex items-center gap-3 flex-wrap mt-0.5 text-[11px] text-slate-400">
+          {fecha && <span>{fecha}</span>}
+          <span className="truncate">{ot.mecanico_nombre || ot.mecanico_email || "Sin mecánico asignado"}</span>
+          {ot.total > 0 && <span className="font-semibold text-slate-500">${Number(ot.total).toLocaleString("es-CL")}</span>}
+        </div>
+      </div>
+      {verDetalle && (
+        <Link to={`/OrdenTrabajoDetalle/${ot.id}`}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold flex-shrink-0"
+          style={{ background: "#F5F3FF", color: "#6D28D9", border: "1px solid #DDD6FE" }}>
+          <Eye className="w-3.5 h-3.5" /> Ver
+        </Link>
+      )}
+    </div>
   );
 }

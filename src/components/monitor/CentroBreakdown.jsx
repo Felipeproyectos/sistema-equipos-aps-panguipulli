@@ -4,6 +4,7 @@ import {
   AlertTriangle, Heart, ClipboardList
 } from "lucide-react";
 import { differenceInDays, parseISO } from "date-fns";
+import { resolverUbicacion } from "@/lib/centros";
 
 const ESTADO_COLOR = {
   operativo: "#16a34a",
@@ -71,9 +72,12 @@ export default function CentroBreakdown({ centros, equipos, alertas, parches, or
     (c.subsedes || []).forEach(s => { if (!cent.subsedes[s]) cent.subsedes[s] = []; });
   });
   equipos.forEach(e => {
-    const cp = e.centro_principal || "Sin centro";
+    // Las sedes dependientes se cuentan dentro de su CESFAM, no como un centro
+    // aparte: si no, el desglose mostraba seis centros donde hay tres.
+    const ubic = resolverUbicacion(e.centro_principal, e.subsede);
+    const cp = ubic.centro || "Sin centro";
     const cent = ensureCentro(cp);
-    const sub = e.subsede && String(e.subsede).trim() ? String(e.subsede).trim() : null;
+    const sub = ubic.subsede || null;
     if (sub) {
       if (!cent.subsedes[sub]) cent.subsedes[sub] = [];
       cent.subsedes[sub].push(e);
