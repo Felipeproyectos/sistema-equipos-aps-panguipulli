@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { generarPDFOrdenTrabajo } from "@/utils/generarPDFOrdenTrabajo";
 import { normalizarTipoActivo, etiquetaTipoActivo } from "@/lib/centros";
+import { PERMISOS } from "@/lib/permisos";
 import LineaTiempo from "@/components/taller/LineaTiempo";
 import RepuestosUtilizados from "@/components/taller/RepuestosUtilizados";
 import ComentariosOT from "@/components/taller/ComentariosOT";
