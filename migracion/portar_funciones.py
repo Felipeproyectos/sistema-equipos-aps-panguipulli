@@ -46,6 +46,13 @@ def portar(codigo):
         raise ValueError("ni Deno.serve ni export default")
     return codigo
 
+# Funciones que nacieron en el servidor y no tienen origen en Base44. Sin esta
+# lista el barrido de mas abajo las borraba por "ya no existen en origen":
+# gestionarAcceso reemplaza a base44.users.inviteUser, que la migracion dejo sin
+# equivalente, asi que nunca va a existir un entry.ts del que salga.
+NATIVAS = ["gestionarAcceso"]
+
+
 def main():
     os.makedirs(DESTINO, exist_ok=True)
     nombres = []
@@ -62,19 +69,21 @@ def main():
 
     # Borrar las que ya no existen en origen. Sin esto, quitar una funcion en
     # Base44 dejaba su copia vieja viviendo en el servidor y siendo llamable.
-    vigentes = {n + ".js" for n in nombres} | {"index.js"}
+    vigentes = {n + ".js" for n in nombres} | {"index.js"} | {n + ".js" for n in NATIVAS}
     for archivo in os.listdir(DESTINO):
         if archivo.endswith(".js") and archivo not in vigentes:
             os.remove(os.path.join(DESTINO, archivo))
             print(f"  -- {archivo[:-3]} (ya no existe en origen, borrada)")
 
     # registro: el servidor resuelve /functions/<nombre> contra este mapa
+    presentes = sorted(nombres + [n for n in NATIVAS
+                                  if os.path.exists(os.path.join(DESTINO, n + ".js"))])
     reg = ["// Generado por migracion/portar_funciones.py. No editar a mano.", ""]
-    for n in nombres:
+    for n in presentes:
         reg.append(f"import {n} from './{n}.js';")
     reg.append("")
     reg.append("export const handlers = {")
-    reg += [f"  {n}," for n in nombres]
+    reg += [f"  {n}," for n in presentes]
     reg.append("};")
     reg.append("")
     open(os.path.join(DESTINO, "index.js"), "w", encoding="utf-8").write("\n".join(reg))

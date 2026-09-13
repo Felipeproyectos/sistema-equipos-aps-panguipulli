@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { getCentrosEstructura } from "@/lib/centros";
-import { Users as UsersIcon, Plus, Search, Stethoscope, Wrench, Shield, Building2 } from "lucide-react";
+import { Users as UsersIcon, Plus, Search, Stethoscope, Wrench, Shield, Building2, ShieldCheck } from "lucide-react";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import UsuarioCard from "@/components/usuarios/UsuarioCard";
 import InviteUserModal from "@/components/usuarios/InviteUserModal";
+import DiagnosticoAcceso from "@/components/usuarios/DiagnosticoAcceso";
 import { ROLES, esRolSalud, esRolTaller, esSuperAdmin, rolesQuePuedeCrear, roleLabel } from "@/lib/roles";
 import { useAuth } from "@/lib/AuthContext";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
@@ -35,6 +36,7 @@ export default function Usuarios() {
   const [centroFiltro, setCentroFiltro] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [diagOpen, setDiagOpen] = useState(false);
   const containerRef = useRef(null);
 
   const fetchData = useCallback(async () => {
@@ -64,6 +66,9 @@ export default function Usuarios() {
   const canAccess = rolesConAcceso.includes(effectiveRole);
   const rolesCreables = rolesQuePuedeCrear(effectiveRole);
   const puedeInvitar = rolesCreables.length > 0;
+  // Revisar y reparar el acceso de TODA la red es distinto de dar de alta a
+  // alguien de tu propio centro: queda en manos de quien administra el sistema.
+  const puedeAdministrarAcceso = [ROLES.SUPER_ADMIN, ROLES.ADMIN].includes(effectiveRole);
 
   // Qué usuarios puede ver cada rol (además del control de acceso general):
   // - super_admin: todos
@@ -157,15 +162,26 @@ export default function Usuarios() {
               <p className="text-slate-400 text-xs lg:text-sm mt-0.5">{usuariosVisibles.length} usuarios visibles</p>
             </div>
           </div>
-          {puedeInvitar && (
-            <button
-              onClick={() => setModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:scale-105 flex-shrink-0"
-              style={{ background: "#2563EB" }}
-            >
-              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Invitar</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {puedeAdministrarAcceso && (
+              <button
+                onClick={() => setDiagOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-105"
+                style={{ background: "rgba(255,255,255,0.15)", color: "white", border: "1px solid rgba(255,255,255,0.25)" }}
+              >
+                <ShieldCheck className="w-4 h-4" /> <span className="hidden sm:inline">Revisar acceso</span>
+              </button>
+            )}
+            {puedeInvitar && (
+              <button
+                onClick={() => setModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:scale-105"
+                style={{ background: "#2563EB" }}
+              >
+                <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nueva cuenta</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -258,6 +274,7 @@ export default function Usuarios() {
       </div>
 
       <InviteUserModal open={modalOpen} onClose={() => setModalOpen(false)} onInvited={fetchData} currentUser={currentUser} />
+      {diagOpen && <DiagnosticoAcceso onClose={() => setDiagOpen(false)} onCambios={fetchData} />}
     </div>
   );
 }

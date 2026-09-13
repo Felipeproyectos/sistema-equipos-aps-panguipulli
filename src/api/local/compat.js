@@ -267,12 +267,59 @@ export function createClientFromRequest() {
   return { auth: { me: async () => usuarioActual() }, ...comun, asServiceRole: comun };
 }
 
+// Cuentas de acceso. En produccion esto lo resuelve la funcion gestionarAcceso
+// contra Supabase Auth; aca no hay Auth que consultar, asi que se simula sobre
+// el mismo almacen en memoria — lo justo para poder revisar las pantallas.
+const users = {
+  diagnostico: async () => {
+    const filas = tablaDe('User');
+    const usuarios = filas.map((u) => {
+      const problemas = [];
+      if (!u.email) problemas.push('sin_correo');
+      if (!u.role) problemas.push('sin_rol');
+      return {
+        id: u.id, email: u.email || '', full_name: u.full_name || '', role: u.role || '',
+        centro_principal: u.centro_principal || '',
+        tiene_cuenta: !!u.email, ultimo_ingreso: null,
+        debe_cambiar_clave: !!u.force_password_reset,
+        puede_entrar: problemas.length === 0, problemas,
+      };
+    });
+    return {
+      usuarios,
+      cuentas_ajenas: [],
+      resumen: {
+        total: usuarios.length,
+        pueden_entrar: usuarios.filter((u) => u.puede_entrar).length,
+        sin_cuenta: 0,
+        sin_rol: usuarios.filter((u) => u.problemas.includes('sin_rol')).length,
+        cuentas_ajenas: 0,
+      },
+    };
+  },
+  crear: async (datos) => {
+    const fila = await entidades.User.create({
+      email: String(datos.email || '').trim().toLowerCase(),
+      full_name: datos.full_name || '',
+      role: datos.role,
+      centro_principal: datos.centro_principal || '',
+      centros_asignados: datos.centro_principal ? [datos.centro_principal] : [],
+      force_password_reset: true,
+      activo: true,
+    });
+    return { usuario: fila, clave_temporal: 'Aps-LOCAL01', correo_enviado: false };
+  },
+  reparar: async () => ({ reparados: [], total: 0 }),
+  restablecerClave: async (email) => ({ email, clave_temporal: 'Aps-LOCAL01', correo_enviado: false }),
+};
+
 // 2. Para el frontend, en lugar del cliente del SDK.
 export const clienteLocal = {
   entities: entidades,
   integrations: integraciones,
   connectors: conectores,
   functions: { invoke },
+  users,
   auth: {
     me: async () => {
       const u = usuarioActual();
