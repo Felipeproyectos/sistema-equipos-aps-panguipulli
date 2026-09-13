@@ -150,7 +150,7 @@ export function createClientFromRequest(req) {
     const { data, error } = await comoUsuario.auth.getUser(token);
     if (error || !data?.user?.email) return null;
     // El perfil vive en `usuario` (heredado de Base44): trae role,
-    // centro_principal, estado_acceso. Se busca por email porque el id de
+    // centro_principal. Se busca por email porque el id de
     // Base44 es un ObjectId y el de auth.users es un uuid.
     const { data: fila } = await servicio
       .from('usuario').select('*').ilike('email', data.user.email).maybeSingle();

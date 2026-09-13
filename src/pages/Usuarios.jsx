@@ -245,11 +245,11 @@ export default function Usuarios() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
             {filtrados
               .slice()
-              .sort((a, b) => {
-                const prio = (u) => u.estado_acceso === "pendiente" ? 0 : u.estado_acceso === "rechazado" ? 1 : 2;
-                if (prio(a) !== prio(b)) return prio(a) - prio(b);
-                return (a.full_name || "").localeCompare(b.full_name || "");
-              })
+              // Alfabetico. Antes se anteponian los "pendiente" y "rechazado" de
+              // estado_acceso, un campo heredado de Base44 que ya nadie escribia
+              // ni leia: todas las fichas quedaron en "aprobado" y el orden era
+              // alfabetico igual, solo que aparentando un control que no existia.
+              .sort((a, b) => (a.full_name || a.email || "").localeCompare(b.full_name || b.email || ""))
               .map(u => (
               <UsuarioCard key={u.id} usuario={u} currentUser={currentUser} onUpdated={handleUpdated} />
             ))}

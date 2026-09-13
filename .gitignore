@@ -37,3 +37,7 @@ migracion/02_datos.sql
 src/api/local/datos.json
 .env.demo
 migracion/backup-sistema_*.json
+
+# Python
+__pycache__/
+*.pyc

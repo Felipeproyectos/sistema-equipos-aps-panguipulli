@@ -40,12 +40,29 @@ TRIGGER = """create or replace function tocar_updated_date() returns trigger
 
 # Campos que Base44 agrega solo a User y no estan en su .jsonc.
 EXTRA_USER = [
-    ("email", "text"), ("full_name", "text"), ("disabled", "boolean"),
-    ("disabled_reason", "text"), ("is_verified", "boolean"),
+    ("email", "text"), ("full_name", "text"),
+    ("is_verified", "boolean"),
     ("force_password_reset", "boolean"), ("app_id", "text"),
     ("is_service", "boolean"), ("collaborator_role", "text"),
     ("_app_role", "text"),
 ]
+
+# Campos que Base44 traia y en Supabase no los escribe ni los lee nadie. El
+# .jsonc de origen se deja intacto (es el respaldo de como era el sistema
+# viejo), asi que se filtran aca: sin esto, cada regeneracion los devolveria a
+# la tabla y volveria a parecer que hay un control de acceso que no existe.
+#
+#   estado_acceso / intentos_acceso  el "aprobar ingreso" de Base44. Todas las
+#                                    fichas quedaron en 'aprobado' y ninguna
+#                                    pantalla ni policy los consulta. Quien
+#                                    puede entrar lo decide Supabase Auth, y
+#                                    que ve, mi_rol() sobre `role`.
+#   disabled / disabled_reason       desactivar una cuenta. Nunca se conecto;
+#                                    para dar de baja a alguien se le quita la
+#                                    cuenta de Auth.
+CAMPOS_MUERTOS = {
+    "User": {"estado_acceso", "intentos_acceso", "disabled", "disabled_reason"},
+}
 
 # Correcciones de datos que se aplican en cada regeneracion. Van aca y no
 # editadas a mano en el JSON: el proximo respaldo de Base44 traeria el error
@@ -99,8 +116,11 @@ def esquemas():
     return out
 
 def cols_de(entidad, e):
+    muertos = CAMPOS_MUERTOS.get(entidad, set())
     cols = list(COLS_SISTEMA)
     for campo, spec in e.get("properties", {}).items():
+        if campo in muertos:
+            continue
         cols.append((campo, tipo_sql(spec)))
     if entidad == "User":
         cols += EXTRA_USER

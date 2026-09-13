@@ -36,7 +36,7 @@ Si Base44 cambia una función, se re-exporta el `.ts` y se corre el portador.
 |---|---|
 | `base44.entities.X` | Supabase con el JWT del usuario → aplican las policies de `03_policies.sql` |
 | `base44.asServiceRole.entities.X` | Supabase con service role → sin RLS |
-| `auth.me()` | Valida el JWT y devuelve la fila de `usuario` (rol, centro, estado_acceso) |
+| `auth.me()` | Valida el JWT y devuelve la fila de `usuario` (rol, centro) |
 | `integrations.Core.SendEmail` | Resend vía `fetch` |
 | `connectors.getConnection('googledrive')` | Refresh token de Google → access token |
 | `functions.invoke(n, p)` | Llama al handler en proceso, sin vuelta por HTTP |
