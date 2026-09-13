@@ -287,13 +287,13 @@ const users = {
     });
     return {
       usuarios,
-      cuentas_sin_ficha: [],
+      cuentas_ajenas: [],
       resumen: {
         total: usuarios.length,
         pueden_entrar: usuarios.filter((u) => u.puede_entrar).length,
         sin_cuenta: 0,
         sin_rol: usuarios.filter((u) => u.problemas.includes('sin_rol')).length,
-        cuentas_sin_ficha: 0,
+        cuentas_ajenas: 0,
       },
     };
   },

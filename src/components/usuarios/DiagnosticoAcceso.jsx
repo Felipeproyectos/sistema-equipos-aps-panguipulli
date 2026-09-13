@@ -131,7 +131,7 @@ export default function DiagnosticoAcceso({ onClose, onCambios }) {
                 <Tarjeta valor={datos.resumen.total} etiqueta="Personas" color="#334155" bg="#f1f5f9" />
                 <Tarjeta valor={datos.resumen.pueden_entrar} etiqueta="Pueden entrar" color="#15803d" bg="#dcfce7" />
                 <Tarjeta valor={datos.resumen.sin_cuenta} etiqueta="Sin cuenta de acceso" color="#b91c1c" bg="#fee2e2" />
-                <Tarjeta valor={datos.resumen.cuentas_sin_ficha} etiqueta="Cuentas sin ficha" color="#b45309" bg="#fef3c7" />
+                <Tarjeta valor={datos.resumen.cuentas_ajenas} etiqueta="Cuentas de otro sistema" color="#64748b" bg="#f1f5f9" />
               </div>
 
               {datos.resumen.sin_cuenta > 0 && (
@@ -216,23 +216,32 @@ export default function DiagnosticoAcceso({ onClose, onCambios }) {
                 </div>
               )}
 
-              {datos.cuentas_sin_ficha.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    Cuentas de acceso sin ficha
-                  </h3>
-                  <p className="text-[11px] text-slate-400 mb-2">
-                    Pueden iniciar sesión pero el sistema no sabe quiénes son: verán
-                    “tu cuenta no está vinculada”. Créales la ficha con el mismo correo.
-                  </p>
-                  <div className="space-y-1.5">
-                    {datos.cuentas_sin_ficha.map((c) => (
-                      <div key={c.email} className="text-xs bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-slate-700">
-                        {c.email}
-                      </div>
-                    ))}
+              {/* El proyecto de Supabase está compartido con otra aplicación de la
+                  Corporación, así que casi todas estas cuentas son de allá y no
+                  son un problema: nunca intentan entrar acá. Se muestran plegadas
+                  y en gris, no como alarma — solo importan si reconoces a alguien
+                  que SÍ debería trabajar en gestión. */}
+              {datos.cuentas_ajenas.length > 0 && (
+                <details className="rounded-xl border border-slate-100">
+                  <summary className="cursor-pointer px-3 py-2.5 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Cuentas de otro sistema ({datos.cuentas_ajenas.length})
+                  </summary>
+                  <div className="px-3 pb-3">
+                    <p className="text-[11px] text-slate-400 mb-2">
+                      Tienen cuenta en este proyecto de Supabase pero no ficha en gestión:
+                      son de la otra aplicación que comparte el proyecto. Solo actúa si
+                      reconoces a alguien que sí debería entrar acá — en ese caso créale
+                      la ficha con el mismo correo.
+                    </p>
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                      {datos.cuentas_ajenas.map((c) => (
+                        <div key={c.email} className="text-xs bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-slate-600">
+                          {c.email}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                </details>
               )}
 
               <div>

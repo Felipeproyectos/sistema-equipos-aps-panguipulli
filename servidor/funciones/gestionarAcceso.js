@@ -176,20 +176,23 @@ async function diagnostico(base44) {
     };
   });
 
-  // Cuentas de Auth sin ficha: entran y quedan en "tu cuenta no está vinculada".
-  const huerfanas = [...cuentas.values()]
+  // Cuentas de Auth sin ficha en este sistema. OJO: el proyecto de Supabase
+  // esta compartido con otra aplicacion, asi que la mayoria de estas son de esa
+  // otra app y NO son un problema — nunca intentan entrar aca. Se listan como
+  // dato, no como falla: solo importa si alguien de gestion aparece en la lista.
+  const ajenas = [...cuentas.values()]
     .filter((c) => !vistos.has(normalizar(c.email)))
     .map((c) => ({ email: c.email, ultimo_ingreso: c.last_sign_in_at || null }));
 
   return {
     usuarios,
-    cuentas_sin_ficha: huerfanas,
+    cuentas_ajenas: ajenas,
     resumen: {
       total: usuarios.length,
       pueden_entrar: usuarios.filter((u) => u.puede_entrar).length,
       sin_cuenta: usuarios.filter((u) => u.problemas.includes('sin_cuenta_de_acceso')).length,
       sin_rol: usuarios.filter((u) => u.problemas.includes('sin_rol') || u.problemas.includes('rol_desconocido')).length,
-      cuentas_sin_ficha: huerfanas.length,
+      cuentas_ajenas: ajenas.length,
     },
   };
 }
