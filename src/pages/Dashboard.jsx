@@ -13,7 +13,6 @@ import { differenceInDays, parseISO, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import TallerDashboard from "@/pages/TallerDashboard";
-import MonitorCorporativo from "@/pages/MonitorCorporativo";
 import { useAuth } from "@/lib/AuthContext";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 
@@ -62,7 +61,7 @@ export default function Dashboard() {
   const fetchData = useCallback(async () => {
     // El mecánico se redirige a su módulo de Órdenes de Trabajo;
     // no necesita cargar ningún listado del dashboard.
-    if (effectiveRole === ROLES.MECANICO) return;
+    if ([ROLES.MECANICO, ROLES.JEFE_TALLER, ROLES.MONITOR_CORPORATIVO].includes(effectiveRole)) return;
     // El taller (jefe/encargado compras) solo necesita equipos y
     // actividades. Se omiten los 4 listados de salud (parches, solicitudes,
     // alertas, bitácoras) para acelerar la carga inicial.
@@ -103,9 +102,20 @@ export default function Dashboard() {
   const esTallerUser = esRolTaller(effectiveRole);
   // El mecánico aterriza directo en su módulo de Órdenes de Trabajo.
   if (effectiveRole === ROLES.MECANICO && !loading) return <Navigate to="/OrdenesTrabajo" replace />;
-  // El Jefe de Taller visualiza el mismo dashboard consolidado que el Monitor
-  // Corporativo (Área Salud + Taller), que se ve ordenado y profesional.
-  if (effectiveRole === ROLES.JEFE_TALLER && !loading) return <MonitorCorporativo />;
+  // El Jefe de Taller aterriza en el Taller, el primer ítem de su propio menú.
+  //
+  // Antes esta pantalla le devolvía <MonitorCorporativo />: la cabecera decía
+  // "Monitor Corporativo · Solo lectura" y la URL seguía siendo "/", así que al
+  // simular el rol parecía que el sistema lo había dejado en otro perfil. Y como
+  // el Monitor no está en su navegación, ningún ítem del menú quedaba marcado.
+  // Se rebota igual que el mecánico: al primer ítem de su menú, con la URL a la
+  // vista.
+  if (effectiveRole === ROLES.JEFE_TALLER && !loading) return <Navigate to="/Taller" replace />;
+  // Y el Monitor Corporativo, a su Monitor. Al rol real lo rebota Layout, pero
+  // ese rebote mira el rol REAL a propósito, así que sin esta línea Base del
+  // Sistema simulando Monitor caía en el Dashboard de Salud — otra pantalla que
+  // ese rol no tiene en su menú.
+  if (effectiveRole === ROLES.MONITOR_CORPORATIVO && !loading) return <Navigate to="/MonitorCorporativo" replace />;
   // El resto de roles de taller ven un panel enfocado en órdenes y solicitudes.
   if (esTallerUser && !loading) return <TallerDashboard user={user} />;
   const hoy = new Date();
