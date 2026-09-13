@@ -137,11 +137,16 @@ const auth = {
   // es un valor unico para todo el proyecto: cambiarlo romperia la recuperacion
   // de esa otra app. Se manda `redirectTo` explicito, que gana sobre el Site URL
   // siempre que este en la lista de Redirect URLs.
+  // El SMTP por defecto de Supabase manda unos pocos correos por hora y su
+  // Site URL apunta a otra aplicacion del mismo proyecto: en la practica el
+  // correo no llegaba. El servidor genera el enlace con la llave de servicio y
+  // lo despacha por Resend, que es el que ya usa el resto del sistema.
   enviarCorreoRecuperacion: async (email) => {
-    const { error } = await cliente().auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/`,
+    await functions.invoke('gestionarAcceso', {
+      accion: 'recuperar',
+      email,
+      origen: window.location.origin,
     });
-    if (error) throw new Error(error.message);
   },
 
   // Supabase avisa con PASSWORD_RECOVERY cuando la sesion viene de un enlace de
@@ -220,4 +225,17 @@ const integrations = {
   },
 };
 
-export const clienteSupabase = { entities, auth, functions, integrations };
+// ── cuentas de acceso ───────────────────────────────────────────────────────
+// En Base44 esto lo hacia la plataforma (base44.users.inviteUser). Al migrar no
+// quedo nada en su lugar y crear un usuario reventaba con "undefined". Todo
+// pasa ahora por la funcion gestionarAcceso, que es la unica que tiene la llave
+// de servicio para tocar Supabase Auth.
+const users = {
+  diagnostico: () => functions.invoke('gestionarAcceso', { accion: 'diagnostico' }).then((r) => r.data),
+  crear: (datos) => functions.invoke('gestionarAcceso', { accion: 'crear', ...datos }).then((r) => r.data),
+  reparar: () => functions.invoke('gestionarAcceso', { accion: 'reparar' }).then((r) => r.data),
+  restablecerClave: (email) =>
+    functions.invoke('gestionarAcceso', { accion: 'restablecer', email }).then((r) => r.data),
+};
+
+export const clienteSupabase = { entities, auth, functions, integrations, users };

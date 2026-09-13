@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { getCentrosEstructura } from "@/lib/centros";
-import { X, Mail, Loader2 } from "lucide-react";
-import { ROLES, rolesQuePuedeCrear, roleLabel, esRolSalud, rolBasePlataforma } from "@/lib/roles";
+import { X, Loader2, Copy, Check, UserPlus } from "lucide-react";
+import { ROLES, rolesQuePuedeCrear, roleLabel, esRolSalud } from "@/lib/roles";
 
 export default function InviteUserModal({ open, onClose, onInvited, currentUser }) {
   const [email, setEmail] = useState("");
+  const [nombre, setNombre] = useState("");
   const [role, setRole] = useState("");
+  const [creada, setCreada] = useState(null);   // { email, clave, correo_enviado }
+  const [copiado, setCopiado] = useState(false);
   const [centrosList, setCentrosList] = useState([]);
   const [centroSel, setCentroSel] = useState([]);
   const [enviando, setEnviando] = useState(false);
@@ -26,7 +29,7 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser 
     if (open && rolesDisponibles.length > 0 && !rolesDisponibles.find((r) => r.value === role)) {
       setRole(rolesDisponibles[0].value);
     }
-    if (open) setCentroSel([]);
+    if (open) { setCentroSel([]); setCreada(null); setMsg(""); setError(""); }
      
   }, [open, currentUser?.role]);
 
@@ -51,29 +54,35 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser 
     try {
       const correo = email.trim().toLowerCase();
       const centroInfo = centroFijo || centroSel[0] || "";
-      // La plataforma solo acepta "user"/"admin"; el rol específico se aplica al aceptar.
-      await base44.users.inviteUser(correo, rolBasePlataforma(role));
-      // Guardamos el rol real deseado para aplicarlo automáticamente cuando el usuario ingrese.
-      await base44.entities.InvitacionPendiente.create({
+      // Antes esto llamaba a base44.users.inviteUser, que dejó de existir al
+      // migrar a Supabase: la invitación fallaba y quedaba una fila de
+      // InvitacionPendiente que nadie aplicaba nunca. Ahora la cuenta se crea
+      // completa de una vez —ficha + acceso + clave temporal— y el correo con
+      // la clave sale por el servidor.
+      const r = await base44.users.crear({
         email: correo,
-        rol_asignado: role,
+        full_name: nombre.trim(),
+        role,
         centro_principal: centroInfo,
-        invitado_por_email: currentUser?.email || "",
-        invitado_por_nombre: currentUser?.full_name || "",
-        aplicada: false,
-      }).catch(() => {});
-      setMsg(
-        `Invitación enviada a ${correo} (${roleLabel(role)}). Su rol se aplicará automáticamente cuando acepte.` +
-        (centroInfo ? ` Centro asignado: ${centroInfo}.` : "")
-      );
+      });
+      setCreada({ email: correo, clave: r.clave_temporal, correo_enviado: r.correo_enviado });
       setEmail("");
+      setNombre("");
       setCentroSel([]);
       if (onInvited) onInvited();
     } catch (e) {
-      setError(e?.message || "Error al invitar");
+      setError(e?.data?.error || e?.message || "No se pudo crear la cuenta");
     } finally {
       setEnviando(false);
     }
+  };
+
+  const copiarClave = async () => {
+    try {
+      await navigator.clipboard.writeText(creada.clave);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch { /* sin permiso de portapapeles: la clave está a la vista igual */ }
   };
 
   return (
@@ -81,7 +90,7 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser 
       <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="sticky top-0 bg-white px-6 py-4 border-b border-slate-100 flex items-center justify-between z-10">
           <h2 className="font-bold text-slate-800 flex items-center gap-2">
-            <Mail className="w-5 h-5 text-blue-600" /> Invitar Usuario
+            <UserPlus className="w-5 h-5 text-blue-600" /> Nueva Cuenta de Acceso
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X className="w-5 h-5" />
@@ -95,6 +104,18 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser 
             </p>
           ) : (
             <>
+              {/* Nombre */}
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Nombre completo</label>
+                <input
+                  type="text"
+                  value={nombre}
+                  onChange={e => setNombre(e.target.value)}
+                  placeholder="Nombre y apellido"
+                  className="mt-1 w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+              </div>
+
               {/* Email */}
               <div>
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Correo electrónico</label>
@@ -157,8 +178,38 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser 
                 </div>
               )}
 
+              {/* Sin esto el botón queda gris y nadie sabe por qué. */}
+              {!puedeInvitar && !creada && (
+                <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
+                  Falta {!email.trim() ? "escribir el correo" : "elegir el centro (CESFAM) principal"} para poder crear la cuenta.
+                </p>
+              )}
+
               {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
               {msg && <p className="text-xs text-green-600 bg-green-50 rounded-lg px-3 py-2">{msg}</p>}
+
+              {/* La clave temporal se muestra una sola vez: si el correo no
+                  salió, es la única forma de entregarla. */}
+              {creada && (
+                <div className="rounded-xl border border-green-200 bg-green-50 p-4 space-y-3">
+                  <p className="text-sm font-bold text-green-800">Cuenta creada para {creada.email}</p>
+                  <div className="bg-white rounded-lg border border-green-200 px-3 py-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Clave temporal</p>
+                      <p className="font-mono text-lg font-bold text-slate-800 truncate">{creada.clave}</p>
+                    </div>
+                    <button onClick={copiarClave} type="button"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold flex-shrink-0 bg-slate-100 text-slate-700">
+                      {copiado ? <><Check className="w-3.5 h-3.5" /> Copiada</> : <><Copy className="w-3.5 h-3.5" /> Copiar</>}
+                    </button>
+                  </div>
+                  <p className="text-xs text-green-700">
+                    {creada.correo_enviado
+                      ? "Le enviamos la clave por correo. Al entrar deberá cambiarla."
+                      : "El correo no pudo enviarse: anota esta clave y entrégasela. No volverá a mostrarse."}
+                  </p>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -174,7 +225,7 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser 
               className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
               style={{ background: "#2563EB" }}
             >
-              {enviando ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : "Invitar"}
+              {enviando ? <><Loader2 className="w-4 h-4 animate-spin" /> Creando...</> : "Crear cuenta"}
             </button>
           )}
         </div>

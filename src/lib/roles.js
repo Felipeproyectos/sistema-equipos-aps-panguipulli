@@ -37,13 +37,6 @@ export function roleLabel(role) {
   return ROLE_LABELS[role] || role || "Sin rol";
 }
 
-// La plataforma solo acepta "user" o "admin" al invitar (base44.users.inviteUser).
-// El rol específico de la app (mecanico, jefe_taller, etc.) se aplica luego mediante
-// InvitacionPendiente. Aquí mapeamos el rol de la app a su rol base de plataforma.
-export function rolBasePlataforma(role) {
-  return role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN ? "admin" : "user";
-}
-
 // Roles cuyo ámbito principal es Salud (equipos vitales: DEA, monitores, ambulancias)
 export const SALUD_ROLES = [ROLES.ADMIN, ROLES.ENCARGADO_SALUD, ROLES.ENCARGADO_COMPRAS_SALUD, ROLES.USER];
 

@@ -78,18 +78,25 @@ export default function Configuracion() {
     setInvitando(true);
     setInvMsg("");
     try {
-      await base44.users.inviteUser(invEmail, invRole);
-      const updated = await base44.entities.User.list().catch(() => []);
-      const newUser = updated.find(u => u.email === invEmail);
-      if (newUser && invCentros.length > 0) {
-        await base44.entities.User.update(newUser.id, { centros_asignados: invCentros });
+      // base44.users.inviteUser era de la plataforma Base44 y desapareció con la
+      // migración. La cuenta se crea completa en el servidor y vuelve con una
+      // clave temporal, que hay que entregarle a la persona si el correo falla.
+      const r = await base44.users.crear({
+        email: invEmail.trim().toLowerCase(),
+        role: invRole,
+        centro_principal: invCentros[0] || "",
+      });
+      if (invCentros.length > 1 && r?.usuario?.id) {
+        await base44.entities.User.update(r.usuario.id, { centros_asignados: invCentros });
       }
-      setInvMsg("✅ Invitación enviada correctamente");
+      setInvMsg(r.correo_enviado
+        ? `✅ Cuenta creada. Le enviamos la clave temporal por correo (${r.clave_temporal}).`
+        : `✅ Cuenta creada. El correo no salió — clave temporal: ${r.clave_temporal}`);
       setInvEmail("");
       setInvCentros([]);
       setUsuarios(await base44.entities.User.list().catch(() => []));
-    } catch {
-      setInvMsg("❌ No se pudo enviar la invitación");
+    } catch (e) {
+      setInvMsg(`❌ ${e?.data?.error || e?.message || "No se pudo crear la cuenta"}`);
     }
     setInvitando(false);
   };
