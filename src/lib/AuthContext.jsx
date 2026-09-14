@@ -161,12 +161,9 @@ export const AuthProvider = ({ children }) => {
       // escritura en la auditoria (ver base44Client.js).
       fijarUsuarioActual(currentUser);
       // Deja el ingreso anotado en Auditoria — el propio incluido.
-      registrarIngreso({
-        email: currentUser.email,
-        nombre: currentUser.full_name,
-        rol: currentUser.role,
-        resultado: 'exitoso',
-      });
+      // El nombre y el rol los pone el servidor a partir del token: no viajan
+      // desde aca, para que no se pueda anotar un ingreso ajeno.
+      registrarIngreso({ email: currentUser.email });
       setIsAuthenticated(true);
       setIsLoadingAuth(false);
     } catch (error) {
