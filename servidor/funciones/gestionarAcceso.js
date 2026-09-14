@@ -21,6 +21,7 @@ import { createClientFromRequest } from '#compat';
 //   actualizar   → corregir el correo o el nombre de una ficha
 //   suspender    → dejar a alguien fuera sin borrar su historial (y revertirlo)
 //   eliminar     → borrar la ficha y su cuenta de acceso
+//   ingreso      → dejar anotado en Auditoría que alguien entró
 
 // La misma jerarquía de src/lib/roles.js. Se repite acá a propósito: el
 // servidor no puede confiar en que el cliente respetó la matriz, y un endpoint
@@ -507,6 +508,29 @@ async function claveYaCambiada(base44, quien) {
   return { ok: true };
 }
 
+// Deja anotado en Auditoría que alguien entró.
+//
+// Lo anotaba el navegador directo sobre `acceso_no_autorizado`, pero la policy
+// `acceso_no_autorizado_create` solo deja escribir esa tabla a super_admin: el
+// insert de todos los demás se rechazaba en silencio (queda un console.warn y
+// nada más). Por eso Auditoría solo mostraba los ingresos de Base del Sistema,
+// como si nadie más entrara.
+//
+// Ahora lo escribe el servidor con la llave de servicio, y la identidad sale
+// del token: no se puede anotar un ingreso a nombre de otra persona.
+async function registrarIngreso(base44, quien, datos) {
+  await base44.asServiceRole.entities.AccesoNoAutorizado.create({
+    email: quien.email || '',
+    usuario_nombre: quien.full_name || '',
+    rol: quien.role || '',
+    resultado: 'exitoso',
+    fecha_intento: new Date().toISOString(),
+    user_agent: String(datos.user_agent || '').slice(0, 400),
+    notas: String(datos.notas || '').slice(0, 300),
+  });
+  return { ok: true };
+}
+
 // ── entrada ─────────────────────────────────────────────────────────────────
 export default async function (req) {
   try {
@@ -549,6 +573,8 @@ export default async function (req) {
       salida = await suspender(base44, quien, cuerpo, true);
     } else if (accion === 'eliminar') {
       salida = await eliminar(base44, quien, cuerpo);
+    } else if (accion === 'ingreso') {
+      salida = await registrarIngreso(base44, quien, cuerpo);
     } else {
       return Response.json({ error: `Acción desconocida: ${accion}` }, { status: 400 });
     }

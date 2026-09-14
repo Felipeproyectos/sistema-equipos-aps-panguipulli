@@ -78,19 +78,21 @@ function auditar(entidad, metodo, args, resultado) {
 
 // Deja constancia de un ingreso al sistema (exitoso o no). Una fila por
 // sesion del navegador, no una por cada F5.
-export async function registrarIngreso({ email, nombre, rol, resultado, notas }) {
-  const marca = `ingreso:${email}:${resultado}`;
+export async function registrarIngreso({ email, notas } = {}) {
+  // Una fila por sesion del navegador, no una por cada F5.
+  const marca = `ingreso:${email}`;
   try {
     if (sessionStorage.getItem(marca)) return;
     sessionStorage.setItem(marca, '1');
   } catch { /* modo privado: se registra igual */ }
+  // Lo escribe el servidor, no el navegador. La policy de la tabla solo deja
+  // insertar a super_admin, asi que escribirla desde aca fallaba en silencio
+  // para todos los demas roles y Auditoria quedaba mostrando solo los ingresos
+  // de Base del Sistema. El servidor ademas toma la identidad del token, asi
+  // que nadie puede anotar un ingreso a nombre de otra persona.
   try {
-    await base44Raw.entities.AccesoNoAutorizado.create({
-      email: email || '',
-      usuario_nombre: nombre || '',
-      rol: rol || '',
-      resultado: resultado || 'exitoso',
-      fecha_intento: new Date().toISOString(),
+    await base44Raw.functions.invoke('gestionarAcceso', {
+      accion: 'ingreso',
       user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
       notas: notas || '',
     });
