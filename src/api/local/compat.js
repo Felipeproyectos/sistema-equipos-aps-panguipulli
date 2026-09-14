@@ -270,6 +270,8 @@ export function createClientFromRequest() {
 // Cuentas de acceso. En produccion esto lo resuelve la funcion gestionarAcceso
 // contra Supabase Auth; aca no hay Auth que consultar, asi que se simula sobre
 // el mismo almacen en memoria — lo justo para poder revisar las pantallas.
+const suspendidos = new Set();
+
 const users = {
   diagnostico: async () => {
     const filas = tablaDe('User');
@@ -280,7 +282,8 @@ const users = {
       return {
         id: u.id, email: u.email || '', full_name: u.full_name || '', role: u.role || '',
         centro_principal: u.centro_principal || '',
-        tiene_cuenta: !!u.email, ultimo_ingreso: null,
+        tiene_cuenta: !!u.email, ultimo_ingreso: u.ultimo_ingreso || null,
+        suspendido: suspendidos.has(u.email),
         debe_cambiar_clave: !!u.force_password_reset,
         puede_entrar: problemas.length === 0, problemas,
       };
@@ -293,6 +296,7 @@ const users = {
         pueden_entrar: usuarios.filter((u) => u.puede_entrar).length,
         sin_cuenta: 0,
         sin_rol: usuarios.filter((u) => u.problemas.includes('sin_rol')).length,
+        suspendidos: usuarios.filter((u) => u.suspendido).length,
         cuentas_ajenas: 0,
       },
     };
@@ -309,7 +313,28 @@ const users = {
     return { usuario: fila, clave_temporal: 'Aps-LOCAL01', correo_enviado: false };
   },
   reparar: async () => ({ reparados: [], total: 0 }),
-  restablecerClave: async (email) => ({ email, clave_temporal: 'Aps-LOCAL01', correo_enviado: false }),
+  restablecerClave: async (email, clave) => ({
+    email, clave_temporal: clave || 'Aps-LOCAL01', correo_enviado: false, elegida: !!clave,
+  }),
+  // Aca no hay Supabase Auth: el correo y el nombre viven en la misma fila, y
+  // la suspension se anota en memoria para poder revisar la pantalla.
+  actualizar: async (email, cambios) => {
+    const fila = tablaDe('User').find((u) => u.email === email);
+    if (!fila) throw new Error('Ese correo no tiene ficha en el sistema');
+    if (cambios.email_nuevo) fila.email = String(cambios.email_nuevo).trim().toLowerCase();
+    if (cambios.full_name !== undefined) fila.full_name = cambios.full_name;
+    return { ok: true, usuario: structuredClone(fila) };
+  },
+  suspender: async (email) => { suspendidos.add(email); return { ok: true, email, suspendido: true }; },
+  reactivar: async (email) => { suspendidos.delete(email); return { ok: true, email, suspendido: false }; },
+  eliminar: async (email) => {
+    const t = tablaDe('User');
+    const i = t.findIndex((u) => u.email === email);
+    if (i < 0) throw new Error('Ese correo no tiene ficha en el sistema');
+    t.splice(i, 1);
+    suspendidos.delete(email);
+    return { ok: true, email, tenia_cuenta: true };
+  },
 };
 
 // 2. Para el frontend, en lugar del cliente del SDK.

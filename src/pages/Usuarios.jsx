@@ -120,7 +120,9 @@ export default function Usuarios() {
   const usuariosSalud = porArea("salud");
   const countPorCentro = (nombre) => usuariosSalud.filter(u => getCentros(u).includes(nombre)).length;
 
+  // `update === null` significa que la ficha se eliminó: sale de la lista.
   const handleUpdated = (id, update) => {
+    if (update === null) { setUsuarios(prev => prev.filter(u => u.id !== id)); return; }
     setUsuarios(prev => prev.map(u => u.id === id ? { ...u, ...update } : u));
   };
 
