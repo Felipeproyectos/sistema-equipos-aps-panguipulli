@@ -15,10 +15,16 @@ export default function ParchesPanelV2({ equipo, parches, user, onUpdated }) {
   const handleAdd = async (e) => {
     e.preventDefault();
     setSaving(true);
-    await base44.entities.Parche.create({ ...form, equipo_id: equipo.id, cantidad: Number(form.cantidad), activo: true });
-    setSaving(false);
-    setShowForm(false);
-    onUpdated && onUpdated();
+    try {
+      await base44.entities.Parche.create({ ...form, equipo_id: equipo.id, cantidad: Number(form.cantidad), activo: true });
+      setShowForm(false);
+      onUpdated && onUpdated();
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async (id) => {

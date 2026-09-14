@@ -83,36 +83,42 @@ export default function AlertasV2() {
   const handleCrearAlerta = async () => {
     if (!form.tipo || !form.descripcion) return;
     setGuardando(true);
-    const equipo = equipos.find(e => e.id === form.equipo_id);
-    const nuevaAlerta = await base44.entities.Alerta.create({
-      tipo: form.tipo,
-      nivel: form.nivel,
-      descripcion: form.descripcion,
-      equipo_id: form.equipo_id || null,
-      centro: equipo?.centro_principal || form.centro,
-      subsede: equipo?.subsede || "",
-      estado: "activa"
-    });
+    try {
+      const equipo = equipos.find(e => e.id === form.equipo_id);
+      const nuevaAlerta = await base44.entities.Alerta.create({
+        tipo: form.tipo,
+        nivel: form.nivel,
+        descripcion: form.descripcion,
+        equipo_id: form.equipo_id || null,
+        centro: equipo?.centro_principal || form.centro,
+        subsede: equipo?.subsede || "",
+        estado: "activa"
+      });
 
-    // Enviar emails a destinatarios seleccionados
-    if (form.destinatarios.length > 0) {
-      setEnviando(true);
-      const equipoLabel = equipo ? `${equipo.marca} ${equipo.modelo}` : "Sistema";
-      const body = `<h2 style="color:#1565c0">⚠️ Alerta: ${TIPOS_ALERTA.find(t=>t.value===form.tipo)?.label}</h2>
+      // Enviar emails a destinatarios seleccionados
+      if (form.destinatarios.length > 0) {
+        setEnviando(true);
+        const equipoLabel = equipo ? `${equipo.marca} ${equipo.modelo}` : "Sistema";
+        const body = `<h2 style="color:#1565c0">⚠️ Alerta: ${TIPOS_ALERTA.find(t=>t.value===form.tipo)?.label}</h2>
 <p><strong>Equipo:</strong> ${equipoLabel}</p>
 <p><strong>Descripción:</strong> ${form.descripcion}</p>
 <p><strong>Nivel:</strong> ${NIVEL_CONFIG[form.nivel]?.label}</p>
 <br/><p style="color:#666;font-size:12px">Sistema de Gestión de Equipos – Corporación Municipal Panguipulli</p>`;
-      await Promise.all(form.destinatarios.map(email =>
-        base44.integrations.Core.SendEmail({ to: email, subject: `[Alerta] ${TIPOS_ALERTA.find(t=>t.value===form.tipo)?.label}`, body }).catch(() => {})
-      ));
-      setEnviando(false);
-    }
+        await Promise.all(form.destinatarios.map(email =>
+          base44.integrations.Core.SendEmail({ to: email, subject: `[Alerta] ${TIPOS_ALERTA.find(t=>t.value===form.tipo)?.label}`, body }).catch(() => {})
+        ));
+        setEnviando(false);
+      }
 
-    setAlertas(prev => [nuevaAlerta, ...prev]);
-    setForm({ tipo: "mantenimiento_requerido", nivel: "advertencia", descripcion: "", equipo_id: "", centro: "", destinatarios: [] });
-    setShowModal(false);
-    setGuardando(false);
+      setAlertas(prev => [nuevaAlerta, ...prev]);
+      setForm({ tipo: "mantenimiento_requerido", nivel: "advertencia", descripcion: "", equipo_id: "", centro: "", destinatarios: [] });
+      setShowModal(false);
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setGuardando(false);
+    }
   };
 
   const toggleDestinatario = (email) => {
@@ -125,36 +131,50 @@ export default function AlertasV2() {
   const handleGestionarSolicitud = async () => {
     if (!gestionando) return;
     setGuardandoSol(true);
-    await base44.entities.Solicitud.update(gestionando.id, { estado: nuevoEstado, respuesta_admin: respuestaAdmin });
-    // Si se finaliza la solicitud, resolver la alerta asociada automáticamente
-    if (nuevoEstado === "finalizada" && gestionando.alerta_id) {
-      await base44.entities.Alerta.update(gestionando.alerta_id, { estado: "resuelta", fecha_resolucion: new Date().toISOString().split("T")[0] });
-      setAlertas(prev => prev.map(a => a.id === gestionando.alerta_id ? { ...a, estado: "resuelta" } : a));
+    try {
+      await base44.entities.Solicitud.update(gestionando.id, { estado: nuevoEstado, respuesta_admin: respuestaAdmin });
+      // Si se finaliza la solicitud, resolver la alerta asociada automáticamente
+      if (nuevoEstado === "finalizada" && gestionando.alerta_id) {
+        await base44.entities.Alerta.update(gestionando.alerta_id, { estado: "resuelta", fecha_resolucion: new Date().toISOString().split("T")[0] });
+        setAlertas(prev => prev.map(a => a.id === gestionando.alerta_id ? { ...a, estado: "resuelta" } : a));
+      }
+      setSolicitudes(prev => prev.map(s => s.id === gestionando.id ? { ...s, estado: nuevoEstado, respuesta_admin: respuestaAdmin } : s));
+      setGestionando(null);
+      setGuardandoSol(false);
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setGuardandoSol(false);
     }
-    setSolicitudes(prev => prev.map(s => s.id === gestionando.id ? { ...s, estado: nuevoEstado, respuesta_admin: respuestaAdmin } : s));
-    setGestionando(null);
-    setGuardandoSol(false);
   };
 
   const handleCrearSolicitudRapida = async () => {
     if (!alertaParaSolicitud || !formSol.tipo) return;
     setGuardandoSolRapida(true);
-    const equipo = equipos.find(e => e.id === alertaParaSolicitud.equipo_id);
-    const nueva = await base44.entities.Solicitud.create({
-      equipo_id: alertaParaSolicitud.equipo_id || "",
-      tipo: formSol.tipo,
-      fecha: new Date().toISOString().split("T")[0],
-      observaciones: formSol.observaciones,
-      centro: alertaParaSolicitud.centro || equipo?.centro_principal || "",
-      estado: "pendiente",
-      alerta_id: alertaParaSolicitud.id,
-      usuario_email: user?.email || "",
-      usuario_nombre: user?.full_name || user?.email || ""
-    });
-    setSolicitudes(prev => [nueva, ...prev]);
-    setAlertaParaSolicitud(null);
-    setFormSol({ tipo: "", observaciones: "" });
-    setGuardandoSolRapida(false);
+    try {
+      const equipo = equipos.find(e => e.id === alertaParaSolicitud.equipo_id);
+      const nueva = await base44.entities.Solicitud.create({
+        equipo_id: alertaParaSolicitud.equipo_id || "",
+        tipo: formSol.tipo,
+        fecha: new Date().toISOString().split("T")[0],
+        observaciones: formSol.observaciones,
+        centro: alertaParaSolicitud.centro || equipo?.centro_principal || "",
+        estado: "pendiente",
+        alerta_id: alertaParaSolicitud.id,
+        usuario_email: user?.email || "",
+        usuario_nombre: user?.full_name || user?.email || ""
+      });
+      setSolicitudes(prev => [nueva, ...prev]);
+      setAlertaParaSolicitud(null);
+      setFormSol({ tipo: "", observaciones: "" });
+      setGuardandoSolRapida(false);
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setGuardandoSolRapida(false);
+    }
   };
 
   const ESTADO_SOL = {

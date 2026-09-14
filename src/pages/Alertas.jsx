@@ -44,17 +44,23 @@ export default function Alertas() {
 
   const handleEnviarAlertas = async (cesfamFiltro = null) => {
     setEnviando(true);
-    setMensajeEnvio("");
-    setShowNotifModal(false);
-    const payload = {
-      ...(cesfamFiltro ? { cesfam: cesfamFiltro } : {}),
-      ...(emailsExtra.length > 0 ? { emails_extra: emailsExtra } : {})
-    };
-    const res = await base44.functions.invoke('enviarAlertasCESFAM', payload);
-    const enviados = res.data?.enviados ?? 0;
-    setMensajeEnvio(enviados > 0 ? `✅ Alertas enviadas a ${enviados} correo(s)` : '⚠️ No se encontraron destinatarios configurados');
-    setEmailsExtra([]);
-    setEnviando(false);
+    try {
+      setMensajeEnvio("");
+      setShowNotifModal(false);
+      const payload = {
+        ...(cesfamFiltro ? { cesfam: cesfamFiltro } : {}),
+        ...(emailsExtra.length > 0 ? { emails_extra: emailsExtra } : {})
+      };
+      const res = await base44.functions.invoke('enviarAlertasCESFAM', payload);
+      const enviados = res.data?.enviados ?? 0;
+      setMensajeEnvio(enviados > 0 ? `✅ Alertas enviadas a ${enviados} correo(s)` : '⚠️ No se encontraron destinatarios configurados');
+      setEmailsExtra([]);
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setEnviando(false);
+    }
   };
 
   const getEstadoParche = (p) => {

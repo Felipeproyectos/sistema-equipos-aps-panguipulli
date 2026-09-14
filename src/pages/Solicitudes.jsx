@@ -71,20 +71,26 @@ export default function Solicitudes() {
 
   const handleCreate = async () => {
     setSaving(true);
-    const base = { equipo_id: form.equipo_id, solicitante_email: user.email, fecha_solicitud: new Date().toISOString().split("T")[0], estado: "pendiente", descripcion: form.descripcion };
-    if (form.tipo_categoria === "parches") {
-      // Crear una solicitud por cada tipo de parche con cantidad > 0
-      const parchesEntries = PARCHE_TIPOS.filter(p => parseInt(form.parches[p.value]) > 0);
-      await Promise.all(parchesEntries.map(p =>
-        base44.entities.SolicitudStock.create({ ...base, tipo_solicitud: p.value, cantidad: parseInt(form.parches[p.value]) })
-      ));
-    } else {
-      await base44.entities.SolicitudStock.create({ ...base, tipo_solicitud: form.tipo_solicitud, cantidad: form.cantidad });
+    try {
+      const base = { equipo_id: form.equipo_id, solicitante_email: user.email, fecha_solicitud: new Date().toISOString().split("T")[0], estado: "pendiente", descripcion: form.descripcion };
+      if (form.tipo_categoria === "parches") {
+        // Crear una solicitud por cada tipo de parche con cantidad > 0
+        const parchesEntries = PARCHE_TIPOS.filter(p => parseInt(form.parches[p.value]) > 0);
+        await Promise.all(parchesEntries.map(p =>
+          base44.entities.SolicitudStock.create({ ...base, tipo_solicitud: p.value, cantidad: parseInt(form.parches[p.value]) })
+        ));
+      } else {
+        await base44.entities.SolicitudStock.create({ ...base, tipo_solicitud: form.tipo_solicitud, cantidad: form.cantidad });
+      }
+      setShowForm(false);
+      setForm({ equipo_id: "", establecimiento: "", lugar: "", tipo_categoria: "parches", parches: { parches_adulto: "", parches_nino: "", parches_mixto: "" }, tipo_solicitud: "bateria", cantidad: 1, descripcion: "" });
+      load();
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setShowForm(false);
-    setForm({ equipo_id: "", establecimiento: "", lugar: "", tipo_categoria: "parches", parches: { parches_adulto: "", parches_nino: "", parches_mixto: "" }, tipo_solicitud: "bateria", cantidad: 1, descripcion: "" });
-    load();
   };
 
   const parchesValidos = form.tipo_categoria === "parches"
