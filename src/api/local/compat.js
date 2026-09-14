@@ -305,7 +305,6 @@ const users = {
       centro_principal: datos.centro_principal || '',
       centros_asignados: datos.centro_principal ? [datos.centro_principal] : [],
       force_password_reset: true,
-      activo: true,
     });
     return { usuario: fila, clave_temporal: 'Aps-LOCAL01', correo_enviado: false };
   },
