@@ -28,8 +28,6 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
   const [deleting, setDeleting] = useState(false);
   const [tab, setTab] = useState("info");
 
-  const isAdmin = user?.role === "admin";
-
   const handleImprimirInforme = async () => {
     let conductorActivo = equipo.conductor_responsable;
     try {
@@ -1415,7 +1413,6 @@ function IncidentesTab({ equipo, user }) {
    BITÁCORA TAB
 ══════════════════════════════════════════════ */
 function BitacoraTab({ equipo, user }) {
-  const isAdmin = user?.role === "admin";
   const [registros, setRegistros] = useState([]);
   const [incidentes, setIncidentes] = useState([]);
   const [showConductorForm, setShowConductorForm] = useState(false);
