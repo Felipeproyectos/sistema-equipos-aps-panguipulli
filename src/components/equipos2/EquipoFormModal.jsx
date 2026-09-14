@@ -3,12 +3,53 @@ import { base44 } from "@/api/base44Client";
 import { X, Upload, Loader2 } from "lucide-react";
 import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO, esVehiculo } from "@/lib/centros";
 
+// Los centros que la ficha de una persona puede tener, en los tres formatos que
+// dejó la migración: `centro_principal` (el que usan las policies), la lista
+// `centros_asignados`, y el `centro_asignado` suelto de Base44.
+//
+// Mirar solo `centro_principal` deja el campo Centro en blanco en cuanto una
+// ficha guarda su centro únicamente en la lista — algo que sí pasa, porque la
+// pantalla de Equipos lee `centros_asignados` y la de Configuración escribe esa
+// misma lista. Y como el campo es de solo lectura, no había forma de corregirlo
+// a mano: se guardaba sin centro y la base rechazaba el equipo entero.
+function centrosDelUsuario(user) {
+  if (!user) return [];
+  const lista = Array.isArray(user.centros_asignados) ? user.centros_asignados : [];
+  return [...new Set([user.centro_principal, user.centro_asignado, user.centro, ...lista].filter(Boolean))];
+}
+
+// Lo que la base contesta cuando rechaza algo no lo entiende nadie que no sea
+// programador. Se traduce a lo que la persona puede hacer al respecto.
+function mensajeDeError(err, centro) {
+  const crudo = err?.message || String(err || "");
+  if (/row-level security|violates row-level|42501|permission denied/i.test(crudo)) {
+    return `El sistema no te deja guardar un equipo en "${centro}". Suele pasar cuando la ficha tuya quedó con un centro distinto al que estás usando. Avísale a Informática con este mensaje.`;
+  }
+  if (/invalid input syntax for type (date|timestamp)/i.test(crudo)) {
+    return "Una de las fechas quedó a medio escribir. Revísalas o déjalas en blanco.";
+  }
+  if (/invalid input syntax for type numeric/i.test(crudo)) {
+    return "El valor o el año tienen que ser un número.";
+  }
+  if (/duplicate key|already exists/i.test(crudo)) {
+    return "Ya existe un equipo con ese número de inventario.";
+  }
+  if (/could not find the '([^']+)' column/i.test(crudo)) {
+    return `El sistema mandó un dato que la base no tiene (${crudo.match(/could not find the '([^']+)' column/i)[1]}). Es un error del sistema, no tuyo: avísale a Informática.`;
+  }
+  if (/Failed to fetch|NetworkError|network/i.test(crudo)) {
+    return "No se pudo conectar. Revisa tu conexión y vuelve a intentarlo.";
+  }
+  return `No se pudo guardar el equipo: ${crudo}`;
+}
+
 export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
   // Pueden elegir cualquier centro: super_admin y admin. El encargado de salud
   // queda fijo a su centro (solo lectura). Antes solo se permitía a "admin",
   // lo que dejaba el campo en blanco para super_admin y encargado_salud.
   const puedeElegirCentro = user?.role === "super_admin" || user?.role === "admin";
-  const centroFijoUsuario = user?.centro_principal || user?.centro_asignado || user?.centro || "";
+  const centrosPropios = centrosDelUsuario(user);
+  const centroFijoUsuario = centrosPropios[0] || "";
   const [centrosEstructura, setCentrosEstructura] = useState([]);
   const [form, setForm] = useState({
     numero_inventario: "", tipo: "dea", marca: "", modelo: "", numero_serie: "",
@@ -22,6 +63,7 @@ export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
     estado_permiso_circulacion: "ok", fecha_vencimiento_permiso_circulacion: ""
   });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const [uploadingFoto, setUploadingFoto] = useState(false);
 
   useEffect(() => {
@@ -50,15 +92,27 @@ export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.centro_principal) {
+      setError("Tu ficha no tiene un centro asignado, y el equipo tiene que quedar en uno. Pídele a Informática que te asigne el centro y vuelve a intentarlo.");
+      return;
+    }
+    setError("");
     setSaving(true);
     const data = { ...form, valor: form.valor ? Number(form.valor) : undefined, anio_adquisicion: Number(form.anio_adquisicion) };
-    if (equipo?.id) {
-      await base44.entities.Equipo.update(equipo.id, data);
-    } else {
-      await base44.entities.Equipo.create(data);
+    // Antes esto no tenía try/catch: si la base rechazaba el guardado, el botón
+    // se quedaba en "Guardando..." para siempre y no aparecía ningún mensaje.
+    // La persona veía que no pasaba nada y no tenía cómo saber por qué.
+    try {
+      if (equipo?.id) {
+        await base44.entities.Equipo.update(equipo.id, data);
+      } else {
+        await base44.entities.Equipo.create(data);
+      }
+      onSaved();
+    } catch (err) {
+      setError(mensajeDeError(err, form.centro_principal));
+      setSaving(false);
     }
-    setSaving(false);
-    onSaved();
   };
 
   return (
@@ -103,13 +157,19 @@ export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-semibold text-slate-600 block mb-1">Centro Principal *</label>
-              {puedeElegirCentro ? (
+              {puedeElegirCentro || centrosPropios.length > 1 ? (
                 <select required className={selectCls} value={form.centro_principal} onChange={e => { set("centro_principal", e.target.value); set("subsede", ""); }}>
                   <option value="">Seleccionar...</option>
-                  {centrosEstructura.map(c => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
+                  {(puedeElegirCentro ? centrosEstructura.map(c => c.nombre) : centrosPropios)
+                    .map(nombre => <option key={nombre} value={nombre}>{nombre}</option>)}
                 </select>
               ) : (
-                <input readOnly className="w-full border border-slate-100 bg-slate-50 rounded-xl px-3 py-2 text-sm text-slate-900" value={form.centro_principal} />
+                <input readOnly className="w-full border border-slate-100 bg-slate-50 rounded-xl px-3 py-2 text-sm text-slate-900" value={form.centro_principal} placeholder="Sin centro asignado" />
+              )}
+              {!puedeElegirCentro && !form.centro_principal && (
+                <p className="text-xs text-amber-700 mt-1">
+                  Tu ficha no tiene centro asignado. Informática tiene que asignártelo para que puedas cargar equipos.
+                </p>
               )}
             </div>
             <div>
@@ -242,6 +302,13 @@ export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
             </label>
             {form.foto_url && <img src={form.foto_url} alt="foto" className="mt-2 h-24 rounded-xl object-cover" />}
           </div>
+
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm font-semibold text-red-800">No se guardó</p>
+              <p className="text-sm text-red-700 mt-0.5">{error}</p>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50">Cancelar</button>
