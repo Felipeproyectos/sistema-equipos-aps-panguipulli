@@ -218,6 +218,12 @@ async function crear(base44, quien, datos) {
   if (!cuenta) cuenta = await crearEnAuth(correo, clave, datos.full_name);
   else await fijarClave(cuenta.id, clave);   // había cuenta suelta: se reaprovecha
 
+  // Sin `activo`: esa columna no existe en `usuario` y PostgREST rechazaba el
+  // insert entero con "Could not find the 'activo' column of 'usuario' in the
+  // schema cache", asi que no se podia crear ninguna cuenta. Tampoco hace
+  // falta: quien puede entrar lo decide Supabase Auth (si existe la cuenta),
+  // no una casilla en esta tabla. `activo` si existe en equipo y repuesto,
+  // donde es el borrado logico; de ahi la confusion.
   const campos = {
     email: correo,
     full_name: datos.full_name || correo.split('@')[0],
@@ -227,7 +233,6 @@ async function crear(base44, quien, datos) {
     subsedes_asignadas: Array.isArray(datos.subsedes_asignadas) ? datos.subsedes_asignadas : [],
     auth_id: cuenta.id,
     force_password_reset: true,
-    activo: true,
   };
   const guardado = ficha
     ? await base44.asServiceRole.entities.User.update(ficha.id, campos)
