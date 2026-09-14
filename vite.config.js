@@ -1,4 +1,3 @@
-import base44 from "@base44/vite-plugin"
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 import path from 'node:path'
@@ -42,17 +41,16 @@ export default defineConfig(({ mode }) => {
         '#compat': path.resolve(import.meta.dirname, 'src/api/local/compat.js'),
       },
     },
+    // Aca estaba @base44/vite-plugin. Inyectaba en el build de produccion un
+    // rastreador de navegacion, notificadores y un agente de edicion visual de
+    // la plataforma de la que se migro el sistema. El rastreador parcheaba
+    // history.pushState y pedia /api/app-logs/<appId>/log-user-in-app/<pagina>
+    // en cada navegacion; no llegaba a enviar nada porque el appId salia vacio,
+    // pero quedaba armado para hacerlo en cuanto alguien definiera
+    // VITE_BASE44_APP_ID. Tambien traia `legacySDKImports`, para codigo que
+    // importara @/entities o @/integrations: no queda ninguno.
     plugins: [
       sinDatosLocales(MODO_LOCAL),
-      base44({
-        // Support for legacy code that imports the base44 SDK with @/integrations, @/entities, etc.
-        // can be removed if the code has been updated to use the new SDK imports from @base44/sdk
-        legacySDKImports: process.env.BASE44_LEGACY_SDK_IMPORTS === 'true',
-        hmrNotifier: !MODO_LOCAL,
-        navigationNotifier: !MODO_LOCAL,
-        analyticsTracker: !MODO_LOCAL,
-        visualEditAgent: !MODO_LOCAL,
-      }),
       react(),
     ],
   }

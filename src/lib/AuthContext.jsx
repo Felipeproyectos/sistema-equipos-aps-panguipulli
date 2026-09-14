@@ -1,7 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { base44, MODO_LOCAL, MODO_SUPABASE, fijarUsuarioActual, registrarIngreso } from '@/api/base44Client';
-import { appParams } from '@/lib/app-params';
-import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 
 const AuthContext = createContext();
 
@@ -39,101 +37,14 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    // En modo Supabase tampoco hay plataforma Base44 que consultar: la
-    // sesión vive en Supabase Auth, no en /api/apps/public. Revisarla directo
-    // evita pegarle a un endpoint que no existe en este despliegue.
-    if (MODO_SUPABASE) {
-      setAppPublicSettings({});
-      setIsLoadingPublicSettings(false);
-      await checkUserAuth();
-      return;
-    }
-
-    try {
-      setIsLoadingPublicSettings(true);
-      setAuthError(null);
-
-      // First, check app public settings (with token if available)
-      // This will tell us if auth is required, user not registered, etc.
-      const appClient = createAxiosClient({
-        baseURL: `/api/apps/public`,
-        headers: {
-          'X-App-Id': appParams.appId
-        },
-        token: appParams.token, // Include token if available
-        interceptResponses: true
-      });
-      
-      try {
-        const publicSettings = await appClient.get(`/prod/public-settings/by-id/${appParams.appId}`);
-        setAppPublicSettings(publicSettings);
-        
-        // If we got the app public settings successfully, check if user is authenticated
-        if (appParams.token) {
-          await checkUserAuth();
-        } else {
-          setIsLoadingAuth(false);
-          setIsAuthenticated(false);
-        }
-        setIsLoadingPublicSettings(false);
-      } catch (appError) {
-        console.error('App state check failed:', appError);
-
-        if (isPublicRoute) {
-          // En rutas públicas, ignorar errores de autenticación
-          setIsLoadingPublicSettings(false);
-          setIsLoadingAuth(false);
-          return;
-        }
-        
-        // Handle app-level errors
-        if (appError.status === 403 && appError.data?.extra_data?.reason) {
-          const reason = appError.data.extra_data.reason;
-          if (reason === 'auth_required') {
-            setAuthError({
-              type: 'auth_required',
-              message: 'Authentication required'
-            });
-            setIsLoadingPublicSettings(false);
-            setIsLoadingAuth(false);
-          } else if (reason === 'user_not_registered') {
-            // Puede que el usuario esté registrado en la entidad User aunque
-            // la plataforma diga user_not_registered. Intentar checkUserAuth igual.
-            setIsLoadingPublicSettings(false);
-            if (appParams.token) {
-              await checkUserAuth();
-            } else {
-              setAuthError({ type: 'user_not_registered', message: 'User not registered for this app' });
-              setIsLoadingAuth(false);
-            }
-          } else {
-            setAuthError({
-              type: reason,
-              message: appError.message
-            });
-            setIsLoadingPublicSettings(false);
-            setIsLoadingAuth(false);
-          }
-        } else {
-          setAuthError({
-            type: 'unknown',
-            message: appError.message || 'Failed to load app'
-          });
-          setIsLoadingPublicSettings(false);
-          setIsLoadingAuth(false);
-        }
-      }
-    } catch (error) {
-      console.error('Unexpected error:', error);
-      if (!isPublicRoute) {
-        setAuthError({
-          type: 'unknown',
-          message: error.message || 'An unexpected error occurred'
-        });
-      }
-      setIsLoadingPublicSettings(false);
-      setIsLoadingAuth(false);
-    }
+    // Fuera del modo local la sesion vive en Supabase Auth. Aca antes venia
+    // todo el arranque contra la plataforma de Base44 (/api/apps/public, sus
+    // codigos de error auth_required y user_not_registered): ~85 lineas que
+    // desde la migracion ya no se ejecutaban nunca, porque el corte de arriba
+    // devolvia antes. Se fueron junto con el SDK.
+    setAppPublicSettings({});
+    setIsLoadingPublicSettings(false);
+    await checkUserAuth();
   };
 
   const checkUserAuth = async () => {
