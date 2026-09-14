@@ -7,7 +7,8 @@ import {
   Loader2, ExternalLink, Printer, ChevronDown
 } from "lucide-react";
 import { TIPOS_EQUIPO, ESTADOS_EQUIPO, esVehiculo, resolverUbicacion } from "@/lib/centros";
-import { esRolTaller, ROLES } from "@/lib/roles";
+import { esRolTaller, ROLES, puedeEliminar } from "@/lib/roles";
+import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import RepuestosTab from "./RepuestosTab";
 import ChecklistPlano from "./ChecklistPlano";
 import ImprimirHistorialModal from "./ImprimirHistorialModal";
@@ -129,7 +130,10 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
                   style={{ border: "1px solid rgba(255,255,255,0.3)" }}>
                   <Edit className="w-3.5 h-3.5" /> Editar
                 </button>
-                {isAdmin && (
+                {/* Antes decia `user?.role === "admin"` a secas, asi que Base
+                    del Sistema, que esta por encima, no veia el boton. Ahora
+                    sale de la matriz, que es espejo de la policy. */}
+                {puedeEliminar(getEffectiveNavRole(user?.role), "equipo") && (
                   <button onClick={handleDelete} disabled={deleting}
                     className="px-3 py-2 rounded-xl text-sm font-semibold text-red-300 hover:bg-red-900/30 transition-all"
                     style={{ border: "1px solid rgba(239,68,68,0.3)" }}>

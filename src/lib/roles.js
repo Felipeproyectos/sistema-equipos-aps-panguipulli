@@ -167,10 +167,17 @@ export function filtrarEquiposVisibles(user, equipos = []) {
 // Todas las eliminaciones, sin importar el rol, deben quedar auditadas
 // (ver Historial.jsx / auditoría de eliminaciones) — este helper solo dice
 // si el botón de eliminar debe mostrarse, no reemplaza la RLS del backend.
+// Espejo de las policies de borrado de migracion/03_policies.sql. La base es
+// la que manda; esto solo decide si el boton se muestra, para no ofrecer algo
+// que la base va a rechazar.
 export const PUEDE_ELIMINAR = {
   equipo: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   parche: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   orden_trabajo: [ROLES.SUPER_ADMIN, ROLES.JEFE_TALLER],
+  // La policy `solicitud_delete` deja a estos dos borrar cualquiera, y ademas
+  // al propio solicitante mientras la suya siga "pendiente" — eso ultimo se
+  // resuelve en la pantalla, porque depende de la fila y no solo del rol.
+  solicitud: [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   repuesto: [ROLES.SUPER_ADMIN, ROLES.JEFE_TALLER],
   proveedor: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.JEFE_TALLER],
   usuario: [ROLES.SUPER_ADMIN],

@@ -4,6 +4,8 @@ import { ClipboardList, Plus, Search, Loader2, X } from "lucide-react";
 import { TIPOS_SOLICITUD, CENTROS_ESTRUCTURA } from "@/lib/centros";
 import NativePicker from "@/components/NativePicker";
 import { useAuth } from "@/lib/AuthContext";
+import { getEffectiveNavRole } from "@/lib/roleSimulator";
+import { puedeEliminar } from "@/lib/roles";
 
 const ESTADO_CONFIG = {
   pendiente: { label: "Pendiente", color: "#d97706", bg: "#fffbeb" },
@@ -162,6 +164,24 @@ export default function SolicitudesV2() {
                         className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50"
                       >
                         Cancelar
+                      </button>
+                    )}
+                    {/* Borrar CUALQUIER solicitud, sea de quien sea y este en el
+                        estado que este. La policy `solicitud_delete` ya lo
+                        permitia, pero no habia boton: solo se podia cancelar la
+                        propia y mientras siguiera pendiente. No se duplica en
+                        las que ya ofrecen "Cancelar". */}
+                    {puedeEliminar(getEffectiveNavRole(user?.role), "solicitud")
+                      && !(sol.usuario_email === user?.email && sol.estado === "pendiente") && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`¿Eliminar la solicitud de ${sol.usuario_nombre || sol.usuario_email}? No se puede deshacer.`)) return;
+                          await base44.entities.Solicitud.delete(sol.id);
+                          setSolicitudes(prev => prev.filter(s => s.id !== sol.id));
+                        }}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        Eliminar
                       </button>
                     )}
                   </div>

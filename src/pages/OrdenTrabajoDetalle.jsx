@@ -5,11 +5,12 @@ import { createPageUrl } from "@/utils";
 import {
   ArrowLeft, Wrench, Car, User, Clock, AlertTriangle, CheckCircle2,
   Calendar, ClipboardList, Save, Loader2, Edit3,
-  Stethoscope, Lock, FileDown
+  Stethoscope, Lock, FileDown, Trash2
 } from "lucide-react";
 import { generarPDFOrdenTrabajo } from "@/utils/generarPDFOrdenTrabajo";
 import { normalizarTipoActivo, etiquetaTipoActivo } from "@/lib/centros";
 import { PERMISOS } from "@/lib/permisos";
+import { puedeEliminar } from "@/lib/roles";
 import LineaTiempo from "@/components/taller/LineaTiempo";
 import RepuestosUtilizados from "@/components/taller/RepuestosUtilizados";
 import ComentariosOT from "@/components/taller/ComentariosOT";
@@ -77,6 +78,11 @@ export default function OrdenTrabajoDetalle() {
   const esJefe = !simActivo && ["super_admin", "jefe_taller"].includes(effectiveRole);
   const esMecanico = !simActivo && effectiveRole === "mecanico";
   const canCerrar = esJefe;
+  // Borrar una OT ya estaba permitido por la policy `orden_trabajo_delete`
+  // (Base del Sistema y Jefe de Taller), pero no habia boton en ninguna
+  // pantalla. Se agrega respetando esa misma lista.
+  const puedeBorrar = !simActivo && puedeEliminar(effectiveRole, "orden_trabajo");
+  const [borrando, setBorrando] = useState(false);
 
   const fetchData = useCallback(async () => {
     const [rep, usersRes] = await Promise.all([
@@ -115,6 +121,40 @@ export default function OrdenTrabajoDetalle() {
 
   const estado = ESTADO_CFG[ot.estado] || ESTADO_CFG.pendiente;
   const prio = PRIORIDAD_CFG[ot.prioridad] || PRIORIDAD_CFG.media;
+
+  // Los ids de este sistema son texto suelto, sin claves foraneas: borrar la OT
+  // no se lleva sola lo que apunta a ella. Los comentarios se van con ella
+  // porque sin la OT no significan nada. Las solicitudes de repuesto NO: llevan
+  // aprobacion, proveedor y precio, asi que si hay alguna se avisa y no se
+  // borra nada — primero hay que resolverla en Aprobacion de Solicitudes.
+  const handleEliminarOT = async () => {
+    setBorrando(true);
+    try {
+      const repuestosPedidos = await base44.entities.SolicitudRepuesto
+        .filter({ orden_trabajo_id: ot.id }).catch(() => []);
+      if (repuestosPedidos.length > 0) {
+        toast({
+          title: "No se puede eliminar todavía",
+          description: `Esta orden tiene ${repuestosPedidos.length} solicitud(es) de repuesto con su historial de compra. Resuélvelas primero en Aprobación de Solicitudes.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!confirm(`¿Eliminar la orden ${ot.numero_ot}?\n\nSe borran también sus comentarios y su línea de tiempo. No se puede deshacer.`)) return;
+
+      const comentarios = await base44.entities.Comentario
+        .filter({ orden_trabajo_id: ot.id }).catch(() => []);
+      for (const c of comentarios) await base44.entities.Comentario.delete(c.id).catch(() => {});
+      await base44.entities.OrdenTrabajo.delete(ot.id);
+
+      toast({ title: `Orden ${ot.numero_ot} eliminada` });
+      navigate(createPageUrl("Taller"));
+    } catch (e) {
+      toast({ title: "No se pudo eliminar", description: e.message, variant: "destructive" });
+    } finally {
+      setBorrando(false);
+    }
+  };
 
   const addTimeline = (evento, notas) => ({
     fecha: new Date().toISOString(),
@@ -451,6 +491,20 @@ export default function OrdenTrabajoDetalle() {
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {puedeBorrar && (
+              <div className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+                <h3 className="text-sm font-bold text-slate-700 mb-1">Eliminar orden</h3>
+                <p className="text-xs text-slate-400 mb-3 leading-snug">
+                  Se borra la orden con sus comentarios y su línea de tiempo. No se puede deshacer.
+                </p>
+                <button onClick={handleEliminarOT} disabled={borrando}
+                  className="w-full py-2.5 rounded-xl text-sm font-bold text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50 flex items-center justify-center gap-2 transition-all">
+                  {borrando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Eliminar {ot.numero_ot}
+                </button>
               </div>
             )}
           </div>
