@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { CheckCircle, Bell, Plus, X, Loader2, Mail, Send, ClipboardList, FileText } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
+import { esAdministrador } from "@/lib/roles";
+import { getEffectiveNavRole } from "@/lib/roleSimulator";
 
 const NIVEL_CONFIG = {
   critica:    { color: "#dc2626", bg: "#fef2f2", border: "#fca5a5", label: "Crítica" },
@@ -183,7 +185,11 @@ export default function AlertasV2() {
     finalizada:  { label: "Finalizada",  color: "#16a34a", bg: "#f0fdf4" },
   };
 
-  const isAdmin = user?.role === "admin";
+  // Antes decía `user?.role === "admin"` a secas, así que Base del Sistema, que
+  // está por encima, no veía el botón de crear alertas, ni las solicitudes de
+  // los demás, ni los botones para gestionarlas. Va por el rol EFECTIVO para
+  // que "Simular Rol" muestre lo que ve de verdad el perfil simulado.
+  const isAdmin = esAdministrador(getEffectiveNavRole(user?.role));
   // Usuarios normales solo ven sus propias solicitudes
   const solicitudesVisibles = isAdmin ? solicitudes : solicitudes.filter(s => s.usuario_email === user?.email);
   const filtradas = alertas.filter(a => filtro === "todos" ? true : a.estado === filtro)

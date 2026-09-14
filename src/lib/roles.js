@@ -62,6 +62,18 @@ export function esMonitorCorporativo(role) {
   return role === ROLES.MONITOR_CORPORATIVO;
 }
 
+// ¿Manda esta persona sobre la administración del sistema?
+//
+// Varias pantallas preguntaban `user.role === "admin"` a secas, y eso dejaba
+// fuera a Base del Sistema, que está POR ENCIMA de Administrador: en Alertas no
+// veía el botón de crear ni las solicitudes ajenas, y en Configuración la lista
+// de usuarios salía vacía. El mismo descuido ya se había corregido en Equipos y
+// en el botón de borrar un equipo; esto le da un solo lugar donde vivir para
+// que no se vuelva a escribir suelto.
+export function esAdministrador(role) {
+  return role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN;
+}
+
 // ── Jerarquía de creación de cuentas: quién puede crear a quién ─────────────
 export const QUIEN_CREA_A_QUIEN = {
   [ROLES.SUPER_ADMIN]: Object.values(ROLES), // crea cualquier rol, incluido otro super_admin

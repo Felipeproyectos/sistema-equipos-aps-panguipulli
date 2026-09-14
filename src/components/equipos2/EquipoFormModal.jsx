@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { X, Upload, Loader2 } from "lucide-react";
 import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO, esVehiculo } from "@/lib/centros";
+import { esAdministrador } from "@/lib/roles";
 
 // Los centros que la ficha de una persona puede tener, en los tres formatos que
 // dejó la migración: `centro_principal` (el que usan las policies), la lista
@@ -22,7 +23,7 @@ export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
   // Pueden elegir cualquier centro: super_admin y admin. El encargado de salud
   // queda fijo a su centro (solo lectura). Antes solo se permitía a "admin",
   // lo que dejaba el campo en blanco para super_admin y encargado_salud.
-  const puedeElegirCentro = user?.role === "super_admin" || user?.role === "admin";
+  const puedeElegirCentro = esAdministrador(user?.role);
   const centrosPropios = centrosDelUsuario(user);
   const centroFijoUsuario = centrosPropios[0] || "";
   const [centrosEstructura, setCentrosEstructura] = useState([]);

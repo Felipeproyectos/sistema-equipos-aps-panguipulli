@@ -5,6 +5,7 @@ import GestionSedes from "@/components/configuracion/GestionSedes";
 import BackupSection from "@/components/configuracion/BackupSection";
 import { QRCodeSVG } from "qrcode.react";
 import { useAuth } from "@/lib/AuthContext";
+import { esAdministrador, roleLabel } from "@/lib/roles";
 
 export default function Configuracion() {
   const { user } = useAuth();
@@ -28,7 +29,11 @@ export default function Configuracion() {
 
   useEffect(() => {
     const init = async () => {
-      if (user?.role !== "admin") return;
+      // Este chequeo decía solo "admin", pero el de más abajo que decide si la
+      // pantalla se muestra (y el menú que trae hasta acá) incluyen a Base del
+      // Sistema. Resultado: entraba, y encontraba la lista de usuarios vacía y
+      // la personalización sin cargar, porque los datos nunca se pedían.
+      if (!esAdministrador(user?.role)) return;
       const [configs, usrs] = await Promise.all([
         base44.entities.AppConfig.list(),
         base44.entities.User.list().catch(() => [])
@@ -128,7 +133,7 @@ export default function Configuracion() {
 
   if (!user) return <div className="flex items-center justify-center min-h-screen"><div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>;
 
-  if (user?.role !== "admin" && user?.role !== "super_admin") return (
+  if (!esAdministrador(user?.role)) return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-4 text-slate-400">
       <Shield className="w-16 h-16 opacity-20" />
       <p className="text-lg font-medium">Acceso restringido a administradores</p>
@@ -259,8 +264,12 @@ export default function Configuracion() {
                   <>
                     <div>
                       <p className="text-sm font-semibold text-slate-800">{u.full_name || u.email}</p>
-                      <p className="text-xs text-slate-400">{u.email} · <span className={u.role === "admin" ? "text-blue-600 font-medium" : "text-slate-500"}>{u.role === "admin" ? "Administrador" : "Usuario"}</span></p>
-                      {u.role !== "admin" && (
+                      {/* Antes solo distinguía "Administrador" o "Usuario": un
+                          Mecánico, un Jefe de Taller o un Encargado Salud salían
+                          todos como "Usuario". roleLabel es la misma etiqueta que
+                          usa el resto del sistema. */}
+                      <p className="text-xs text-slate-400">{u.email} · <span className={esAdministrador(u.role) ? "text-blue-600 font-medium" : "text-slate-500"}>{roleLabel(u.role)}</span></p>
+                      {!esAdministrador(u.role) && (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {(u.centros_asignados?.length > 0) ? u.centros_asignados.map(c => (
                             <span key={c} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "#EFF6FF", color: "#2563EB" }}>{c}</span>
