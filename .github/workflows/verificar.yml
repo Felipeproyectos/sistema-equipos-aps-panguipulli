@@ -1,0 +1,68 @@
+# Verificación automática de cada Pull Request y de lo que entra a main.
+#
+# Por qué existe: dos errores llegaron a producción y los encontró el usuario
+# apretando botones — un `PERMISOS is not defined` que dejaba la pantalla de
+# una orden de trabajo en blanco, y un campo `activo` inexistente que impedía
+# crear cuentas. Los tres pasos de abajo habrían atajado ambos antes de
+# fusionar.
+#
+# Son rápidos y no necesitan secretos: no tocan Supabase ni Railway.
+
+name: Verificar
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Si se empuja dos veces seguidas a la misma rama, se cancela la corrida vieja.
+concurrency:
+  group: verificar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Lint y compilación
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # `npm ci` en vez de `npm install`: respeta package-lock.json al pie de
+      # la letra, así la corrida usa exactamente las mismas versiones.
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Incluye no-undef, la regla que detecta usar algo que nadie importó.
+      - name: Lint
+        run: npm run lint
+
+      - name: Compilar
+        run: npx vite build
+
+  base_de_datos:
+    name: Campos contra el esquema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Compara lo que las funciones del servidor escriben contra las columnas
+      # que existen de verdad en migracion/*.sql. Sin esto, un campo inventado
+      # solo aparece en producción, al apretar el botón: PostgREST rechaza la
+      # fila entera en vez de ignorar el campo de más.
+      - name: Verificar campos contra el esquema
+        run: python migracion/verificar_campos.py
+
+      # El generador trae sus propias comprobaciones; correrlo sin argumentos
+      # las ejecuta y no escribe nada.
+      - name: Autotest del generador de SQL
+        run: python migracion/generar_sql.py
