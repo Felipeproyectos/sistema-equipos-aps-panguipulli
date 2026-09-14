@@ -56,10 +56,17 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
   const handleDelete = async () => {
     if (!confirm("¿Eliminar este equipo? Quedará oculto de los listados pero se conserva en el historial para auditoría.")) return;
     setDeleting(true);
-    // Soft delete: se marca inactivo en vez de borrar el registro real, para
-    // que Base del Sistema siempre pueda auditar qué se eliminó y cuándo.
-    await base44.entities.Equipo.update(equipo.id, { activo: false });
-    onDeleted();
+    try {
+      // Soft delete: se marca inactivo en vez de borrar el registro real, para
+      // que Base del Sistema siempre pueda auditar qué se eliminó y cuándo.
+      await base44.entities.Equipo.update(equipo.id, { activo: false });
+      onDeleted();
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const estadoColor = { operativo: "#10B981", mantenimiento: "#F59E0B", fuera_de_servicio: "#EF4444" }[equipo.estado] || "#94A3B8";
@@ -505,10 +512,17 @@ function MantenimientoTab({ equipo, actividades, user, onUpdated }) {
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
-    await base44.entities.Actividad.create({ ...form, equipo_id: equipo.id });
-    setSaving(false);
-    setShowForm(false);
-    onUpdated();
+    try {
+      await base44.entities.Actividad.create({ ...form, equipo_id: equipo.id });
+      setSaving(false);
+      setShowForm(false);
+      onUpdated();
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -1212,10 +1226,16 @@ function ParchesTab({ equipo, parches, user, onUpdated }) {
   const handleAdd = async (e) => {
     e.preventDefault();
     setSaving(true);
-    await base44.entities.Parche.create({ ...form, equipo_id: equipo.id, cantidad: Number(form.cantidad), activo: true });
-    setSaving(false);
-    setShowForm(false);
-    onUpdated && onUpdated();
+    try {
+      await base44.entities.Parche.create({ ...form, equipo_id: equipo.id, cantidad: Number(form.cantidad), activo: true });
+      setShowForm(false);
+      onUpdated && onUpdated();
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -1302,15 +1322,21 @@ function IncidentesTab({ equipo, user }) {
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
-    if (editingInc) {
-      await base44.entities.Actividad.update(editingInc.id, form);
-    } else {
-      await base44.entities.Actividad.create({ equipo_id: equipo.id, tipo: "incidente", ...form });
+    try {
+      if (editingInc) {
+        await base44.entities.Actividad.update(editingInc.id, form);
+      } else {
+        await base44.entities.Actividad.create({ equipo_id: equipo.id, tipo: "incidente", ...form });
+      }
+      setShowForm(false);
+      setEditingInc(null);
+      load();
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setShowForm(false);
-    setEditingInc(null);
-    load();
   };
 
   const handleDelete = async (id) => {
@@ -1416,53 +1442,73 @@ function BitacoraTab({ equipo, user }) {
   const handleSaveConductor = async (e) => {
     e.preventDefault();
     setSaving(true);
-    const kmInicial = Number(form.km_inicial);
-    const activo = registros.find(r => !r.km_final);
-    if (activo) await base44.entities.Kilometraje.update(activo.id, { km_final: kmInicial });
-    await base44.entities.Kilometraje.create({ equipo_id: equipo.id, fecha: form.fecha, conductor: form.conductor, valor_km: kmInicial, km_inicial: kmInicial, observaciones: form.observaciones });
-    // Guardar incidente si fue indicado
-    if (form.tiene_incidente && form.incidente.trim()) {
-      await base44.functions.invoke('reportarIncidenteAmbulancia', {
-        equipo_id: equipo.id,
-        fecha: form.fecha,
-        tipo_incidente: form.tipo_incidente,
-        observaciones: form.incidente,
-        usuario_nombre: form.conductor,
-        ambulancia_operativa: form.ambulancia_operativa
-      });
+    try {
+      const kmInicial = Number(form.km_inicial);
+      const activo = registros.find(r => !r.km_final);
+      if (activo) await base44.entities.Kilometraje.update(activo.id, { km_final: kmInicial });
+      await base44.entities.Kilometraje.create({ equipo_id: equipo.id, fecha: form.fecha, conductor: form.conductor, valor_km: kmInicial, km_inicial: kmInicial, observaciones: form.observaciones });
+      // Guardar incidente si fue indicado
+      if (form.tiene_incidente && form.incidente.trim()) {
+        await base44.functions.invoke('reportarIncidenteAmbulancia', {
+          equipo_id: equipo.id,
+          fecha: form.fecha,
+          tipo_incidente: form.tipo_incidente,
+          observaciones: form.incidente,
+          usuario_nombre: form.conductor,
+          ambulancia_operativa: form.ambulancia_operativa
+        });
+      }
+      setShowConductorForm(false);
+      setForm({ fecha: new Date().toISOString().split("T")[0], conductor: "", km_inicial: "", observaciones: "", incidente: "", tiene_incidente: false });
+      load();
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setShowConductorForm(false);
-    setForm({ fecha: new Date().toISOString().split("T")[0], conductor: "", km_inicial: "", observaciones: "", incidente: "", tiene_incidente: false });
-    load();
   };
 
   const handleSaveIncidente = async (e) => {
     e.preventDefault();
     setSavingInc(true);
-    const km = registros.find(r => r.id === addingIncForKm);
-    await base44.entities.Actividad.create({ equipo_id: equipo.id, tipo: "incidente", fecha: km?.fecha || new Date().toISOString().split("T")[0], observaciones: incForm.observaciones, usuario_nombre: incForm.usuario_nombre || km?.conductor || "" });
-    setSavingInc(false);
-    setAddingIncForKm(null);
-    setIncForm({ observaciones: "", usuario_nombre: user?.full_name || "" });
-    load();
+    try {
+      const km = registros.find(r => r.id === addingIncForKm);
+      await base44.entities.Actividad.create({ equipo_id: equipo.id, tipo: "incidente", fecha: km?.fecha || new Date().toISOString().split("T")[0], observaciones: incForm.observaciones, usuario_nombre: incForm.usuario_nombre || km?.conductor || "" });
+      setSavingInc(false);
+      setAddingIncForKm(null);
+      setIncForm({ observaciones: "", usuario_nombre: user?.full_name || "" });
+      load();
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSavingInc(false);
+    }
   };
 
   const handleSaveIncidenteDirecto = async (e) => {
     e.preventDefault();
     setSavingIncDirecto(true);
-    await base44.functions.invoke('reportarIncidenteAmbulancia', {
-      equipo_id: equipo.id,
-      fecha: incDirectoForm.fecha,
-      tipo_incidente: incDirectoForm.tipo_incidente,
-      observaciones: incDirectoForm.observaciones,
-      usuario_nombre: incDirectoForm.usuario_nombre,
-      ambulancia_operativa: incDirectoForm.ambulancia_operativa
-    });
-    setSavingIncDirecto(false);
-    setShowIncidenteForm(false);
-    setIncDirectoForm({ fecha: new Date().toISOString().split("T")[0], tipo_incidente: "falla_mecanica", observaciones: "", usuario_nombre: user?.full_name || "", ambulancia_operativa: true });
-    load();
+    try {
+      await base44.functions.invoke('reportarIncidenteAmbulancia', {
+        equipo_id: equipo.id,
+        fecha: incDirectoForm.fecha,
+        tipo_incidente: incDirectoForm.tipo_incidente,
+        observaciones: incDirectoForm.observaciones,
+        usuario_nombre: incDirectoForm.usuario_nombre,
+        ambulancia_operativa: incDirectoForm.ambulancia_operativa
+      });
+      setSavingIncDirecto(false);
+      setShowIncidenteForm(false);
+      setIncDirectoForm({ fecha: new Date().toISOString().split("T")[0], tipo_incidente: "falla_mecanica", observaciones: "", usuario_nombre: user?.full_name || "", ambulancia_operativa: true });
+      load();
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSavingIncDirecto(false);
+    }
   };
 
   const registroActivo = registros.find(r => !r.km_final);

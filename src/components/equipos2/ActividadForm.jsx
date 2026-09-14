@@ -19,32 +19,38 @@ export default function ActividadForm({ equipo, user, onClose, onSaved }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
-    const data = {
-      ...form,
-      equipo_id: equipo.id,
-      usuario_email: user?.email || "",
-      usuario_nombre: user?.full_name || user?.email || ""
-    };
-    // Si es traslado, actualizar el equipo
-    if (form.tipo === "traslado" && form.centro_destino) {
-      data.centro_origen = equipo.centro_principal;
-      data.subsede_origen = equipo.subsede || "";
-      await base44.entities.Equipo.update(equipo.id, {
-        centro_principal: form.centro_destino,
-        subsede: form.subsede_destino || ""
-      });
-    }
-    await base44.entities.Actividad.create(data);
-    // Si cambio de parches, cerrar alertas de parche relacionadas
-    if (form.tipo === "cambio_parches") {
-      const alertas = await base44.entities.Alerta.filter({ equipo_id: equipo.id, estado: "activa" }).catch(() => []);
-      const parche_alertas = alertas.filter(a => a.tipo === "parche_vencido" || a.tipo === "parche_por_vencer");
-      for (const a of parche_alertas) {
-        await base44.entities.Alerta.update(a.id, { estado: "resuelta", fecha_resolucion: form.fecha });
+    try {
+      const data = {
+        ...form,
+        equipo_id: equipo.id,
+        usuario_email: user?.email || "",
+        usuario_nombre: user?.full_name || user?.email || ""
+      };
+      // Si es traslado, actualizar el equipo
+      if (form.tipo === "traslado" && form.centro_destino) {
+        data.centro_origen = equipo.centro_principal;
+        data.subsede_origen = equipo.subsede || "";
+        await base44.entities.Equipo.update(equipo.id, {
+          centro_principal: form.centro_destino,
+          subsede: form.subsede_destino || ""
+        });
       }
+      await base44.entities.Actividad.create(data);
+      // Si cambio de parches, cerrar alertas de parche relacionadas
+      if (form.tipo === "cambio_parches") {
+        const alertas = await base44.entities.Alerta.filter({ equipo_id: equipo.id, estado: "activa" }).catch(() => []);
+        const parche_alertas = alertas.filter(a => a.tipo === "parche_vencido" || a.tipo === "parche_por_vencer");
+        for (const a of parche_alertas) {
+          await base44.entities.Alerta.update(a.id, { estado: "resuelta", fecha_resolucion: form.fecha });
+        }
+      }
+      onSaved();
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onSaved();
   };
 
   return (

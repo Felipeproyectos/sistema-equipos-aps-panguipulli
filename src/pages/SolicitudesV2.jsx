@@ -317,11 +317,18 @@ function SolicitudForm({ equipos, user, onClose, onSaved, onOptimistic }) {
       usuario_email: user?.email || "",
       usuario_nombre: user?.full_name || user?.email || ""
     };
-    // Optimistic: close immediately and add temp record
+    // A proposito no se espera al guardado: se cierra el formulario y la
+    // solicitud aparece de inmediato en la lista, para que no se sienta lenta.
     onOptimistic?.(payload);
     onSaved();
-    // Persist in background
-    base44.entities.Solicitud.create(payload).catch(() => {});
+    // El guardado real va detras. Si falla, base44Client muestra el motivo, y
+    // este onSaved() vuelve a leer de la base: asi la fila provisoria
+    // desaparece en vez de quedarse mostrando una solicitud que no existe.
+    // Antes se tragaba el error con un .catch vacio y la persona se iba
+    // convencida de haberla enviado.
+    base44.entities.Solicitud.create(payload)
+      .catch(() => {})
+      .finally(() => onSaved());
   };
 
   return (
@@ -426,12 +433,14 @@ function GestionarModal({ solicitud, onClose, onSaved, onOptimistic }) {
     // Optimistic close
     onOptimistic?.(data);
     onSaved();
-    // Persist in background
+    // El guardado real va detras, igual que al crear. Si falla, base44Client
+    // muestra el motivo y el onSaved() del final vuelve a leer de la base, para
+    // que la fila no quede mostrando un estado que no se guardo.
     base44.entities.Solicitud.update(solicitud.id, data).then(() => {
       if (estado === "finalizada" && solicitud.alerta_id) {
         base44.entities.Alerta.update(solicitud.alerta_id, { estado: "resuelta", fecha_resolucion: new Date().toISOString().split("T")[0] }).catch(() => {});
       }
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => onSaved());
   };
 
   return (

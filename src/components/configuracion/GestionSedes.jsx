@@ -46,11 +46,17 @@ export default function GestionSedes() {
   const handleAgregarSede = async () => {
     if (!nuevaSede.trim()) return;
     setSaving(true);
-    const nueva = await base44.entities.Centro.create({ nombre: nuevaSede.trim(), tipo: "CESFAM", sucursales: [] });
-    setSedes(prev => [...prev, nueva]);
-    setNuevaSede("");
-    setShowNuevaSede(false);
-    setSaving(false);
+    try {
+      const nueva = await base44.entities.Centro.create({ nombre: nuevaSede.trim(), tipo: "CESFAM", sucursales: [] });
+      setSedes(prev => [...prev, nueva]);
+      setNuevaSede("");
+      setShowNuevaSede(false);
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleEliminarSede = async (id) => {

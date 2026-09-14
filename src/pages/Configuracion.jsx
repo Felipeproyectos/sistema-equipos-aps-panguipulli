@@ -58,15 +58,21 @@ export default function Configuracion() {
 
   const handleSave = async () => {
     setSaving(true);
-    if (config?.id) {
-      await base44.entities.AppConfig.update(config.id, form);
-    } else {
-      const newConfig = await base44.entities.AppConfig.create(form);
-      setConfig(newConfig);
+    try {
+      if (config?.id) {
+        await base44.entities.AppConfig.update(config.id, form);
+      } else {
+        const newConfig = await base44.entities.AppConfig.create(form);
+        setConfig(newConfig);
+      }
+      setSaved(true);
+      setTimeout(() => window.location.reload(), 1200);
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => window.location.reload(), 1200);
   };
 
   const toggleInvCentro = (nombre) => {

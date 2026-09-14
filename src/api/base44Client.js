@@ -5,6 +5,8 @@ import { clienteLocal } from '@/api/local/compat';
 import { clienteSupabase } from '@/api/clienteSupabase';
 import { PERMISOS } from '@/lib/permisos';
 import { describir, debeAuditarse } from '@/lib/auditoria';
+import { mensajeDeError, queSeEstabaHaciendo } from '@/lib/mensajesDeError';
+import { toast } from '@/components/ui/use-toast';
 
 const { appId, token, functionsVersion, appBaseUrl } = appParams;
 
@@ -124,21 +126,60 @@ function ocultarInactivos(resultado) {
   return Array.isArray(resultado) ? resultado.filter((item) => item?.activo !== false) : resultado;
 }
 
+// ── Que una escritura fallada no pase inadvertida ───────────────────────────
+// Habia 39 funciones que escribian en la base sin try/catch. Si la base
+// rechazaba el cambio, no pasaba absolutamente nada visible: el error quedaba
+// en la consola del navegador, donde nadie mira. La persona apretaba Guardar,
+// no ocurria nada, y no tenia como saber por que. Asi se descubrio tarde que
+// un encargado de salud llevaba dias sin poder cargar equipos.
+//
+// El aviso se pone aca, en el unico punto por donde pasan TODAS las escrituras
+// de la aplicacion, en vez de pantalla por pantalla: asi vale tambien para las
+// que se escriban manana.
+//
+// El error se vuelve a lanzar SIEMPRE: quien ya lo atrapaba sigue haciendo lo
+// mismo, y esto solo agrega el aviso.
+let ultimoAviso = { texto: '', cuando: 0 };
+
+function avisarDelFallo(err, entidad, metodo) {
+  try {
+    const texto = mensajeDeError(err, queSeEstabaHaciendo(String(entidad), metodo));
+    // Un borrado en lote que falla 30 veces no debe tapar la pantalla con 30
+    // avisos iguales.
+    const ahora = Date.now();
+    if (texto === ultimoAviso.texto && ahora - ultimoAviso.cuando < 4000) return;
+    ultimoAviso = { texto, cuando: ahora };
+    toast({ variant: 'destructive', title: 'No se guardó', description: texto });
+  } catch (e) {
+    // Avisar del fallo nunca puede provocar otro fallo.
+    console.warn('No se pudo mostrar el aviso de error:', e?.message);
+  }
+}
+
 function bloquearSiSimulando(fn, contexto, entidad, metodo) {
   return (...args) => {
-    if (monitorNoPuedeEscribir(entidad)) {
-      return Promise.reject(new Error(`${MENSAJE_SOLO_LECTURA} (${contexto})`));
-    }
-    if (isSimulandoActivo()) {
-      return Promise.reject(new Error(`${MENSAJE_BLOQUEO_SIMULACION} (${contexto})`));
+    // Los dos bloqueos propios tambien se avisan: antes tampoco decian nada, y
+    // quedaba igual de mudo que un rechazo de la base.
+    const bloqueo = monitorNoPuedeEscribir(entidad) ? MENSAJE_SOLO_LECTURA
+      : isSimulandoActivo() ? MENSAJE_BLOQUEO_SIMULACION
+      : null;
+    if (bloqueo) {
+      const err = new Error(`${bloqueo} (${contexto})`);
+      avisarDelFallo(err, entidad, metodo);
+      return Promise.reject(err);
     }
     const salida = fn(...args);
     // Solo se audita lo que efectivamente se guardo: si la promesa se rechaza,
     // no hubo cambio que registrar.
-    if (metodo && entidad !== undefined) {
-      return Promise.resolve(salida).then((r) => { auditar(String(entidad), metodo, args, r); return r; });
-    }
-    return salida;
+    return Promise.resolve(salida)
+      .then((r) => {
+        if (metodo && entidad !== undefined) auditar(String(entidad), metodo, args, r);
+        return r;
+      })
+      .catch((err) => {
+        avisarDelFallo(err, entidad, metodo);
+        throw err;
+      });
   };
 }
 

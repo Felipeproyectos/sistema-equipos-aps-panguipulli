@@ -20,13 +20,19 @@ export default function ConfigEmailAlertas() {
   const handleAdd = async () => {
     if (!form.cesfam || !form.email1) return;
     setSaving(true);
-    const emails = [form.email1.trim()];
-    if (form.email2.trim()) emails.push(form.email2.trim());
-    await base44.entities.ConfigAlerta.create({ cesfam: form.cesfam, emails });
-    setForm({ cesfam: "", email1: "", email2: "" });
-    setAdding(false);
-    setSaving(false);
-    load();
+    try {
+      const emails = [form.email1.trim()];
+      if (form.email2.trim()) emails.push(form.email2.trim());
+      await base44.entities.ConfigAlerta.create({ cesfam: form.cesfam, emails });
+      setForm({ cesfam: "", email1: "", email2: "" });
+      setAdding(false);
+      load();
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async (id) => {

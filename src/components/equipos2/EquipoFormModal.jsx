@@ -18,31 +18,6 @@ function centrosDelUsuario(user) {
   return [...new Set([user.centro_principal, user.centro_asignado, user.centro, ...lista].filter(Boolean))];
 }
 
-// Lo que la base contesta cuando rechaza algo no lo entiende nadie que no sea
-// programador. Se traduce a lo que la persona puede hacer al respecto.
-function mensajeDeError(err, centro) {
-  const crudo = err?.message || String(err || "");
-  if (/row-level security|violates row-level|42501|permission denied/i.test(crudo)) {
-    return `El sistema no te deja guardar un equipo en "${centro}". Suele pasar cuando la ficha tuya quedó con un centro distinto al que estás usando. Avísale a Informática con este mensaje.`;
-  }
-  if (/invalid input syntax for type (date|timestamp)/i.test(crudo)) {
-    return "Una de las fechas quedó a medio escribir. Revísalas o déjalas en blanco.";
-  }
-  if (/invalid input syntax for type numeric/i.test(crudo)) {
-    return "El valor o el año tienen que ser un número.";
-  }
-  if (/duplicate key|already exists/i.test(crudo)) {
-    return "Ya existe un equipo con ese número de inventario.";
-  }
-  if (/could not find the '([^']+)' column/i.test(crudo)) {
-    return `El sistema mandó un dato que la base no tiene (${crudo.match(/could not find the '([^']+)' column/i)[1]}). Es un error del sistema, no tuyo: avísale a Informática.`;
-  }
-  if (/Failed to fetch|NetworkError|network/i.test(crudo)) {
-    return "No se pudo conectar. Revisa tu conexión y vuelve a intentarlo.";
-  }
-  return `No se pudo guardar el equipo: ${crudo}`;
-}
-
 export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
   // Pueden elegir cualquier centro: super_admin y admin. El encargado de salud
   // queda fijo a su centro (solo lectura). Antes solo se permitía a "admin",
@@ -100,8 +75,8 @@ export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
     setSaving(true);
     const data = { ...form, valor: form.valor ? Number(form.valor) : undefined, anio_adquisicion: Number(form.anio_adquisicion) };
     // Antes esto no tenía try/catch: si la base rechazaba el guardado, el botón
-    // se quedaba en "Guardando..." para siempre y no aparecía ningún mensaje.
-    // La persona veía que no pasaba nada y no tenía cómo saber por qué.
+    // se quedaba en "Guardando..." para siempre. El motivo lo muestra
+    // base44Client; lo que hace falta acá es soltar el botón.
     try {
       if (equipo?.id) {
         await base44.entities.Equipo.update(equipo.id, data);
@@ -109,8 +84,10 @@ export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
         await base44.entities.Equipo.create(data);
       }
       onSaved();
-    } catch (err) {
-      setError(mensajeDeError(err, form.centro_principal));
+    } catch {
+      // El aviso con el motivo lo muestra base44Client, en un solo lugar para
+      // toda la aplicacion. Aca solo se libera el boton y se deja el
+      // formulario abierto con lo que la persona ya habia escrito.
       setSaving(false);
     }
   };

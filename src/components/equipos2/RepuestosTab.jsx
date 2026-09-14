@@ -64,17 +64,23 @@ export default function RepuestosTab({ equipo, user }) {
   const handleAdd = async (e) => {
     e.preventDefault();
     setSaving(true);
-    const ahora = new Date().toISOString();
-    await base44.entities.RepuestoCritico.create({
-      ...newForm,
-      equipo_id: equipo.id,
-      modificado_por: user?.full_name || user?.email || "Usuario desconocido",
-      fecha_modificacion: ahora
-    });
-    await loadRepuestos();
-    setShowAddForm(false);
-    setNewForm({ tipo: "neumaticos", marca_modelo: "", estado_label: "operativo", vida_util_pct: 100, stock_unidades: 0, ultimo_cambio: "", proximo_mantenimiento: "", notas: "" });
-    setSaving(false);
+    try {
+      const ahora = new Date().toISOString();
+      await base44.entities.RepuestoCritico.create({
+        ...newForm,
+        equipo_id: equipo.id,
+        modificado_por: user?.full_name || user?.email || "Usuario desconocido",
+        fecha_modificacion: ahora
+      });
+      await loadRepuestos();
+      setShowAddForm(false);
+      setNewForm({ tipo: "neumaticos", marca_modelo: "", estado_label: "operativo", vida_util_pct: 100, stock_unidades: 0, ultimo_cambio: "", proximo_mantenimiento: "", notas: "" });
+    } catch {
+      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
+      // boton, que sin esto quedaba en "Guardando..." para siempre.
+    } finally {
+      setSaving(false);
+    }
   };
 
   const alertasCriticas = repuestos.filter(r => ["critico", "agotado", "revision_requerida"].includes(r.estado_label)).length;
