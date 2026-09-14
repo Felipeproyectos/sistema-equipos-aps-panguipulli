@@ -49,6 +49,10 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // La flota corporativa (camionetas, furgones, camiones 3/4) no está cargada
+  // como inventario: el desplegable salía vacío y no se podía crear la orden.
+  // Con esto se escriben patente y marca/modelo a mano, igual que un externo.
+  const [manual, setManual] = useState(false);
 
   useEffect(() => {
     if (editando) {
@@ -64,12 +68,14 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
         prioridad: editando.prioridad || "media",
         origen: editando.origen || "solicitud_directa",
       });
+      setManual(!editando.equipo_id);
     } else {
       setForm({
         tipo_activo: "salud", equipo_id: "", equipo_label: "",
         patente: "", marca_modelo: "", problema_reportado: "",
         diagnostico: "", prioridad: "media", origen: "solicitud_directa",
       });
+      setManual(false);
     }
     setError("");
   }, [editando, open, equipos]);
@@ -81,6 +87,11 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
     () => (equipos || []).filter(e => categoriaActivoPorTipo(e.tipo) === form.tipo_activo),
     [equipos, form.tipo_activo]
   );
+
+  // Externo siempre se escribe. Corporativo, cuando no hay nada registrado en
+  // esa categoría o cuando la persona elige escribirlo.
+  const esCorporativo = form.tipo_activo === "corporativo";
+  const entradaManual = esExterno || (esCorporativo && (manual || equiposFiltrados.length === 0));
 
   if (!open) return null;
 
@@ -96,10 +107,16 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
         marca_modelo: "",
       };
     });
+    setManual(false);
     setError("");
   };
 
   const handleEquipoChange = (id) => {
+    if (id === "__manual__") {
+      setManual(true);
+      setForm(f => ({ ...f, equipo_id: "", equipo_label: "", patente: "", marca_modelo: "" }));
+      return;
+    }
     const eq = (equipos || []).find(e => e.id === id);
     setForm(f => ({
       ...f,
@@ -112,19 +129,24 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
 
   const handleSubmit = async () => {
     if (!form.problema_reportado.trim()) { setError("Debe describir el problema reportado."); return; }
-    if (!esExterno && !form.equipo_id) {
+    if (!entradaManual && !form.equipo_id) {
       setError(form.tipo_activo === "salud"
         ? "Seleccione una ambulancia."
         : "Seleccione un vehículo corporativo.");
       return;
     }
     if (esExterno && !form.patente.trim()) { setError("Ingrese la patente del activo externo."); return; }
+    if (entradaManual && !esExterno && !form.patente.trim() && !form.marca_modelo.trim()) {
+      setError("Escriba al menos la patente o la marca y modelo del vehículo.");
+      return;
+    }
 
     setSaving(true);
     try {
       const numero_ot = editando?.numero_ot || `OT-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
-      const label = esExterno
-        ? `${form.marca_modelo || "Vehículo externo"} · ${form.patente}`
+      const label = entradaManual
+        ? [form.marca_modelo.trim() || (esExterno ? "Vehículo externo" : "Vehículo corporativo"),
+           form.patente.trim()].filter(Boolean).join(" · ")
         : form.equipo_label;
 
       const base = {
@@ -194,8 +216,8 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
             <p className="text-[11px] text-slate-400 mt-1.5">{categoria.ayuda}</p>
           </div>
 
-          {/* Selector de equipo */}
-          {!esExterno ? (
+          {/* Equipo: de la lista, o escrito a mano */}
+          {!entradaManual ? (
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
                 {form.tipo_activo === "salud" ? "Ambulancia" : "Equipo / Vehículo"}
@@ -208,6 +230,7 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
                     {eq.marca} {eq.modelo}{eq.patente ? ` · ${eq.patente}` : ""}{eq.centro_principal ? ` (${eq.centro_principal})` : ""}
                   </option>
                 ))}
+                {esCorporativo && <option value="__manual__">Otro — escribirlo a mano</option>}
               </select>
               {equiposFiltrados.length === 0 && (
                 <p className="text-[11px] text-amber-600 font-semibold mt-1.5">
@@ -216,17 +239,33 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Patente</label>
-                <input value={form.patente} onChange={e => setForm(f => ({ ...f, patente: e.target.value }))}
-                  placeholder="XX-XX-XX" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm uppercase" />
+            <div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Patente</label>
+                  <input value={form.patente} onChange={e => setForm(f => ({ ...f, patente: e.target.value }))}
+                    placeholder="XX-XX-XX" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm uppercase" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Marca / Modelo</label>
+                  <input value={form.marca_modelo} onChange={e => setForm(f => ({ ...f, marca_modelo: e.target.value }))}
+                    placeholder="Ej: Toyota Hilux" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm" />
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Marca / Modelo</label>
-                <input value={form.marca_modelo} onChange={e => setForm(f => ({ ...f, marca_modelo: e.target.value }))}
-                  placeholder="Ej: Toyota Hilux" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm" />
-              </div>
+              {esCorporativo && (
+                <p className="text-[11px] text-slate-400 mt-1.5">
+                  La flota corporativa se escribe a mano.
+                  {equiposFiltrados.length > 0 && (
+                    <>
+                      {" "}
+                      <button type="button" onClick={() => setManual(false)}
+                        className="text-blue-600 font-semibold underline">
+                        Elegir de la lista
+                      </button>
+                    </>
+                  )}
+                </p>
+              )}
             </div>
           )}
 
