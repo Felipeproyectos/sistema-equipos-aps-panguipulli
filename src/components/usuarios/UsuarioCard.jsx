@@ -29,6 +29,10 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
   const [guardando, setGuardando] = useState(false);
   const [centrosList, setCentrosList] = useState([]);
   const [cambiandoAcceso, setCambiandoAcceso] = useState(false);
+  const [nombre, setNombre] = useState(usuario.full_name || "");
+  const [correo, setCorreo] = useState(usuario.email || "");
+  const [avisoAccion, setAvisoAccion] = useState(null);   // {tipo, texto}
+  const [ocupado, setOcupado] = useState("");
 
   useEffect(() => {
     getCentrosEstructura().then(setCentrosList).catch(() => {});
@@ -46,18 +50,60 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
   const centroActual = getCentroPrincipal(usuario);
   const subsedesDelCentro = centrosList.find((c) => c.nombre === centroPrincipal)?.subsedes || [];
 
+  // Suspender, reactivar y eliminar pasan por el servidor: tocan la cuenta de
+  // Supabase Auth, no la ficha. Suspender deja todo el historial en pie y solo
+  // cierra la puerta; eliminar se lleva la ficha y la cuenta, y no se deshace.
+  const accion = async (nombreAccion, confirmacion) => {
+    if (confirmacion && !confirm(confirmacion)) return;
+    setOcupado(nombreAccion);
+    setAvisoAccion(null);
+    try {
+      const r = await base44.users[nombreAccion](usuario.email);
+      if (nombreAccion === "eliminar") { onUpdated?.(usuario.id, null); return; }
+      setAvisoAccion({
+        tipo: "ok",
+        texto: r?.suspendido ? "Cuenta suspendida: ya no puede entrar." : "Cuenta reactivada: ya puede entrar.",
+      });
+      onUpdated?.(usuario.id, {});
+    } catch (e) {
+      setAvisoAccion({ tipo: "error", texto: e?.data?.error || e?.message || "No se pudo completar" });
+    } finally {
+      setOcupado("");
+    }
+  };
+
   const handleGuardar = async () => {
     setGuardando(true);
+    setAvisoAccion(null);
     try {
+      // El nombre y el correo NO se escriben directo: el correo es el enlace
+      // entre la ficha y la cuenta de acceso, y cambiarlo en un solo lado deja
+      // a la persona sin rol y sin filas. El servidor cambia los dos.
+      const nom = nombre.trim();
+      const cor = correo.trim().toLowerCase();
+      const cambiaNombre = nom && nom !== (usuario.full_name || "");
+      const cambiaCorreo = cor && cor !== (usuario.email || "").toLowerCase();
+      if (cambiaNombre || cambiaCorreo) {
+        await base44.users.actualizar(usuario.email, {
+          ...(cambiaNombre && { full_name: nom }),
+          ...(cambiaCorreo && { email_nuevo: cor }),
+        });
+      }
+
       const update = {
         role: rol,
         centro_principal: esRolSalud(rol) ? centroPrincipal : "",
         subsedes_asignadas: esRolSalud(rol) ? subsedes : [],
       };
       await base44.entities.User.update(usuario.id, update);
-      onUpdated?.(usuario.id, update);
+      onUpdated?.(usuario.id, {
+        ...update,
+        ...(cambiaNombre && { full_name: nom }),
+        ...(cambiaCorreo && { email: cor }),
+      });
       setEditando(false);
     } catch (e) {
+      setAvisoAccion({ tipo: "error", texto: e?.data?.error || e?.message || "No se pudo guardar" });
       console.error(e);
     } finally {
       setGuardando(false);
@@ -111,12 +157,27 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
                   onClick={() => setEditando(true)}
                   className="w-full py-2 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
                 >
-                  Editar rol / asignación
+                  Editar datos, rol y asignación
                 </button>
               )}
             </>
           ) : (
             <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Nombre</label>
+                <input value={nombre} onChange={(e) => setNombre(e.target.value)}
+                  placeholder="Nombre y apellido"
+                  className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Correo</label>
+                <input value={correo} onChange={(e) => setCorreo(e.target.value)}
+                  type="email" placeholder="correo@ejemplo.com"
+                  className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs" />
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Cambiarlo también cambia el correo con el que entra al sistema.
+                </p>
+              </div>
               <div>
                 <label className="text-xs font-semibold text-slate-500">Rol</label>
                 <select
@@ -165,6 +226,41 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
                   )}
                 </>
               )}
+              {avisoAccion && (
+                <p className={`text-[11px] font-semibold rounded-lg px-3 py-2 ${
+                  avisoAccion.tipo === "error" ? "text-red-600 bg-red-50" : "text-green-700 bg-green-50"}`}>
+                  {avisoAccion.texto}
+                </p>
+              )}
+
+              {/* Suspender y eliminar solo para Base del Sistema, y nunca sobre
+                  la propia cuenta (el servidor lo vuelve a comprobar). */}
+              {esSuperAdmin(currentUser?.role) && (
+                <div className="border-t border-slate-100 pt-3 space-y-2">
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Acceso</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => accion("suspender", `¿Suspender a ${usuario.full_name || usuario.email}?\n\nNo podrá entrar, pero se conserva su ficha y todo su historial. Es reversible.`)}
+                      disabled={!!ocupado}
+                      className="flex-1 py-2 rounded-lg text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 disabled:opacity-50">
+                      {ocupado === "suspender" ? "Suspendiendo..." : "Suspender"}
+                    </button>
+                    <button
+                      onClick={() => accion("reactivar")}
+                      disabled={!!ocupado}
+                      className="flex-1 py-2 rounded-lg text-[11px] font-semibold text-green-700 bg-green-50 border border-green-200 disabled:opacity-50">
+                      {ocupado === "reactivar" ? "Reactivando..." : "Reactivar"}
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => accion("eliminar", `¿Eliminar a ${usuario.full_name || usuario.email}?\n\nSe borra su ficha y su cuenta de acceso. NO se puede deshacer.\n\nSi solo quieres que deje de entrar, usa Suspender.`)}
+                    disabled={!!ocupado}
+                    className="w-full py-2 rounded-lg text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 disabled:opacity-50">
+                    {ocupado === "eliminar" ? "Eliminando..." : "Eliminar cuenta"}
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <button onClick={() => setEditando(false)} className="flex-1 py-2 rounded-lg text-xs font-semibold text-slate-500 bg-slate-100">
                   Cancelar

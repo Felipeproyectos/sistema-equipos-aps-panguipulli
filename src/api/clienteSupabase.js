@@ -238,8 +238,18 @@ const users = {
   diagnostico: () => functions.invoke('gestionarAcceso', { accion: 'diagnostico' }).then((r) => r.data),
   crear: (datos) => functions.invoke('gestionarAcceso', { accion: 'crear', ...datos }).then((r) => r.data),
   reparar: () => functions.invoke('gestionarAcceso', { accion: 'reparar' }).then((r) => r.data),
-  restablecerClave: (email) =>
-    functions.invoke('gestionarAcceso', { accion: 'restablecer', email }).then((r) => r.data),
+  // `clave` opcional: sin ella se genera una temporal y se exige cambiarla al
+  // entrar; con ella se fija la que se indique y no se exige el cambio.
+  restablecerClave: (email, clave) =>
+    functions.invoke('gestionarAcceso', { accion: 'restablecer', email, clave }).then((r) => r.data),
+  actualizar: (email, cambios) =>
+    functions.invoke('gestionarAcceso', { accion: 'actualizar', email, ...cambios }).then((r) => r.data),
+  suspender: (email) =>
+    functions.invoke('gestionarAcceso', { accion: 'suspender', email }).then((r) => r.data),
+  reactivar: (email) =>
+    functions.invoke('gestionarAcceso', { accion: 'reactivar', email }).then((r) => r.data),
+  eliminar: (email) =>
+    functions.invoke('gestionarAcceso', { accion: 'eliminar', email }).then((r) => r.data),
 };
 
 export const clienteSupabase = { entities, auth, functions, integrations, users };

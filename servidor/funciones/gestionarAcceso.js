@@ -16,8 +16,11 @@ import { createClientFromRequest } from '#compat';
 //   diagnostico  → qué cuentas están completas y cuáles no (nadie queda ciego)
 //   crear        → alta completa: fila + cuenta + clave temporal + correo
 //   reparar      → crea las cuentas de Auth que faltan, en lote
-//   restablecer  → clave temporal nueva para una persona puntual
+//   restablecer  → clave nueva: temporal automática, o una elegida a mano
 //   recuperar    → enlace de recuperación por correo (público, sin sesión)
+//   actualizar   → corregir el correo o el nombre de una ficha
+//   suspender    → dejar a alguien fuera sin borrar su historial (y revertirlo)
+//   eliminar     → borrar la ficha y su cuenta de acceso
 
 // La misma jerarquía de src/lib/roles.js. Se repite acá a propósito: el
 // servidor no puede confiar en que el cliente respetó la matriz, y un endpoint
@@ -112,6 +115,38 @@ async function fijarClave(authId, clave) {
   return admin('PUT', `/auth/v1/admin/users/${authId}`, { password: clave, email_confirm: true });
 }
 
+async function cambiarCorreoEnAuth(authId, correo) {
+  return admin('PUT', `/auth/v1/admin/users/${authId}`, { email: correo, email_confirm: true });
+}
+
+async function cambiarNombreEnAuth(authId, nombre) {
+  return admin('PUT', `/auth/v1/admin/users/${authId}`, { user_metadata: { full_name: nombre || '' } });
+}
+
+// Suspender = "ban" de Supabase Auth. Se prefirió esto a una columna propia
+// porque frena el ingreso en la puerta, no en la pantalla: mientras dure, ni
+// la clave correcta abre sesión. `none` lo levanta. Cien años es la forma de
+// decir "hasta que alguien lo revierta" — el Admin API pide una duración.
+const SUSPENSION_LARGA = '876000h';
+
+async function suspenderEnAuth(authId, suspender) {
+  return admin('PUT', `/auth/v1/admin/users/${authId}`, {
+    ban_duration: suspender ? SUSPENSION_LARGA : 'none',
+  });
+}
+
+async function borrarDeAuth(authId) {
+  return admin('DELETE', `/auth/v1/admin/users/${authId}`);
+}
+
+// Una cuenta está suspendida si su ban sigue vigente.
+function estaSuspendida(cuenta) {
+  const hasta = cuenta?.banned_until;
+  if (!hasta) return false;
+  const t = Date.parse(hasta);
+  return Number.isFinite(t) && t > Date.now();
+}
+
 // ── correo ──────────────────────────────────────────────────────────────────
 const plantilla = (titulo, cuerpo) => `
 <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">
@@ -170,6 +205,8 @@ async function diagnostico(base44) {
       centro_principal: u.centro_principal || '',
       tiene_cuenta: !!cuenta,
       ultimo_ingreso: cuenta?.last_sign_in_at || null,
+      creada: cuenta?.created_at || null,
+      suspendido: estaSuspendida(cuenta),
       debe_cambiar_clave: !!u.force_password_reset,
       puede_entrar: problemas.length === 0,
       problemas,
@@ -192,6 +229,7 @@ async function diagnostico(base44) {
       pueden_entrar: usuarios.filter((u) => u.puede_entrar).length,
       sin_cuenta: usuarios.filter((u) => u.problemas.includes('sin_cuenta_de_acceso')).length,
       sin_rol: usuarios.filter((u) => u.problemas.includes('sin_rol') || u.problemas.includes('rol_desconocido')).length,
+      suspendidos: usuarios.filter((u) => u.suspendido).length,
       cuentas_ajenas: ajenas.length,
     },
   };
@@ -287,20 +325,28 @@ async function restablecer(base44, quien, datos) {
   const mando = ROLES_QUE_ADMINISTRAN.includes(quien.role) || puedeCrear(quien.role, ficha.role);
   if (!mando) return { error: 'No puedes restablecer la clave de esa cuenta', status: 403 };
 
-  const clave = claveTemporal();
+  // Se puede dictar una clave concreta en vez de aceptar la generada. Cuando
+  // la elige una persona NO se exige cambiarla al entrar: es a propósito — si
+  // se acordó por teléfono, obligar a cambiarla enseguida no sirve de nada.
+  const aMano = String(datos.clave || '').trim();
+  if (aMano && aMano.length < 8) {
+    return { error: 'La clave debe tener al menos 8 caracteres', status: 400 };
+  }
+  const clave = aMano || claveTemporal();
+
   let cuenta = await buscarEnAuth(correo);
   if (cuenta) await fijarClave(cuenta.id, clave);
   else cuenta = await crearEnAuth(correo, clave, ficha.full_name);
 
   await base44.asServiceRole.entities.User.update(ficha.id, {
-    auth_id: cuenta.id, force_password_reset: true,
+    auth_id: cuenta.id, force_password_reset: !aMano,
   });
 
   let correo_enviado = true;
   try { await avisarClaveTemporal(base44, correo, ficha.full_name, clave); }
   catch { correo_enviado = false; }
 
-  return { email: correo, clave_temporal: clave, correo_enviado };
+  return { email: correo, clave_temporal: clave, correo_enviado, elegida: !!aMano };
 }
 
 // Recuperación por el propio usuario, SIN sesión. El correo sale por Resend y
@@ -341,6 +387,105 @@ async function recuperar(base44, datos, origen) {
     console.error('Recuperación falló para', correo, e.message);
   }
   return respuesta;
+}
+
+// ── quién puede tocar la ficha de quién ─────────────────────────────────────
+// Mismo criterio que restablecer: quien administra llega a cualquiera; el resto
+// solo a los roles que podría haber creado. Y nadie se toca a sí mismo, para
+// que no exista el caso de quedarse sin administrador por accidente.
+async function fichaBajoMando(base44, quien, datos) {
+  const correo = normalizar(datos.email);
+  if (!correo) return { error: 'Falta el correo', status: 400 };
+
+  const filas = await base44.asServiceRole.entities.User.list('email', 1000);
+  const ficha = filas.find((u) => normalizar(u.email) === correo);
+  if (!ficha) return { error: 'Ese correo no tiene ficha en el sistema', status: 404 };
+
+  if (normalizar(quien.email) === correo) {
+    return { error: 'No puedes hacer eso sobre tu propia cuenta', status: 400 };
+  }
+  const mando = ROLES_QUE_ADMINISTRAN.includes(quien.role) || puedeCrear(quien.role, ficha.role);
+  if (!mando) return { error: 'No puedes administrar esa cuenta', status: 403 };
+  return { ficha, filas };
+}
+
+// Corregir el correo o el nombre de alguien.
+//
+// El correo es el enlace entre la ficha y la cuenta de acceso (ver mi_rol() en
+// 03_policies.sql): cambiarlo en un solo lado deja a la persona sin rol y sin
+// filas. Por eso acá se cambian LOS DOS, y si Auth falla no se toca la ficha.
+async function actualizar(base44, quien, datos) {
+  const hallado = await fichaBajoMando(base44, quien, datos);
+  if (hallado.error) return hallado;
+  const { ficha, filas } = hallado;
+
+  const nuevoCorreo = datos.email_nuevo === undefined ? null : normalizar(datos.email_nuevo);
+  const nuevoNombre = datos.full_name === undefined ? null : String(datos.full_name).trim();
+  if (nuevoCorreo === null && nuevoNombre === null) {
+    return { error: 'No hay nada que cambiar', status: 400 };
+  }
+  if (nuevoNombre !== null && !nuevoNombre) {
+    return { error: 'El nombre no puede quedar vacío', status: 400 };
+  }
+  if (nuevoCorreo !== null) {
+    if (!nuevoCorreo.includes('@')) return { error: 'Correo inválido', status: 400 };
+    const chocaFicha = filas.some((u) => u.id !== ficha.id && normalizar(u.email) === nuevoCorreo);
+    if (chocaFicha) return { error: 'Ya hay otra persona con ese correo', status: 409 };
+    const chocaCuenta = await buscarEnAuth(nuevoCorreo);
+    if (chocaCuenta) return { error: 'Ese correo ya tiene una cuenta de acceso', status: 409 };
+  }
+
+  const cuenta = await buscarEnAuth(normalizar(ficha.email));
+  const cambios = {};
+
+  // Primero Auth. Si revienta, la ficha queda intacta y siguen emparejadas.
+  if (nuevoCorreo !== null && nuevoCorreo !== normalizar(ficha.email)) {
+    if (cuenta) await cambiarCorreoEnAuth(cuenta.id, nuevoCorreo);
+    cambios.email = nuevoCorreo;
+  }
+  if (nuevoNombre !== null && nuevoNombre !== (ficha.full_name || '')) {
+    if (cuenta) await cambiarNombreEnAuth(cuenta.id, nuevoNombre);
+    cambios.full_name = nuevoNombre;
+  }
+  if (!Object.keys(cambios).length) return { ok: true, sin_cambios: true };
+
+  const guardado = await base44.asServiceRole.entities.User.update(ficha.id, cambios);
+  return { ok: true, usuario: guardado, cambios };
+}
+
+// Dejar a alguien fuera sin borrar nada, o devolverle el acceso.
+async function suspender(base44, quien, datos, activar) {
+  const hallado = await fichaBajoMando(base44, quien, datos);
+  if (hallado.error) return hallado;
+  const { ficha } = hallado;
+
+  const cuenta = await buscarEnAuth(normalizar(ficha.email));
+  if (!cuenta) return { error: 'Esa persona no tiene cuenta de acceso que suspender', status: 404 };
+
+  await suspenderEnAuth(cuenta.id, !activar);
+  return { ok: true, email: normalizar(ficha.email), suspendido: !activar };
+}
+
+// Borrar la ficha y su cuenta de acceso. No se deshace.
+async function eliminar(base44, quien, datos) {
+  const hallado = await fichaBajoMando(base44, quien, datos);
+  if (hallado.error) return hallado;
+  const { ficha } = hallado;
+
+  // La máxima autoridad no se borra desde la aplicación, igual que no se
+  // asigna desde acá.
+  if (ficha.role === 'super_admin') {
+    return { error: 'La cuenta de Base del Sistema no se elimina desde la aplicación', status: 403 };
+  }
+
+  // Primero la cuenta de acceso: si queda la ficha sin cuenta, el diagnóstico
+  // lo muestra y se puede arreglar. Al revés quedaría una cuenta suelta que
+  // ninguna pantalla lista.
+  const cuenta = await buscarEnAuth(normalizar(ficha.email));
+  if (cuenta) await borrarDeAuth(cuenta.id);
+  await base44.asServiceRole.entities.User.delete(ficha.id);
+
+  return { ok: true, email: normalizar(ficha.email), tenia_cuenta: !!cuenta };
 }
 
 // Quien acaba de elegir su clave nueva en el primer ingreso avisa por aca.
@@ -396,6 +541,14 @@ export default async function (req) {
       salida = await restablecer(base44, quien, cuerpo);
     } else if (accion === 'clave_cambiada') {
       salida = await claveYaCambiada(base44, quien);
+    } else if (accion === 'actualizar') {
+      salida = await actualizar(base44, quien, cuerpo);
+    } else if (accion === 'suspender') {
+      salida = await suspender(base44, quien, cuerpo, false);
+    } else if (accion === 'reactivar') {
+      salida = await suspender(base44, quien, cuerpo, true);
+    } else if (accion === 'eliminar') {
+      salida = await eliminar(base44, quien, cuerpo);
     } else {
       return Response.json({ error: `Acción desconocida: ${accion}` }, { status: 400 });
     }
