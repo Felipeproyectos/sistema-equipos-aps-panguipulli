@@ -9,6 +9,7 @@
 // Eso es a proposito — las policies de migracion/03_policies.sql tienen que
 // aplicar. Si usara la service role key, cualquiera veria todo.
 import { createClient } from '@supabase/supabase-js';
+import { COLUMNAS_NO_TEXTO } from '@/api/columnasTipadas';
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -61,6 +62,44 @@ function condiciones(q, filtro) {
 
 const limitar = (q, n) => (n ? q.limit(n) : q);
 
+// Un formulario de React deja sus campos sin llenar en `""`. En una columna de
+// texto eso es un valor valido; en una de fecha o numero, Postgres corta con
+// «invalid input syntax for type date: ""» y PostgREST rechaza la escritura
+// ENTERA — no ignora el campo, igual que con una columna inexistente.
+//
+// Por eso no se podia crear un equipo: el formulario tiene tres fechas que casi
+// nunca se llenan, y dos solo aparecen si el equipo es un vehiculo, asi que en
+// un DEA iban vacias siempre.
+//
+// La importacion desde Base44 ya aplicaba esta misma regla (ver la funcion
+// `lit` de migracion/generar_sql.py): por eso los datos viejos entraron bien y
+// los nuevos no se podian crear. La lista de columnas sale de la misma fuente,
+// base44/entities/*.jsonc, via migracion/generar_columnas_tipadas.py.
+export function limpiarVacios(nombreTabla, obj) {
+  const noTexto = COLUMNAS_NO_TEXTO[nombreTabla];
+  if (!noTexto || !obj || typeof obj !== 'object') return obj;
+  let copia = null;
+  for (const [campo, valor] of Object.entries(obj)) {
+    if (valor === '' && noTexto.has(campo)) {
+      if (!copia) copia = { ...obj };
+      copia[campo] = null;
+    }
+  }
+  return copia || obj;
+}
+
+// ponytail: si limpiarVacios deja de funcionar, vuelve el error que impedia
+// crear equipos — y vuelve en silencio, porque el fallo aparece recien contra
+// la base de produccion.
+export function _selfCheck() {
+  const e = limpiarVacios('equipo', { fecha_vencimiento_bateria: '', marca: '', valor: '' });
+  console.assert(e.fecha_vencimiento_bateria === null && e.valor === null, 'fecha/numero vacios -> null', e);
+  console.assert(e.marca === '', "el texto vacio se respeta", e);
+  const igual = { marca: 'Zoll' };
+  console.assert(limpiarVacios('equipo', igual) === igual, 'sin cambios, mismo objeto');
+  console.assert(limpiarVacios('tabla_que_no_existe', igual) === igual, 'tabla desconocida, sin tocar');
+}
+
 function entidad(nombre) {
   const t = tabla(nombre);
   const sel = () => cliente().from(t).select('*');
@@ -68,11 +107,12 @@ function entidad(nombre) {
     list: (sort, n) => limitar(ordenar(sel(), sort), n).then(desempacar),
     filter: (f, sort, n) => limitar(ordenar(condiciones(sel(), f), sort), n).then(desempacar),
     get: (id) => cliente().from(t).select('*').eq('id', id).maybeSingle().then(desempacar),
-    create: (obj) => cliente().from(t).insert(obj).select().single().then(desempacar),
+    create: (obj) => cliente().from(t).insert(limpiarVacios(t, obj)).select().single().then(desempacar),
     // id, created_date y updated_date los pone Postgres (ver 01_esquema.sql).
-    bulkCreate: (arr) => cliente().from(t).insert(arr).select().then(desempacar),
+    bulkCreate: (arr) =>
+      cliente().from(t).insert((arr || []).map((o) => limpiarVacios(t, o))).select().then(desempacar),
     update: (id, cambios) =>
-      cliente().from(t).update(cambios).eq('id', id).select().single().then(desempacar),
+      cliente().from(t).update(limpiarVacios(t, cambios)).eq('id', id).select().single().then(desempacar),
     delete: (id) => cliente().from(t).delete().eq('id', id).then(desempacar).then(() => ({})),
     bulkUpdate: (items) => Promise.all(items.map((i) => entidad(nombre).update(i.id, i))),
     bulkDelete: (ids) => Promise.all(ids.map((id) => entidad(nombre).delete(id))),

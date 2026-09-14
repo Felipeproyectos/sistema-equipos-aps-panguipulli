@@ -66,3 +66,11 @@ jobs:
       # las ejecuta y no escribe nada.
       - name: Autotest del generador de SQL
         run: python migracion/generar_sql.py
+
+      # src/api/columnasTipadas.js dice qué columnas NO son de texto, para que
+      # el cliente mande NULL y no `""` en una fecha vacía — un `""` ahí hace
+      # que Postgres rechace la escritura entera, que es lo que impedía crear
+      # equipos. Si alguien agrega un campo en base44/entities/ y no regenera
+      # esa lista, la columna nueva queda desprotegida: esto lo detiene acá.
+      - name: Lista de columnas tipadas al día
+        run: python migracion/generar_columnas_tipadas.py --verificar
