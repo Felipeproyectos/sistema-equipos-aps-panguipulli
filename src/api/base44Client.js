@@ -1,5 +1,3 @@
-import { createClient } from '@base44/sdk';
-import { appParams } from '@/lib/app-params';
 import { isSimulandoActivo, MENSAJE_BLOQUEO_SIMULACION } from '@/lib/roleSimulator';
 import { clienteLocal } from '@/api/local/compat';
 import { clienteSupabase } from '@/api/clienteSupabase';
@@ -8,29 +6,28 @@ import { describir, debeAuditarse } from '@/lib/auditoria';
 import { mensajeDeError, queSeEstabaHaciendo } from '@/lib/mensajesDeError';
 import { toast } from '@/components/ui/use-toast';
 
-const { appId, token, functionsVersion, appBaseUrl } = appParams;
-
 // El motor se elige aca y en ningun otro lado. Las ~214 llamadas de la app
 // entran por el Proxy de mas abajo, asi que cambiar de motor no toca ninguna
 // pantalla — todo lo que sigue (bloqueo de simulacion, solo lectura del
 // Monitor, borrado logico) vale igual sea cual sea.
 //
-//   VITE_MODO=local      -> datos en memoria, sin backend (README-LOCAL.md)
-//   VITE_MODO=supabase   -> Supabase + el servidor de Railway
-//   sin VITE_MODO        -> Base44, como estaba antes de migrar
+//   VITE_MODO=local   -> datos en memoria, sin backend (README-LOCAL.md)
+//   cualquier otro    -> Supabase + el servidor de Railway
+//
+// Antes habia un tercer motor: el SDK de Base44, de donde se migro el sistema.
+// Ya no queda nada de aquel despliegue que pueda responder, pero el SDK seguia
+// entrando al bundle que descarga cada funcionario (118 KB de codigo que nunca
+// corria, y rastros de base44 en el navegador: base44SharedInstances,
+// base44_access_token). Se saco entero.
+//
+// Ojo con el nombre: `base44` es como se llama el cliente en las ~214 llamadas
+// de la app. Es solo el nombre de la variable — detras hay Supabase. Renombrarlo
+// tocaria 107 archivos sin cambiar una sola linea de comportamiento, asi que se
+// deja.
 export const MODO_LOCAL = import.meta.env.VITE_MODO === 'local';
-export const MODO_SUPABASE = import.meta.env.VITE_MODO === 'supabase';
+export const MODO_SUPABASE = !MODO_LOCAL;
 
-const base44Raw = MODO_LOCAL ? clienteLocal
-  : MODO_SUPABASE ? clienteSupabase
-  : createClient({
-      appId,
-      token,
-      functionsVersion,
-      serverUrl: '',
-      requiresAuth: false,
-      appBaseUrl
-    });
+const base44Raw = MODO_LOCAL ? clienteLocal : clienteSupabase;
 
 // ── Bloqueo centralizado de escrituras durante "Simular Rol" ────────────────
 // Solo Base del Sistema (super_admin) puede activar la simulación (ver

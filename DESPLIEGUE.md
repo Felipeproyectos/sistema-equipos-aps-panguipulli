@@ -119,8 +119,9 @@ VITE_SUPABASE_ANON_KEY=eyJ...          # la anon, NUNCA la service_role
 VITE_API_URL=https://TU-SERVICIO.up.railway.app
 ```
 
-`VITE_MODO` elige el motor del cliente: `supabase` para producción, `local`
-para el modo de revisión, y sin valor vuelve a Base44.
+`VITE_MODO` elige el motor del cliente: `local` para el modo de revisión con
+datos en memoria; cualquier otro valor (o ninguno) usa Supabase. Déjalo en
+`supabase` de todas formas, para que quede dicho.
 
 **Solo la anon key.** Todo lo que empieza con `VITE_` termina dentro del bundle
 que descarga cada usuario. La `service_role` va únicamente en Railway.
@@ -136,20 +137,22 @@ o Netlify — es HTML y JS, no necesita servidor.
 JSON del modo local por uno vacío. Verificado — cero correos y cero equipos en
 el bundle.
 
-Falta conectarlo a Supabase: hoy `src/api/base44Client.js` todavía habla el
-protocolo de Base44. Ese es el trabajo que queda, junto con la autenticación.
+**Ya no queda nada de Base44 en el bundle.** El SDK y el plugin de aquella
+plataforma se quitaron: el cliente habla Supabase y nada más. Si ves
+`base44SharedInstances` o `base44_access_token` en el navegador, estás mirando
+un despliegue viejo.
+
+El nombre `base44` sobrevive como nombre de variable del cliente en las ~214
+llamadas de la aplicación (`src/api/base44Client.js`). Es solo eso, un nombre:
+detrás hay Supabase.
 
 ---
 
 ## Lo que falta antes de que sirva en producción
 
-1. **Autenticación sobre Supabase Auth.** El control de acceso de Base44 se
-   quitó. La tabla `usuario` conserva rol y centro, y tiene una columna
-   `auth_id uuid references auth.users(id)` esperando: enlazar es llenarla.
-2. **El cliente del frontend**, que aún apunta a Base44.
-3. **Google Drive**, si quieres que `subirInspeccionDrive` funcione: el refresh
+1. **Google Drive**, si quieres que `subirInspeccionDrive` funcione: el refresh
    token debe ser de la cuenta dueña de la carpeta `BITÁCORA`.
-4. **Dominio verificado en Resend**, o los correos de alerta no salen.
+2. **Dominio verificado en Resend**, o los correos de alerta no salen.
 
 ---
 
