@@ -125,8 +125,12 @@ const auth = {
   cambiarClave: async (nueva) => {
     const { error } = await cliente().auth.updateUser({ password: nueva });
     if (error) throw new Error(error.message);
-    const yo = await me();
-    if (yo) await entities.User.update(yo.id, { force_password_reset: false });
+    // Apagar la marca de "cambio obligatorio" va por el servidor: la policy
+    // `usuario_escribe` solo deja escribir en `usuario` a super_admin y admin,
+    // asi que hacerlo desde aca fallaba para todos los demas con "Cannot coerce
+    // the result to a single JSON object" — y como la clave ya habia cambiado,
+    // la persona quedaba dando vueltas en la misma pantalla.
+    await functions.invoke('gestionarAcceso', { accion: 'clave_cambiada' });
   },
   // Las cuentas creadas con Google (provider_type = social) NO tienen clave:
   // signInWithPassword siempre responde "Invalid login credentials" con ellas.

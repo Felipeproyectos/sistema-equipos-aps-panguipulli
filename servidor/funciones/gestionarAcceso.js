@@ -343,6 +343,25 @@ async function recuperar(base44, datos, origen) {
   return respuesta;
 }
 
+// Quien acaba de elegir su clave nueva en el primer ingreso avisa por aca.
+//
+// No puede hacerlo por su cuenta: la policy `usuario_escribe` solo deja
+// escribir en `usuario` a super_admin y admin, asi que el update salia con
+// cero filas y PostgREST respondia "Cannot coerce the result to a single JSON
+// object". La clave SI quedaba cambiada (eso pasa en Supabase Auth, antes),
+// pero la marca no se apagaba: al volver a entrar el sistema le pedia
+// cambiarla otra vez, para siempre.
+//
+// Se hace con la llave de servicio, y solo sobre la ficha de quien llama:
+// `quien` sale del token, no del cuerpo del pedido, asi que nadie puede
+// apagarle la marca a otro.
+async function claveYaCambiada(base44, quien) {
+  if (!quien?.id) return { error: 'Sin ficha de usuario', status: 400 };
+  if (!quien.force_password_reset) return { ok: true, sin_cambios: true };
+  await base44.asServiceRole.entities.User.update(quien.id, { force_password_reset: false });
+  return { ok: true };
+}
+
 // ── entrada ─────────────────────────────────────────────────────────────────
 export default async function (req) {
   try {
@@ -375,6 +394,8 @@ export default async function (req) {
       salida = await crear(base44, quien, cuerpo);
     } else if (accion === 'restablecer') {
       salida = await restablecer(base44, quien, cuerpo);
+    } else if (accion === 'clave_cambiada') {
+      salida = await claveYaCambiada(base44, quien);
     } else {
       return Response.json({ error: `Acción desconocida: ${accion}` }, { status: 400 });
     }
