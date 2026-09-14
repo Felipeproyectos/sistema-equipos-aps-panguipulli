@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import {
-  ShieldAlert, ShieldCheck, Loader2, Wrench, KeyRound, X, Copy, Check, RefreshCw,
+  ShieldAlert, ShieldCheck, Loader2, Wrench, KeyRound, X, Copy, Check, RefreshCw, Search,
 } from "lucide-react";
 import { roleLabel } from "@/lib/roles";
 
@@ -52,6 +52,7 @@ export default function DiagnosticoAcceso({ onClose, onCambios }) {
   const [restableciendo, setRestableciendo] = useState("");
   const [claves, setClaves] = useState({});   // email -> clave temporal
   const [error, setError] = useState("");
+  const [busqueda, setBusqueda] = useState("");
 
   const revisar = async () => {
     setError(""); setCargando(true); setReparados(null);
@@ -87,8 +88,19 @@ export default function DiagnosticoAcceso({ onClose, onCambios }) {
     setRestableciendo("");
   };
 
-  const sinAcceso = (datos?.usuarios || []).filter((u) => !u.puede_entrar);
-  const conAcceso = (datos?.usuarios || []).filter((u) => u.puede_entrar);
+  // Busca por nombre, correo y rol a la vez, sin distinguir mayusculas ni
+  // tildes: escribir "mecanico" tiene que encontrar a los "Mecánico".
+  const sinTildes = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const aguja = sinTildes(busqueda).trim();
+  const calza = (u) =>
+    !aguja || [u.full_name, u.email, roleLabel(u.role), u.centro_principal]
+      .some((campo) => sinTildes(campo).includes(aguja));
+
+  const todos = datos?.usuarios || [];
+  const sinAcceso = todos.filter((u) => !u.puede_entrar && calza(u));
+  const conAcceso = todos.filter((u) => u.puede_entrar && calza(u));
+  const totalConAcceso = todos.filter((u) => u.puede_entrar).length;
+  const encontrados = sinAcceso.length + conAcceso.length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(15,23,42,0.5)" }}>
@@ -136,6 +148,31 @@ export default function DiagnosticoAcceso({ onClose, onCambios }) {
                 <Tarjeta valor={datos.resumen.pueden_entrar} etiqueta="Pueden entrar" color="#15803d" bg="#dcfce7" />
                 <Tarjeta valor={datos.resumen.sin_cuenta} etiqueta="Sin cuenta de acceso" color="#b91c1c" bg="#fee2e2" />
               </div>
+
+              {/* La lista crece con cada persona que entra al sistema; sin esto
+                  hay que ir bajando a mano. Filtra las dos secciones a la vez. */}
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar por nombre, correo, rol o centro..."
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400"
+                />
+                {busqueda && (
+                  <button type="button" onClick={() => setBusqueda("")}
+                    title="Limpiar"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {busqueda && encontrados === 0 && (
+                <p className="text-sm text-slate-400 text-center py-6">
+                  Nadie calza con &ldquo;{busqueda}&rdquo;.
+                </p>
+              )}
 
               {datos.resumen.sin_cuenta > 0 && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
@@ -220,11 +257,12 @@ export default function DiagnosticoAcceso({ onClose, onCambios }) {
               )}
 
 
+              {conAcceso.length > 0 && (
               <div>
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Pueden entrar ({conAcceso.length})
+                  Pueden entrar ({busqueda ? `${conAcceso.length} de ${totalConAcceso}` : totalConAcceso})
                 </h3>
-                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                <div className={`space-y-1.5 overflow-y-auto ${busqueda ? "max-h-96" : "max-h-64"}`}>
                   {conAcceso.map((u) => (
                     <div key={u.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2">
                       <div className="min-w-0">
@@ -249,6 +287,7 @@ export default function DiagnosticoAcceso({ onClose, onCambios }) {
                   ))}
                 </div>
               </div>
+              )}
 
               <button onClick={revisar} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100">
                 <RefreshCw className="w-4 h-4" /> Volver a revisar
