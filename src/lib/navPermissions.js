@@ -1,16 +1,20 @@
 import {
   LayoutDashboard, Monitor, Bell, ClipboardList, FileText,
-  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart
+  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart, Route
 } from "lucide-react";
 import { ROLES } from "@/lib/roles";
 
 // Matriz de navegación por rol. Roles finales:
 // super_admin (Base del Sistema) · admin · encargado_salud ·
 // encargado_compras_salud · monitor_corporativo · jefe_taller ·
-// encargado_compras_taller · mecanico · user (Usuario/Chofer)
+// encargado_compras_taller · mecanico · user (Usuario/Chofer) ·
+// encargado_movilizacion
 export const NAV_ITEMS = [
   { label: "Dashboard", page: "Dashboard", path: "/", icon: LayoutDashboard,
     roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.ENCARGADO_SALUD, ROLES.ENCARGADO_COMPRAS_SALUD, ROLES.USER] },
+
+  { label: "Movilización", page: "Movilizacion", path: "/Movilizacion", icon: Route,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ENCARGADO_MOVILIZACION] },
 
   { label: "Taller", page: "Taller", path: "/Taller", icon: Wrench,
     roles: [ROLES.SUPER_ADMIN, ROLES.JEFE_TALLER] },
@@ -73,6 +77,7 @@ const ROLE_ORDER = {
   // Su pantalla principal es el Monitor; en el orden general quedaba despues
   // de Reportes, y ese orden decide tambien a donde se lo manda de vuelta.
   [ROLES.MONITOR_CORPORATIVO]: ["MonitorCorporativo"],
+  [ROLES.ENCARGADO_MOVILIZACION]: ["Movilizacion"],
 };
 
 export function getNavItemsForRole(role) {

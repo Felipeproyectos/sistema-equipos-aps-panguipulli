@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { getCentrosEstructura } from "@/lib/centros";
 import { Shield, Wrench, Stethoscope, ChevronDown, ChevronUp } from "lucide-react";
-import { ROLES, roleLabel, esRolTaller, esSuperAdmin, esRolSalud, rolesQuePuedeCrear } from "@/lib/roles";
+import { ROLES, roleLabel, esRolFlota, esSuperAdmin, esRolSalud, rolesQuePuedeCrear } from "@/lib/roles";
 
 const ROLE_COLORS = {
   [ROLES.SUPER_ADMIN]: "#7c3aed",
@@ -10,6 +10,7 @@ const ROLE_COLORS = {
   [ROLES.MONITOR_CORPORATIVO]: "#0891b2",
   [ROLES.ENCARGADO_SALUD]: "#059669",
   [ROLES.ENCARGADO_COMPRAS_SALUD]: "#0d9488",
+  [ROLES.ENCARGADO_MOVILIZACION]: "#b45309",
   [ROLES.JEFE_TALLER]: "#ea580c",
   [ROLES.ENCARGADO_COMPRAS_TALLER]: "#c2410c",
   [ROLES.MECANICO]: "#ca8a04",
@@ -46,7 +47,7 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
   const canEdit = !isSelf && (esSuperAdmin(currentUser?.role) || rolesAsignables.includes(usuario.role));
 
   const color = ROLE_COLORS[usuario.role] || "#64748b";
-  const AreaIcon = esRolTaller(usuario.role) ? Wrench : esRolSalud(usuario.role) ? Stethoscope : Shield;
+  const AreaIcon = esRolFlota(usuario.role) ? Wrench : esRolSalud(usuario.role) ? Stethoscope : Shield;
   const centroActual = getCentroPrincipal(usuario);
   const subsedesDelCentro = centrosList.find((c) => c.nombre === centroPrincipal)?.subsedes || [];
 

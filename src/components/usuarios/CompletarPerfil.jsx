@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { getCentrosEstructura } from "@/lib/centros";
 import { Stethoscope, Wrench, Shield, Loader2, CheckCircle2, UserPlus } from "lucide-react";
 
-import { esRolTaller, esSuperAdmin, ROLES } from "@/lib/roles";
+import { esRolFlota, esSuperAdmin, ROLES } from "@/lib/roles";
 
 export default function CompletarPerfil({ user, onCompleto }) {
   const [open, setOpen] = useState(false);
@@ -19,7 +19,7 @@ export default function CompletarPerfil({ user, onCompleto }) {
     const sinArea = !user.area || !["salud", "taller", "ambas"].includes(user.area);
     if (sinArea) {
       // Pre-derivar área desde el rol
-      if (esRolTaller(user.role)) setArea("taller");
+      if (esRolFlota(user.role)) setArea("taller");
       else if (esSuperAdmin(user.role) || user.role === ROLES.ADMIN || user.role === ROLES.MONITOR_CORPORATIVO) setArea("ambas");
       else setArea("salud");
       setOpen(true);

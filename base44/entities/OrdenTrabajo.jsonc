@@ -65,7 +65,8 @@
       "enum": [
         "bitacora",
         "solicitud_directa",
-        "inspeccion"
+        "inspeccion",
+        "movilizacion"
       ],
       "default": "solicitud_directa",
       "description": "Origen de la orden de trabajo"
@@ -73,6 +74,10 @@
     "inspeccion_id": {
       "type": "string",
       "description": "ID de la inspecci\u00f3n que origin\u00f3 la OT (si aplica)"
+    },
+    "solicitud_id": {
+      "type": "string",
+      "description": "Solicitud de Calidad que Movilización derivó a taller, si vino de ahí"
     },
     "reportado_por_email": {
       "type": "string"

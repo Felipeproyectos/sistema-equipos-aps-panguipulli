@@ -35,7 +35,12 @@ const CATEGORIAS = [
   },
 ];
 
-export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipos, editando, user }) {
+// `semilla` deja que otra pantalla abra este mismo formulario con campos ya
+// puestos. Lo usa la bandeja de Movilización para derivar una solicitud al
+// taller: llega con el vehículo, el problema y el vínculo a la solicitud que
+// la originó, y el Encargado solo revisa y confirma. Un solo formulario de
+// orden de trabajo para todo el sistema, en vez de dos que se parecen.
+export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipos, editando, user, semilla }) {
   const [form, setForm] = useState({
     tipo_activo: "salud",
     equipo_id: "",
@@ -74,11 +79,12 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
         tipo_activo: "salud", equipo_id: "", equipo_label: "",
         patente: "", marca_modelo: "", problema_reportado: "",
         diagnostico: "", prioridad: "media", origen: "solicitud_directa",
+        ...(semilla || {}),
       });
-      setManual(false);
+      setManual(!!semilla && !semilla.equipo_id);
     }
     setError("");
-  }, [editando, open, equipos]);
+  }, [editando, open, equipos, semilla]);
 
   const categoria = CATEGORIAS.find(c => c.value === form.tipo_activo) || CATEGORIAS[0];
   const esExterno = form.tipo_activo === "externo";
