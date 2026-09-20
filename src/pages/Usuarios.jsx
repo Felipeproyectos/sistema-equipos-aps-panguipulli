@@ -6,7 +6,7 @@ import usePullToRefresh from "@/hooks/usePullToRefresh";
 import UsuarioCard from "@/components/usuarios/UsuarioCard";
 import InviteUserModal from "@/components/usuarios/InviteUserModal";
 import DiagnosticoAcceso from "@/components/usuarios/DiagnosticoAcceso";
-import { ROLES, esRolSalud, esRolTaller, esSuperAdmin, rolesQuePuedeCrear, roleLabel } from "@/lib/roles";
+import { ROLES, esRolSalud, esRolFlota, esSuperAdmin, rolesQuePuedeCrear, roleLabel } from "@/lib/roles";
 import { useAuth } from "@/lib/AuthContext";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 
@@ -21,7 +21,7 @@ function deriveArea(u) {
   if (u.area === "salud") return "salud";
   if (u.area === "taller") return "taller";
   if (u.area === "admin") return "admin";
-  if (esRolTaller(u.role)) return "taller";
+  if (esRolFlota(u.role)) return "taller";
   if (u.role === ROLES.ADMIN || esSuperAdmin(u.role) || u.role === ROLES.MONITOR_CORPORATIVO) return "admin";
   if (esRolSalud(u.role)) return "salud";
   return "salud";

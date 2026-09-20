@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { AlertCircle, Wand2, Loader2, CheckCircle2, X } from "lucide-react";
-import { esRolTaller, esSuperAdmin, ROLES } from "@/lib/roles";
+import { esRolFlota, esSuperAdmin, ROLES } from "@/lib/roles";
 
 const CENTRO_MIGRACION_DEFECTO = "CESFAM Panguipulli";
 
@@ -14,7 +14,7 @@ function getCentros(u) {
 
 function derivarArea(u) {
   if (esSuperAdmin(u.role) || u.role === ROLES.ADMIN || u.role === ROLES.MONITOR_CORPORATIVO) return "ambas";
-  if (esRolTaller(u.role)) return "taller";
+  if (esRolFlota(u.role)) return "taller";
   return "salud";
 }
 

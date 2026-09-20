@@ -12,6 +12,7 @@ export const ROLES = {
   ENCARGADO_SALUD: "encargado_salud",
   ENCARGADO_COMPRAS_SALUD: "encargado_compras_salud",
   MONITOR_CORPORATIVO: "monitor_corporativo",
+  ENCARGADO_MOVILIZACION: "encargado_movilizacion",
   JEFE_TALLER: "jefe_taller",
   ENCARGADO_COMPRAS_TALLER: "encargado_compras_taller",
   MECANICO: "mecanico",
@@ -27,6 +28,7 @@ export const ROLE_LABELS = {
   [ROLES.ENCARGADO_SALUD]: "Encargado Salud",
   [ROLES.ENCARGADO_COMPRAS_SALUD]: "Encargado Compras Salud",
   [ROLES.MONITOR_CORPORATIVO]: "Monitor Corporativo",
+  [ROLES.ENCARGADO_MOVILIZACION]: "Encargado de Movilización",
   [ROLES.JEFE_TALLER]: "Jefe de Taller",
   [ROLES.ENCARGADO_COMPRAS_TALLER]: "Encargado Compras Taller",
   [ROLES.MECANICO]: "Mecánico",
@@ -42,6 +44,22 @@ export const SALUD_ROLES = [ROLES.ADMIN, ROLES.ENCARGADO_SALUD, ROLES.ENCARGADO_
 
 // Roles cuyo ámbito principal es Taller mecánico
 export const TALLER_ROLES = [ROLES.JEFE_TALLER, ROLES.ENCARGADO_COMPRAS_TALLER, ROLES.MECANICO];
+
+// Movilización administra la flota y es la única puerta hacia el Taller. NO va
+// dentro de TALLER_ROLES a proposito: ese grupo abre pantallas de mecánico
+// (repuestos de un equipo, tablero del taller, reportes de taller) que no le
+// corresponden. Comparte con el Taller el "área" a la que pertenece, y nada más.
+export const FLOTA_ROLES = [...TALLER_ROLES, ROLES.ENCARGADO_MOVILIZACION];
+
+export function esEncargadoMovilizacion(role) {
+  return role === ROLES.ENCARGADO_MOVILIZACION;
+}
+
+/** ¿Pertenece al área de flota — taller o movilización? Sirve para clasificar
+ *  a la persona en las pantallas de usuarios, no para dar permisos. */
+export function esRolFlota(role) {
+  return FLOTA_ROLES.includes(role);
+}
 
 // Roles que ven ambas áreas (con distintos niveles de acción)
 export const TRANSVERSAL_ROLES = [ROLES.SUPER_ADMIN, ROLES.MONITOR_CORPORATIVO];
@@ -78,6 +96,7 @@ export function esAdministrador(role) {
 export const QUIEN_CREA_A_QUIEN = {
   [ROLES.SUPER_ADMIN]: Object.values(ROLES), // crea cualquier rol, incluido otro super_admin
   [ROLES.ADMIN]: [ROLES.ADMIN, ROLES.ENCARGADO_SALUD, ROLES.ENCARGADO_COMPRAS_SALUD, ROLES.USER],
+  [ROLES.ENCARGADO_MOVILIZACION]: [],
   [ROLES.ENCARGADO_SALUD]: [ROLES.USER],
   [ROLES.JEFE_TALLER]: [ROLES.MECANICO, ROLES.ENCARGADO_COMPRAS_TALLER],
   [ROLES.ENCARGADO_COMPRAS_SALUD]: [],

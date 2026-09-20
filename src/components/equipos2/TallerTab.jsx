@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Hammer, Loader2, Wrench, User, Calendar, AlertCircle, CheckCircle2, Clock, Pause, Eye } from "lucide-react";
+import { Hammer, Loader2, Wrench, User, Calendar, AlertCircle, CheckCircle2, Clock, Pause, Eye , Route } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { Link } from "react-router-dom";
+import InformarMovilizacion from "@/components/equipos2/InformarMovilizacion";
+import { useAuth } from "@/lib/AuthContext";
+import { esRolFlota } from "@/lib/roles";
 
 const ESTADOS = {
   pendiente: { label: "Pendiente", color: "#64748B", bg: "#F1F5F9", icon: Clock },
@@ -21,8 +24,15 @@ const PRIORIDAD = {
 };
 
 export default function TallerTab({ equipo }) {
+  const { user } = useAuth();
   const [ordenes, setOrdenes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [informando, setInformando] = useState(false);
+
+  // El aviso a Movilización es para quien mira el vehículo desde afuera del
+  // área de flota: Calidad, que detecta el problema y no tiene por qué abrir
+  // una orden. El Taller y Movilización ya tienen sus propias herramientas.
+  const puedeInformar = !esRolFlota(user?.role);
 
   useEffect(() => {
     if (!equipo?.id) return;
@@ -59,6 +69,23 @@ export default function TallerTab({ equipo }) {
           Trabajos de mantenimiento realizados por el equipo de taller mecánico a este vehículo.
         </p>
       </div>
+
+      {/* Calidad no le habla al Taller: le informa a Movilización, que decide
+          si el vehículo entra al taller y con qué prioridad. */}
+      {puedeInformar && (
+        <button onClick={() => setInformando(true)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-amber-900 bg-amber-50 border border-amber-200 hover:bg-amber-100">
+          <Route className="w-4 h-4" />
+          Informar un problema a Movilización
+        </button>
+      )}
+
+      {informando && (
+        <InformarMovilizacion
+          equipo={equipo}
+          onClose={() => setInformando(false)}
+        />
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
