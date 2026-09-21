@@ -147,9 +147,23 @@ create policy asignacion_chofer_delete on asignacion_chofer for delete to authen
 -- Va a mano porque esta tabla no se genera desde su .jsonc (ver el
 -- comentario de ahí). Es la misma línea que generar_sql.py emite para
 -- todas las demás.
-drop trigger if exists asignacion_chofer_historial on asignacion_chofer;
-create trigger asignacion_chofer_historial after insert or update or delete on asignacion_chofer
-  for each row execute function avisar_al_servidor('registrarHistorial', 'AsignacionChofer');
+-- Condicionado a que la funcion exista. En produccion NO existe: 04_webhooks
+-- nunca se ejecuto ahi, y crear el disparador a secas hacia fallar — y
+-- revertir — toda esta migracion con
+--     ERROR 42883: function avisar_al_servidor() does not exist
+-- Una migracion no puede depender de que otra se haya corrido; si falta, se
+-- avisa y se sigue, que es mejor que dejar la tabla sin crear.
+do $$
+begin
+  if exists (select 1 from pg_proc where proname = 'avisar_al_servidor') then
+    execute 'drop trigger if exists asignacion_chofer_historial on asignacion_chofer';
+    execute 'create trigger asignacion_chofer_historial after insert or update or delete
+             on asignacion_chofer for each row
+             execute function avisar_al_servidor(''registrarHistorial'', ''AsignacionChofer'')';
+  else
+    raise notice 'avisar_al_servidor() no existe: sin disparador de auditoria (ver 04_webhooks.sql)';
+  end if;
+end $$;
 
 commit;
 
@@ -180,7 +194,9 @@ select
    where schemaname='public' and tablename='asignacion_chofer' and cmd='UPDATE')
     as al_cerrar_tambien_la_exige;
 
--- 4. El disparador de auditoría quedó puesto. Se espera 1 fila.
+-- 4. El disparador de auditoría, SI la función existe en esta base.
+--    Puede devolver 0 filas sin que nada esté mal: ver el comentario del
+--    bloque `do $$` de arriba y migracion/04_webhooks.sql.
 select tgname as disparador
 from pg_trigger
 where tgrelid = 'asignacion_chofer'::regclass and not tgisinternal;
