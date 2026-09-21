@@ -10,6 +10,8 @@
         "encargado_salud",
         "encargado_compras_salud",
         "monitor_corporativo",
+        "encargado_movilizacion",
+        "chofer",
         "jefe_taller",
         "encargado_compras_taller",
         "mecanico",
@@ -56,6 +58,19 @@
         "type": "string"
       },
       "description": "Subsedes espec\u00edficas (dentro del centro_principal) que el usuario puede ver. Si est\u00e1 vac\u00edo, se asume solo el centro principal sin subsedes."
+    },
+    "licencia_numero": {
+      "type": "string",
+      "description": "N\u00famero de la licencia de conducir (solo choferes)"
+    },
+    "licencia_clase": {
+      "type": "string",
+      "description": "Clase de la licencia: A1-A5, B, C, D, E, F"
+    },
+    "licencia_vencimiento": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de caducidad de la licencia. De ac\u00e1 sale la alerta a 60 d\u00edas."
     },
     "centros_asignados": {
       "type": "array",

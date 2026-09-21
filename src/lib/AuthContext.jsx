@@ -120,7 +120,11 @@ export const AuthProvider = ({ children }) => {
       appPublicSettings,
       logout,
       navigateToLogin,
-      checkAppState
+      checkAppState,
+      // Releer la ficha del usuario sin recargar la pagina. Lo usa la pantalla
+      // donde el chofer actualiza su licencia: sin esto el estado de arriba
+      // seguiria mostrando la fecha vieja hasta el siguiente ingreso.
+      refreshUser: checkUserAuth
     }}>
       {children}
     </AuthContext.Provider>

@@ -55,6 +55,8 @@ import Dashboard from './pages/Dashboard';
 import Equipos2 from './pages/Equipos2';
 import Movilizacion from './pages/Movilizacion';
 import Flota from './pages/Flota';
+import Choferes from './pages/Choferes';
+import MiLicencia from './pages/MiLicencia';
 import SolicitudesV2 from './pages/SolicitudesV2';
 import Solicitudes from './pages/Solicitudes';
 import Usuarios from './pages/Usuarios';
@@ -71,6 +73,8 @@ export const PAGES = {
     "Equipos2": Equipos2,
     "Movilizacion": Movilizacion,
     "Flota": Flota,
+    "Choferes": Choferes,
+    "MiLicencia": MiLicencia,
     "Solicitudes": Solicitudes,
     "SolicitudesV2": SolicitudesV2,
     "Usuarios": Usuarios,

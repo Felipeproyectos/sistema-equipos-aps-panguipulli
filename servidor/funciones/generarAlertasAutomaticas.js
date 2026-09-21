@@ -11,16 +11,22 @@ export default async function (req) {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const [equipos, parches, alertasActivas] = await Promise.all([
+    const [equipos, parches, alertasActivas, usuarios] = await Promise.all([
       base44.asServiceRole.entities.Equipo.list('-created_date', 1000),
       base44.asServiceRole.entities.Parche.list('-created_date', 2000),
       base44.asServiceRole.entities.Alerta.filter({ estado: 'activa' }, '-created_date', 1000),
+      base44.asServiceRole.entities.User.list('email', 1000),
     ]);
 
     const hoy = new Date();
     // Índice de alertas activas para deduplicación O(1)
     const existentes = new Set(
       alertasActivas.map(a => `${a.equipo_id}|${a.tipo}`)
+    );
+    // Las alertas de licencia cuelgan de una persona, no de un equipo, asi que
+    // se deduplican por su propia clave.
+    const existentesChofer = new Set(
+      alertasActivas.filter(a => a.chofer_id).map(a => `${a.chofer_id}|${a.tipo}`)
     );
 
     const nuevas = [];
@@ -74,6 +80,35 @@ export default async function (req) {
           subsede: eq.subsede || '',
         });
       }
+    }
+
+    // ── Licencias de conducir ──────────────────────────────────────────────
+    // A diferencia de los vencimientos del vehiculo, que avisan a 90 dias,
+    // la licencia avisa a 60: es el plazo que decidio Movilizacion, tiempo
+    // suficiente para pedir hora y renovar en el municipio sin que la alerta
+    // quede meses en pantalla antes de que se pueda hacer algo.
+    const DIAS_AVISO_LICENCIA = 60;
+    for (const u of usuarios) {
+      if (u.role !== 'chofer' || !u.licencia_vencimiento) continue;
+      const dias = differenceInDays(parseISO(u.licencia_vencimiento), hoy);
+      const tipo = dias < 0 ? 'licencia_vencida'
+                 : dias <= DIAS_AVISO_LICENCIA ? 'licencia_por_vencer'
+                 : null;
+      if (!tipo) continue;
+      const key = `${u.id}|${tipo}`;
+      if (existentesChofer.has(key)) continue;
+      existentesChofer.add(key);
+      const quien = u.full_name || u.email;
+      nuevas.push({
+        chofer_id: u.id,
+        tipo,
+        nivel: dias < 0 ? 'critica' : 'advertencia',
+        descripcion: dias < 0
+          ? `Licencia de ${quien} vencida hace ${Math.abs(dias)} días`
+          : `Licencia de ${quien} vence en ${dias} días`,
+        estado: 'activa',
+        centro: u.centro_principal || '',
+      });
     }
 
     let creadas = 0;

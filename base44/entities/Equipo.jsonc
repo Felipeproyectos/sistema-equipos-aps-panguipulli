@@ -12,7 +12,10 @@
         "dea",
         "monitor_desfibrilador",
         "ambulancia",
-        "monitor_multiparametros"
+        "monitor_multiparametros",
+        "camioneta",
+        "furgon",
+        "camion_3_4"
       ],
       "description": "Tipo de equipo m\u00e9dico"
     },

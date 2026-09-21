@@ -33,5 +33,5 @@ export const COLUMNAS_NO_TEXTO = {
   solicitud_repuesto: new Set(["cantidad", "created_date", "fecha_aprobacion", "fecha_compra", "fecha_recepcion_bodega", "fecha_solicitud", "is_sample", "linea_tiempo", "precio_total_compra", "updated_date"]),
   solicitud_repuesto_salud: new Set(["cantidad", "created_date", "fecha_aprobacion", "fecha_compra", "fecha_recepcion_bodega", "fecha_solicitud", "is_sample", "linea_tiempo", "precio_total_compra", "updated_date"]),
   solicitud_stock: new Set(["cantidad", "created_date", "fecha_solicitud", "is_sample", "updated_date"]),
-  usuario: new Set(["centros_asignados", "created_date", "force_password_reset", "is_sample", "is_service", "is_verified", "subsedes_asignadas", "updated_date"]),
+  usuario: new Set(["centros_asignados", "created_date", "force_password_reset", "is_sample", "is_service", "is_verified", "licencia_vencimiento", "subsedes_asignadas", "updated_date"]),
 };

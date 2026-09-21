@@ -1,9 +1,13 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { getCentrosEstructura } from "@/lib/centros";
-import { Stethoscope, Wrench, Shield, Loader2, CheckCircle2, UserPlus } from "lucide-react";
+import { Stethoscope, Wrench, Shield, Loader2, CheckCircle2, UserPlus, IdCard, AlertCircle } from "lucide-react";
 
-import { esRolFlota, esSuperAdmin, ROLES } from "@/lib/roles";
+import { esRolFlota, esChofer, esSuperAdmin, ROLES } from "@/lib/roles";
+
+// Las clases de licencia municipal chilenas. A1-A5 son de transporte de
+// pasajeros o carga; B es el automovil particular.
+const CLASES_LICENCIA = ["A1", "A2", "A3", "A4", "A5", "B", "C", "D", "E", "F"];
 
 export default function CompletarPerfil({ user, onCompleto }) {
   const [open, setOpen] = useState(false);
@@ -12,12 +16,19 @@ export default function CompletarPerfil({ user, onCompleto }) {
   const [centrosList, setCentrosList] = useState([]);
   const [guardando, setGuardando] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  const [licencia, setLicencia] = useState({ numero: "", clase: "B", vence: "" });
+
+  const soyChofer = esChofer(user?.role);
 
   useEffect(() => {
     if (!user?.email) return;
     // Mostrar si el usuario no tiene área asignada
+    // Al chofer ademas se le pide la licencia: sin ella Movilizacion no puede
+    // saber si esta habilitado para manejar, ni avisarle antes de que venza.
     const sinArea = !user.area || !["salud", "taller", "ambas"].includes(user.area);
-    if (sinArea) {
+    const sinLicencia = esChofer(user.role) && !user.licencia_vencimiento;
+    if (sinArea || sinLicencia) {
       // Pre-derivar área desde el rol
       if (esRolFlota(user.role)) setArea("taller");
       else if (esSuperAdmin(user.role) || user.role === ROLES.ADMIN || user.role === ROLES.MONITOR_CORPORATIVO) setArea("ambas");
@@ -35,21 +46,37 @@ export default function CompletarPerfil({ user, onCompleto }) {
 
   const handleGuardar = async () => {
     if (area === "salud" && centros.length === 0) return;
+    if (soyChofer) {
+      if (!licencia.numero.trim()) { setError("Escribe el número de tu licencia."); return; }
+      if (!licencia.vence) { setError("Falta la fecha de vencimiento de tu licencia."); return; }
+    }
+    setError("");
     setGuardando(true);
     try {
       const update = {
         area,
         centros_asignados: area === "salud" ? centros : [],
         centro_principal: area === "salud" ? (centros[0] || "") : "",
+        ...(soyChofer ? {
+          licencia_numero: licencia.numero.trim(),
+          licencia_clase: licencia.clase,
+          licencia_vencimiento: licencia.vence,
+        } : {}),
       };
-      await base44.auth.updateMe(update);
+      // Por el servidor y no con auth.updateMe: la policy `usuario_escribe`
+      // solo deja escribir en `usuario` a super_admin y admin, asi que
+      // updateMe fallaba para todos los demas — y el error se perdia en un
+      // console.error, dejando a la persona apretando "Guardar" sin que
+      // pasara nada. El servidor escribe con la llave de servicio, y la
+      // identidad la saca del token, no de lo que le manden.
+      await base44.functions.invoke("gestionarAcceso", { accion: "mi_perfil", ...update });
       setDone(true);
       setTimeout(() => {
         setOpen(false);
         onCompleto?.();
       }, 1800);
     } catch (e) {
-      console.error(e);
+      setError(e?.message || "No se pudo guardar. Intenta de nuevo.");
     } finally {
       setGuardando(false);
     }
@@ -90,7 +117,9 @@ export default function CompletarPerfil({ user, onCompleto }) {
 
             <div className="p-6 space-y-5">
               <p className="text-sm text-slate-600">
-                Para acceder correctamente al sistema, necesitamos que confirmes tu <strong>área operativa</strong> y <strong>centro(s)</strong> de trabajo. Un administrador validará esta información.
+                {soyChofer
+                  ? <>Antes de empezar necesitamos los datos de tu <strong>licencia de conducir</strong>. Movilización te va a avisar cuando esté por vencer.</>
+                  : <>Para acceder correctamente al sistema, necesitamos que confirmes tu <strong>área operativa</strong> y <strong>centro(s)</strong> de trabajo. Un administrador validará esta información.</>}
               </p>
 
               {/* Área */}
@@ -116,6 +145,53 @@ export default function CompletarPerfil({ user, onCompleto }) {
                   })}
                 </div>
               </div>
+
+              {/* La licencia, solo para el chofer. Es lo que decide si puede
+                  manejar, y de su vencimiento sale la alerta a 60 dias. */}
+              {soyChofer && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                  <p className="flex items-center gap-2 text-xs font-semibold text-amber-900 uppercase tracking-wide">
+                    <IdCard className="w-4 h-4" /> Tu licencia de conducir
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label htmlFor="lic-numero" className="text-xs font-semibold text-slate-600 block mb-1">
+                        Número de licencia <span className="text-red-500">*</span>
+                      </label>
+                      <input id="lic-numero" value={licencia.numero}
+                        onChange={e => setLicencia(l => ({ ...l, numero: e.target.value }))}
+                        placeholder="Como aparece en el documento"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white
+                                   focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                    </div>
+                    <div>
+                      <label htmlFor="lic-clase" className="text-xs font-semibold text-slate-600 block mb-1">Clase</label>
+                      <select id="lic-clase" value={licencia.clase}
+                        onChange={e => setLicencia(l => ({ ...l, clase: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white
+                                   focus:outline-none focus:ring-2 focus:ring-amber-300">
+                        {CLASES_LICENCIA.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="lic-vence" className="text-xs font-semibold text-slate-600 block mb-1">
+                        Vence el <span className="text-red-500">*</span>
+                      </label>
+                      <input id="lic-vence" type="date" value={licencia.vence}
+                        onChange={e => setLicencia(l => ({ ...l, vence: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white
+                                   focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
 
               {/* Centros (solo salud) */}
               {area === "salud" && (
