@@ -33,7 +33,10 @@ const semaforo = (estado) => {
   return `<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:50%;background:${s.dot};display:inline-block;flex-shrink:0"></span><span style="color:${s.dot};font-weight:600">${s.label}</span></span>`;
 };
 
-export function generarPDFEquipo({ equipo, actividades, parches }) {
+// `prestamos` y `asignaciones` son opcionales: si no llegan, el informe sale
+// como antes. Solo los vehiculos tienen prestamos, y a un DEA no hay que
+// mostrarle una seccion vacia.
+export function generarPDFEquipo({ equipo, actividades, parches, prestamos = [], asignaciones = [] }) {
   const hoy = new Date();
   const est = ESTADO_STYLES[equipo.estado] || { bg: "#f1f5f9", color: "#64748b", label: equipo.estado };
   const tipoLabel = TIPO_LABELS[equipo.tipo] || equipo.tipo;
@@ -175,6 +178,57 @@ export function generarPDFEquipo({ equipo, actividades, parches }) {
         </tr>`;
       }).join("");
 
+  // ── Prestamos entre centros ──────────────────────────────────────────
+  // Va destacado y arriba de las demas secciones a proposito: cuando alguien
+  // saca el informe de un vehiculo para explicar un gasto, lo primero que
+  // necesita saber es si en ese periodo el vehiculo estaba en otro centro y
+  // quien lo estaba pagando.
+  const fechaCorta = (v) => {
+    if (!v) return "—";
+    const d = new Date(`${v}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("es-CL");
+  };
+  const prestamosOrdenados = [...prestamos]
+    .filter(p => p.equipo_id === equipo.id)
+    .sort((a, b) => String(b.desde || "").localeCompare(String(a.desde || "")));
+  const prestamoVigente = prestamosOrdenados.find(p => p.estado === "vigente") || null;
+
+  const filasPrestamos = prestamosOrdenados.map(p => {
+    const vigente = p.estado === "vigente";
+    const chofer = asignaciones.find(a => a.prestamo_id === p.id);
+    const estadoTxt = vigente
+      ? (p.hasta_previsto && p.hasta_previsto < hoy.toISOString().split("T")[0]
+          ? "EN CURSO (atrasado)" : "EN CURSO")
+      : p.estado === "cancelado" ? "Cancelado" : "Devuelto";
+    return `<tr style="border-bottom:1px solid #f1f5f9${vigente ? ";background:#fffbeb" : ""}">
+      <td style="padding:5px 6px">${fechaCorta(p.desde)}</td>
+      <td style="padding:5px 6px">${p.devuelto_el ? fechaCorta(p.devuelto_el)
+        : p.hasta_previsto ? `${fechaCorta(p.hasta_previsto)} (previsto)` : "—"}</td>
+      <td style="padding:5px 6px;font-weight:700">${p.centro_destino || "—"}</td>
+      <td style="padding:5px 6px;font-weight:700;color:#b45309">${p.centro_costo || "—"}</td>
+      <td style="padding:5px 6px">${chofer ? (chofer.chofer_nombre || "—") : "—"}</td>
+      <td style="padding:5px 6px">${estadoTxt}</td>
+    </tr>`;
+  }).join("");
+
+  // Un aviso arriba del todo cuando el vehiculo NO esta en su centro. Sin
+  // esto habria que leer la tabla para darse cuenta.
+  const avisoPrestamo = prestamoVigente ? `
+    <div style="margin-top:14px;padding:12px 16px;border-radius:8px;background:#fffbeb;border-left:5px solid #d97706">
+      <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:3px">
+        ⇄ ESTE VEHÍCULO ESTÁ PRESTADO
+      </div>
+      <div style="font-size:10px;color:#78350f;line-height:1.55">
+        Cedido a <strong>${prestamoVigente.centro_destino}</strong>
+        desde el <strong>${fechaCorta(prestamoVigente.desde)}</strong>${
+          prestamoVigente.hasta_previsto
+            ? `, con devolución acordada para el <strong>${fechaCorta(prestamoVigente.hasta_previsto)}</strong>` : ""}.
+        Durante este período el gasto lo asume
+        <strong>${prestamoVigente.centro_costo || "—"}</strong>.${
+          prestamoVigente.motivo ? `<br/>Motivo: ${prestamoVigente.motivo}` : ""}
+      </div>
+    </div>` : "";
+
   const seccionTable = (titulo, icono, color, bg, headers, filas) => `
     <div style="margin-top:16px">
       <div style="background:linear-gradient(135deg,${color},${bg});border-radius:8px;padding:8px 12px;margin-bottom:8px">
@@ -235,6 +289,13 @@ export function generarPDFEquipo({ equipo, actividades, parches }) {
       ${seccionEspecifica}
     </div>
   </div>
+
+  ${avisoPrestamo}
+
+  <!-- PRESTAMOS ENTRE CENTROS -->
+  ${filasPrestamos ? seccionTable("Préstamos entre centros","⇄","#b45309","#d97706",
+      ["Salió","Volvió","Centro que lo recibió","Centro que pagó","Chofer a cargo","Estado"],
+      filasPrestamos) : ""}
 
   <!-- INSPECCIONES -->
   ${seccionTable("Últimas Inspecciones (5 más recientes)","✓","#1565c0","#0288d1",["Fecha","Tipo","Responsable","Observaciones"],filasInsp)}

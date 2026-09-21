@@ -27,6 +27,7 @@ export const COLUMNAS_NO_TEXTO = {
   orden_de_compra: new Set(["created_date", "fecha_emision", "fecha_entrega_estimada", "is_sample", "items", "total", "updated_date"]),
   orden_trabajo: new Set(["created_date", "fecha_asignacion", "fecha_fin", "fecha_inicio", "horas_estimadas", "horas_reales", "is_sample", "linea_tiempo", "repuestos_utilizados", "total", "total_mano_obra", "total_repuestos", "updated_date"]),
   parche: new Set(["activo", "cantidad", "created_date", "fecha_adquisicion", "fecha_vencimiento", "is_sample", "updated_date"]),
+  prestamo_vehiculo: new Set(["created_date", "desde", "devuelto_el", "hasta_previsto", "is_sample", "updated_date"]),
   proveedor: new Set(["activo", "created_date", "is_sample", "updated_date"]),
   repuesto: new Set(["activo", "created_date", "fecha_factura", "fecha_orden_compra", "is_sample", "precio_unitario", "stock_actual", "stock_minimo", "ultimo_reposicion", "updated_date"]),
   repuesto_critico: new Set(["created_date", "is_sample", "stock_unidades", "updated_date", "vida_util_pct"]),

@@ -35,7 +35,17 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
       const activo = kms.find(r => !r.km_final);
       if (activo?.conductor) conductorActivo = activo.conductor;
     } catch { /* dato opcional: si no se puede leer, se ignora */ }
-    generarPDFEquipo({ equipo: { ...equipo, conductor_responsable: conductorActivo }, actividades, parches });
+    // Los prestamos y quien manejaba durante cada uno. Son opcionales: si la
+    // persona que saca el informe no puede leerlos, el informe sale igual, sin
+    // esa seccion, en vez de no salir.
+    const [prestamos, asignaciones] = await Promise.all([
+      base44.entities.PrestamoVehiculo.filter({ equipo_id: equipo.id }, "-desde", 100).catch(() => []),
+      base44.entities.AsignacionChofer.filter({ equipo_id: equipo.id }, "-desde", 100).catch(() => []),
+    ]);
+    generarPDFEquipo({
+      equipo: { ...equipo, conductor_responsable: conductorActivo },
+      actividades, parches, prestamos, asignaciones,
+    });
   };
   const estado = ESTADOS_EQUIPO.find(e => e.value === equipo.estado) || ESTADOS_EQUIPO[0];
   const tipoLabel = TIPOS_EQUIPO.find(t => t.value === equipo.tipo)?.label || equipo.tipo;

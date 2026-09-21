@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { base44 } from "@/api/base44Client";
-import { Truck, Plus, Search, RefreshCw, Lock, UserCheck, UserX, AlertTriangle } from "lucide-react";
+import { Truck, Plus, Search, RefreshCw, Lock, UserCheck, UserX, AlertTriangle, ArrowLeftRight, CalendarClock } from "lucide-react";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { TIPOS_VEHICULO, TIPOS_VEHICULO_CORPORATIVO, ESTADOS_EQUIPO, TIPOS_EQUIPO, esVehiculo } from "@/lib/centros";
 import EquipoCard from "@/components/equipos2/EquipoCard";
@@ -9,6 +9,7 @@ import EquipoDetalleModal from "@/components/equipos2/EquipoDetalleModal";
 import { useAuth } from "@/lib/AuthContext";
 import { isSimulandoActivo } from "@/lib/roleSimulator";
 import AsignarChoferModal from "@/components/flota/AsignarChoferModal";
+import PrestamoModal from "@/components/flota/PrestamoModal";
 import { estadoLicencia } from "@/pages/Choferes";
 
 // Las fichas de la flota, para el Encargado de Movilización.
@@ -41,6 +42,8 @@ export default function Flota() {
   const [asignaciones, setAsignaciones] = useState([]);
   const [choferes, setChoferes] = useState([]);
   const [asignando, setAsignando] = useState(null);
+  const [prestamos, setPrestamos] = useState([]);
+  const [prestando, setPrestando] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
@@ -61,6 +64,8 @@ export default function Flota() {
     // tarjeta quien tiene el vehiculo a cargo y si su licencia sigue al dia.
     base44.entities.AsignacionChofer.filter({ estado: "activa" }, "-created_date", 500)
       .then(setAsignaciones).catch(() => setAsignaciones([]));
+    base44.entities.PrestamoVehiculo.filter({ estado: "vigente" }, "-desde", 500)
+      .then(setPrestamos).catch(() => setPrestamos([]));
     base44.functions.invoke("getUsuariosPorCentro")
       .then(r => setChoferes((Array.isArray(r?.data) ? r.data : []).filter(u => u.role === "chofer")))
       .catch(() => base44.entities.User.list("full_name", 500)
@@ -89,6 +94,10 @@ export default function Flota() {
   const puedeEditar = (eq) => !soloLectura && TIPOS_VEHICULO_CORPORATIVO.includes(eq.tipo);
 
   const asignacionDe = (eq) => asignaciones.find(a => a.equipo_id === eq.id) || null;
+  const prestamoDe = (eq) => prestamos.find(p => p.equipo_id === eq.id) || null;
+
+  const hoyISO = new Date().toISOString().split("T")[0];
+  const prestamoAtrasado = (p) => !!(p?.hasta_previsto && p.hasta_previsto < hoyISO);
 
   /** Estado de la licencia de quien tiene el vehículo a cargo, si hay alguien.
    *  Se mira ACÁ y no solo al asignar: una licencia puede vencer despues, con
@@ -114,6 +123,9 @@ export default function Flota() {
   });
 
   const cuantas = (fn) => equipos.filter(fn).length;
+
+  const prestados = equipos.filter(e => prestamoDe(e));
+  const prestadosAtrasados = prestados.filter(e => prestamoAtrasado(prestamoDe(e)));
 
   const conLicenciaCaida = equipos.filter(e => {
     const lic = licenciaDelAsignado(e);
@@ -149,6 +161,7 @@ export default function Flota() {
                 {cuantas(e => TIPOS_VEHICULO_CORPORATIVO.includes(e.tipo))} corporativos ·{" "}
                 {(() => { const n = cuantas(e => e.tipo === "ambulancia");
                           return `${n} ${n === 1 ? "ambulancia" : "ambulancias"}`; })()}
+                {prestados.length > 0 && ` · ${prestados.length} prestado${prestados.length === 1 ? "" : "s"}`}
               </p>
             </div>
           </div>
@@ -179,6 +192,27 @@ export default function Flota() {
               <p className="text-xs text-red-700 mt-1">
                 {conLicenciaCaida.map(e => e.patente || `${e.marca} ${e.modelo}`).join(" · ")}
                 {" "}— la asignación sigue en pie hasta que la cambies.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {prestadosAtrasados.length > 0 && (
+          <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 mb-5">
+            <CalendarClock className="w-5 h-5 text-amber-700 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm text-amber-900">
+                <strong>{prestadosAtrasados.length}</strong>{" "}
+                {prestadosAtrasados.length === 1
+                  ? "vehículo prestado pasó su fecha de devolución"
+                  : "vehículos prestados pasaron su fecha de devolución"}.
+              </p>
+              <p className="text-xs text-amber-800 mt-1">
+                {prestadosAtrasados.map(e => {
+                  const p = prestamoDe(e);
+                  return `${e.patente || `${e.marca} ${e.modelo}`} en ${p.centro_destino}`;
+                }).join(" · ")}
+                {" "}— mientras sigan abiertos, sus gastos se cargan al centro del préstamo.
               </p>
             </div>
           </div>
@@ -266,12 +300,40 @@ export default function Flota() {
                           : <><UserX className="w-3 h-3 shrink-0" /> Sin chofer asignado</>}
                       </p>
                       {!soloLectura && (
-                        <button onClick={() => setAsignando({ equipo: eq, actual: a })}
-                          className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 shrink-0">
-                          {a ? "Cambiar" : "Asignar"}
-                        </button>
+                        <span className="flex items-center gap-2 shrink-0">
+                          <button onClick={() => setAsignando({ equipo: eq, actual: a, prestamo: prestamoDe(eq) })}
+                            className="text-[11px] font-semibold text-amber-700 hover:text-amber-900">
+                            {a ? "Cambiar" : "Asignar"}
+                          </button>
+                          <span className="text-slate-300">·</span>
+                          <button onClick={() => setPrestando({ equipo: eq, vigente: prestamoDe(eq) })}
+                            className="text-[11px] font-semibold text-slate-500 hover:text-slate-700">
+                            {prestamoDe(eq) ? "Devolver" : "Prestar"}
+                          </button>
+                        </span>
                       )}
                     </div>
+                  );
+                })()}
+
+                {/* Donde esta el vehiculo hoy, si no esta en su centro. Va
+                    junto al chofer porque son la misma pregunta practica:
+                    quien lo tiene y donde. */}
+                {(() => {
+                  const pr = prestamoDe(eq);
+                  if (!pr) return null;
+                  const tarde = prestamoAtrasado(pr);
+                  return (
+                    <p className={`flex items-center gap-1.5 mt-1 px-1 text-[11px] ${
+                      tarde ? "text-amber-700 font-semibold" : "text-slate-500"}`}>
+                      <ArrowLeftRight className="w-3 h-3 shrink-0" />
+                      <span className="truncate">
+                        Prestado a {pr.centro_destino}
+                        {pr.centro_costo && pr.centro_costo !== pr.centro_destino
+                          && ` · paga ${pr.centro_costo}`}
+                      </span>
+                      {tarde && <span className="shrink-0">· atrasado</span>}
+                    </p>
                   );
                 })()}
 
@@ -287,10 +349,20 @@ export default function Flota() {
         )}
       </div>
 
+      {prestando && (
+        <PrestamoModal
+          equipo={prestando.equipo}
+          prestamoVigente={prestando.vigente}
+          onClose={() => setPrestando(null)}
+          onGuardado={reload}
+        />
+      )}
+
       {asignando && (
         <AsignarChoferModal
           equipo={asignando.equipo}
           asignacionActual={asignando.actual}
+          prestamoVigente={asignando.prestamo}
           onClose={() => setAsignando(null)}
           onGuardado={reload}
         />

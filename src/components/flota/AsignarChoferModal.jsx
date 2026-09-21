@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { X, Loader2, IdCard, AlertTriangle, UserCheck, Ban } from "lucide-react";
+import { X, Loader2, IdCard, AlertTriangle, UserCheck, Ban, ArrowLeftRight } from "lucide-react";
 import { ROLES } from "@/lib/roles";
 import { estadoLicencia } from "@/pages/Choferes";
 
@@ -15,10 +15,23 @@ import { estadoLicencia } from "@/pages/Choferes";
 // es para que la persona entienda, no para impedir — una validación que solo
 // está en el navegador se salta recargando.
 
-export default function AsignarChoferModal({ equipo, asignacionActual, onClose, onGuardado }) {
+export default function AsignarChoferModal({ equipo, asignacionActual, prestamoVigente, onClose, onGuardado }) {
   const [choferes, setChoferes] = useState([]);
   const [elegido, setElegido] = useState("");
-  const [desde, setDesde] = useState(new Date().toISOString().split("T")[0]);
+  // Si el vehiculo esta prestado, la asignacion nace con la ventana del
+  // prestamo: el chofer queda a cargo por el tiempo que el vehiculo esta
+  // cedido, que es lo que el Encargado esta resolviendo en ese momento.
+  //
+  // Pero solo si esa fecha todavia sirve. Un prestamo ATRASADO tiene su
+  // fecha de termino en el pasado, y heredarla dejaba el formulario trabado
+  // con "la fecha de termino no puede ser anterior a la de inicio" — justo
+  // cuando hay que asignarle un chofer al vehiculo que no ha vuelto. En ese
+  // caso se deja abierta y el Encargado pone la que corresponda.
+  const hoyISO = new Date().toISOString().split("T")[0];
+  const [desde, setDesde] = useState(
+    prestamoVigente?.desde > hoyISO ? prestamoVigente.desde : hoyISO);
+  const [hasta, setHasta] = useState(
+    prestamoVigente?.hasta_previsto > hoyISO ? prestamoVigente.hasta_previsto : "");
   const [observaciones, setObservaciones] = useState("");
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -51,6 +64,7 @@ export default function AsignarChoferModal({ equipo, asignacionActual, onClose, 
   const guardar = async () => {
     if (!elegido) { setError("Elige un chofer."); return; }
     if (!desde) { setError("Falta la fecha desde la que queda a cargo."); return; }
+    if (hasta && hasta < desde) { setError("La fecha de término no puede ser anterior a la de inicio."); return; }
     setError("");
     setGuardando(true);
     try {
@@ -71,6 +85,10 @@ export default function AsignarChoferModal({ equipo, asignacionActual, onClose, 
         equipo_id: equipo.id,
         equipo_label: etiqueta,
         desde,
+        hasta: hasta || null,
+        // Queda enlazada al prestamo para que despues se pueda decir "manejando
+        // la camioneta durante el prestamo a Conaripe", y no solo el vehiculo.
+        prestamo_id: prestamoVigente?.id || null,
         estado: "activa",
         observaciones: observaciones.trim(),
       });
@@ -126,6 +144,23 @@ export default function AsignarChoferModal({ equipo, asignacionActual, onClose, 
                            hover:bg-white disabled:opacity-60">
                 Dejar sin chofer
               </button>
+            </div>
+          )}
+
+          {prestamoVigente && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm text-amber-900 flex items-start gap-2">
+                <ArrowLeftRight className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>
+                  Este vehículo está prestado a <strong>{prestamoVigente.centro_destino}</strong>
+                  {prestamoVigente.hasta_previsto > hoyISO
+                    ? <> hasta el <strong>{fechaCorta(prestamoVigente.hasta_previsto)}</strong>.</>
+                    : prestamoVigente.hasta_previsto
+                      ? <> y debía volver el <strong>{fechaCorta(prestamoVigente.hasta_previsto)}</strong>, así que está atrasado.</>
+                      : <>, sin fecha de devolución acordada.</>}
+                  {" "}La asignación va a figurar como parte del préstamo.
+                </span>
+              </p>
             </div>
           )}
 
@@ -188,14 +223,25 @@ export default function AsignarChoferModal({ equipo, asignacionActual, onClose, 
                 </div>
               )}
 
-              <div>
-                <label htmlFor="asig-desde" className="text-xs font-semibold text-slate-600 block mb-1">
-                  Desde *
-                </label>
-                <input id="asig-desde" type="date" value={desde}
-                  onChange={e => setDesde(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white
-                             focus:outline-none focus:ring-2 focus:ring-amber-300" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="asig-desde" className="text-xs font-semibold text-slate-600 block mb-1">
+                    Desde *
+                  </label>
+                  <input id="asig-desde" type="date" value={desde}
+                    onChange={e => setDesde(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white
+                               focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                </div>
+                <div>
+                  <label htmlFor="asig-hasta" className="text-xs font-semibold text-slate-600 block mb-1">
+                    Hasta
+                  </label>
+                  <input id="asig-hasta" type="date" value={hasta}
+                    onChange={e => setHasta(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white
+                               focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                </div>
               </div>
 
               <div>
@@ -235,4 +281,10 @@ export default function AsignarChoferModal({ equipo, asignacionActual, onClose, 
       </div>
     </div>
   );
+}
+
+function fechaCorta(v) {
+  if (!v) return "";
+  const d = new Date(`${v}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("es-CL");
 }

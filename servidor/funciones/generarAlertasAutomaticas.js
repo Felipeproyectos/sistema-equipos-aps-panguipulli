@@ -11,11 +11,13 @@ export default async function (req) {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const [equipos, parches, alertasActivas, usuarios] = await Promise.all([
+    const [equipos, parches, alertasActivas, usuarios, prestamos] = await Promise.all([
       base44.asServiceRole.entities.Equipo.list('-created_date', 1000),
       base44.asServiceRole.entities.Parche.list('-created_date', 2000),
       base44.asServiceRole.entities.Alerta.filter({ estado: 'activa' }, '-created_date', 1000),
       base44.asServiceRole.entities.User.list('email', 1000),
+      base44.asServiceRole.entities.PrestamoVehiculo.filter({ estado: 'vigente' }, '-desde', 500)
+        .catch(() => []),
     ]);
 
     const hoy = new Date();
@@ -108,6 +110,30 @@ export default async function (req) {
           : `Licencia de ${quien} vence en ${dias} días`,
         estado: 'activa',
         centro: u.centro_principal || '',
+      });
+    }
+
+    // ── Prestamos que pasaron su fecha de devolucion ───────────────────────
+    // Un prestamo no se cierra solo: queda vigente hasta que alguien confirme
+    // que el vehiculo volvio. El riesgo de eso es que nadie se acuerde, y
+    // mientras tanto los gastos se siguen cargando al centro del prestamo.
+    // Este aviso es el contrapeso.
+    for (const p of prestamos) {
+      if (!p.hasta_previsto) continue;
+      const dias = differenceInDays(parseISO(p.hasta_previsto), hoy);
+      if (dias >= 0) continue;
+      const tipo = 'prestamo_vencido';
+      const key = `${p.equipo_id}|${tipo}`;
+      if (existentes.has(key)) continue;
+      existentes.add(key);
+      nuevas.push({
+        equipo_id: p.equipo_id,
+        tipo,
+        nivel: 'advertencia',
+        descripcion: `${p.equipo_label || 'Vehiculo'} prestado a ${p.centro_destino}: `
+          + `debia volver hace ${Math.abs(dias)} dias. El gasto se sigue cargando a ${p.centro_costo}.`,
+        estado: 'activa',
+        centro: p.centro_origen || '',
       });
     }
 

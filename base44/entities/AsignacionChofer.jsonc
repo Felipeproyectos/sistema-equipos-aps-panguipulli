@@ -41,6 +41,10 @@
       "default": "activa",
       "description": "Un vehiculo tiene una sola asignacion 'activa' a la vez"
     },
+    "prestamo_id": {
+      "type": "string",
+      "description": "Si esta asignacion es por un prestamo, cual. Deja que la bitacora del chofer diga 'durante el prestamo a X' y no solo el vehiculo."
+    },
     "observaciones": {
       "type": "string"
     }
