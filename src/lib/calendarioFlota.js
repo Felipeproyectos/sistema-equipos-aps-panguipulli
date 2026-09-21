@@ -111,6 +111,71 @@ export function esFinDeSemana(iso) {
   return d === 0 || d === 6;
 }
 
+/** El lunes de la semana en que cae esta fecha. Acá la semana parte el lunes
+ *  porque así se arman los turnos, no como en el `getDay()` de JavaScript,
+ *  que parte el domingo. */
+export function inicioDeSemana(iso) {
+  const d = new Date(`${iso}T12:00:00`);
+  const dia = d.getDay();            // 0 = domingo
+  d.setDate(d.getDate() - ((dia + 6) % 7));
+  return aISO(d);
+}
+
+/** Los siete días de la semana en que cae esta fecha, de lunes a domingo. */
+export function diasDeLaSemana(iso) {
+  const lunes = new Date(`${inicioDeSemana(iso)}T12:00:00`);
+  const dias = [];
+  for (let i = 0; i < 7; i++) {
+    dias.push(aISO(lunes));
+    lunes.setDate(lunes.getDate() + 1);
+  }
+  return dias;
+}
+
+/** Suma días a una fecha ISO. */
+export function sumarDias(iso, n) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return aISO(d);
+}
+
+/** Dos fechas en cualquier orden, devueltas de menor a mayor. Es lo que hace
+ *  que arrastrar de derecha a izquierda funcione igual que al revés. */
+export function rangoEntre(a, b) {
+  return a <= b ? { desde: a, hasta: b } : { desde: b, hasta: a };
+}
+
+/** Las asignaciones activas de un vehículo que cubren ese día. Pueden ser dos
+ *  cuando la jornada está partida entre mañana y tarde. */
+export function asignacionesDelDia(asignaciones, equipoId, dia) {
+  return asignaciones.filter(a => a.estado === "activa"
+    && a.equipo_id === equipoId
+    && rangosSeTocan(a.desde, a.hasta, dia, dia));
+}
+
+/**
+ * Los tramos de un vehículo dentro de un período: cada asignación recortada a
+ * lo que efectivamente cae dentro.
+ *
+ * Es lo que se imprime. En pantalla basta con pintar día por día, pero en un
+ * papel hay que poder leer "Carlos Soto, del 14 al 20", y para eso el tramo
+ * tiene que venir ya recortado al período — una asignación abierta o que
+ * empezó el mes pasado no puede imprimirse con su fecha original, porque
+ * diría algo que no es lo que se está mirando.
+ */
+export function tramosDelPeriodo(asignaciones, equipoId, desde, hasta) {
+  return asignaciones
+    .filter(a => a.estado === "activa" && a.equipo_id === equipoId
+      && rangosSeTocan(a.desde, a.hasta, desde, hasta))
+    .map(a => ({
+      asignacion: a,
+      desde: a.desde > desde ? a.desde : desde,
+      hasta: !a.hasta || a.hasta > hasta ? hasta : a.hasta,
+      recortado: a.desde < desde || !a.hasta || a.hasta > hasta,
+    }))
+    .sort((x, y) => (x.desde < y.desde ? -1 : x.desde > y.desde ? 1 : 0));
+}
+
 /** Autotest: corre con `node src/lib/calendarioFlota.js`. Las reglas de
  *  choque son fáciles de romper sin darse cuenta, y un error acá se traduce
  *  en dos choferes citados al mismo vehículo el mismo día. */
@@ -171,6 +236,32 @@ export function _selfCheck() {
   ]);
   debe(choquesConTaller(asigs, tallerCerrado).length === 1,
     "con fecha de cierre solo choca la asignacion que lo cruza");
+
+  // ── Semanas, rangos y tramos ───────────────────────────────────────
+  // El 2026-09-21 es lunes; el 2026-09-27, domingo.
+  debe(inicioDeSemana("2026-09-24") === "2026-09-21", "el lunes de esa semana es el 21");
+  debe(inicioDeSemana("2026-09-27") === "2026-09-21", "el domingo todavia es de la semana del 21");
+  debe(inicioDeSemana("2026-09-21") === "2026-09-21", "un lunes es su propio inicio");
+  const sem = diasDeLaSemana("2026-09-24");
+  debe(sem.length === 7 && sem[0] === "2026-09-21" && sem[6] === "2026-09-27", "la semana va de lunes a domingo");
+  debe(sumarDias("2026-09-30", 1) === "2026-10-01", "sumar dias cruza el mes");
+  debe(sumarDias("2026-01-01", -1) === "2025-12-31", "y restar cruza el anio");
+
+  const r = rangoEntre("2026-09-20", "2026-09-10");
+  debe(r.desde === "2026-09-10" && r.hasta === "2026-09-20", "arrastrar al reves se ordena solo");
+
+  debe(asignacionesDelDia(asigs, "e1", "2026-09-05").length === 1, "un dia con una asignacion");
+  debe(asignacionesDelDia(asigs, "e1", "2026-09-15").length === 0, "un dia libre");
+  debe(asignacionesDelDia(asigs, "e1", "2026-09-25").length === 1, "la terminada no cuenta aunque cubra el dia");
+
+  const tr = tramosDelPeriodo(asigs, "e1", "2026-09-01", "2026-09-30");
+  debe(tr.length === 2, `dos tramos en el mes, hubo ${tr.length}`);
+  debe(tr[0].desde === "2026-09-01" && tr[0].hasta === "2026-09-10", "el primero va del 1 al 10");
+  debe(tr[1].desde === "2026-09-20" && tr[1].hasta === "2026-09-30",
+    "la abierta se recorta al fin del periodo, no se imprime sin fecha");
+  debe(tr[1].recortado === true, "y queda marcada como recortada");
+  debe(tramosDelPeriodo(asigs, "e1", "2026-09-12", "2026-09-18").length === 0,
+    "una semana libre no tiene tramos");
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("calendarioFlota: autotest ok");

@@ -16,7 +16,7 @@ import { TURNOS } from "@/lib/calendarioFlota";
 // es para que la persona entienda, no para impedir — una validación que solo
 // está en el navegador se salta recargando.
 
-export default function AsignarChoferModal({ equipo, asignacionActual, prestamoVigente, desdeSugerido, onClose, onGuardado }) {
+export default function AsignarChoferModal({ equipo, asignacionActual, prestamoVigente, desdeSugerido, hastaSugerido, onClose, onGuardado }) {
   const [choferes, setChoferes] = useState([]);
   const [elegido, setElegido] = useState("");
   // Si el vehiculo esta prestado, la asignacion nace con la ventana del
@@ -28,13 +28,14 @@ export default function AsignarChoferModal({ equipo, asignacionActual, prestamoV
   // con "la fecha de termino no puede ser anterior a la de inicio" — justo
   // cuando hay que asignarle un chofer al vehiculo que no ha vuelto. En ese
   // caso se deja abierta y el Encargado pone la que corresponda.
-  // `desdeSugerido` llega del calendario: es el dia en que la persona hizo
-  // clic, y es lo que espera ver puesto.
+  // `desdeSugerido` y `hastaSugerido` llegan del calendario: son los dias que
+  // la persona marco arrastrando, y es lo que espera ver puesto. Lo que marco
+  // manda sobre la ventana del prestamo — si eligio tres dias, son tres dias.
   const hoyISO = new Date().toISOString().split("T")[0];
   const [desde, setDesde] = useState(
     desdeSugerido || (prestamoVigente?.desde > hoyISO ? prestamoVigente.desde : hoyISO));
   const [hasta, setHasta] = useState(
-    prestamoVigente?.hasta_previsto > hoyISO ? prestamoVigente.hasta_previsto : "");
+    hastaSugerido || (prestamoVigente?.hasta_previsto > hoyISO ? prestamoVigente.hasta_previsto : ""));
   const [turno, setTurno] = useState("completo");
   const [horaSalida, setHoraSalida] = useState("");
   const [horaRegreso, setHoraRegreso] = useState("");
