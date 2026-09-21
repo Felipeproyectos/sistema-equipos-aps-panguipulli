@@ -2,6 +2,10 @@
   "name": "Alerta",
   "type": "object",
   "properties": {
+    "chofer_id": {
+      "type": "string",
+      "description": "Chofer al que se refiere la alerta (licencia). Excluyente con equipo_id."
+    },
     "equipo_id": {
       "type": "string"
     },
@@ -16,6 +20,8 @@
         "equipo_fuera_servicio",
         "revision_tecnica_vencida",
         "revision_tecnica_por_vencer",
+        "licencia_por_vencer",
+        "licencia_vencida",
         "permiso_circulacion_vencido",
         "permiso_circulacion_por_vencer",
         "certificacion_vencida",

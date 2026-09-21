@@ -28,7 +28,7 @@ import { createClientFromRequest } from '#compat';
 // que crea cuentas es justo donde eso importa.
 const ROLES_VALIDOS = [
   'super_admin', 'admin', 'encargado_salud', 'encargado_compras_salud',
-  'monitor_corporativo', 'encargado_movilizacion',
+  'monitor_corporativo', 'encargado_movilizacion', 'chofer',
   'jefe_taller', 'encargado_compras_taller', 'mecanico', 'user',
 ];
 
@@ -40,9 +40,12 @@ const QUIEN_CREA_A_QUIEN = {
   encargado_compras_salud: [],
   encargado_compras_taller: [],
   monitor_corporativo: [],
-  encargado_movilizacion: [],
+  // Movilizacion da de alta a sus choferes y a nadie mas. Es la unica
+  // excepcion a que solo Base del Sistema toque los perfiles de flota.
+  encargado_movilizacion: ['chofer'],
   mecanico: [],
   user: [],
+  chofer: [],
 };
 
 // Quién puede ver el diagnóstico y reparar cuentas: administrar el acceso de
@@ -520,6 +523,36 @@ async function claveYaCambiada(base44, quien) {
 //
 // Ahora lo escribe el servidor con la llave de servicio, y la identidad sale
 // del token: no se puede anotar un ingreso a nombre de otra persona.
+// Los datos que una persona puede cambiar DE SI MISMA. Es una lista blanca
+// a proposito: `role`, `email` y los centros de otro perfil no se tocan desde
+// aca, aunque vengan en el cuerpo de la peticion.
+//
+// Por que pasa por el servidor y no por `auth.updateMe`: la policy
+// `usuario_escribe` solo deja escribir en `usuario` a super_admin y admin, asi
+// que `updateMe` fallaba para todos los demas. CompletarPerfil se lo tragaba en
+// un console.error y la persona quedaba apretando "Guardar" sin que pasara
+// nada. Es el mismo motivo por el que `clave_cambiada` ya venia por aca.
+const CAMPOS_DE_MI_PERFIL = [
+  'area', 'centros_asignados', 'centro_principal', 'subsedes_asignadas',
+  'licencia_numero', 'licencia_clase', 'licencia_vencimiento',
+];
+
+async function miPerfil(base44, quien, datos) {
+  const cambios = {};
+  for (const campo of CAMPOS_DE_MI_PERFIL) {
+    if (datos[campo] !== undefined) cambios[campo] = datos[campo];
+  }
+  if (Object.keys(cambios).length === 0) {
+    return { error: 'No hay nada que guardar', status: 400 };
+  }
+  // Una fecha vacia es null, no ''. PostgREST rechaza el update entero si le
+  // mandan '' a una columna `date`.
+  if (cambios.licencia_vencimiento === '') cambios.licencia_vencimiento = null;
+
+  const guardado = await base44.asServiceRole.entities.User.update(quien.id, cambios);
+  return { usuario: guardado };
+}
+
 async function registrarIngreso(base44, quien, datos) {
   await base44.asServiceRole.entities.AccesoNoAutorizado.create({
     email: quien.email || '',
@@ -575,6 +608,8 @@ export default async function (req) {
       salida = await suspender(base44, quien, cuerpo, true);
     } else if (accion === 'eliminar') {
       salida = await eliminar(base44, quien, cuerpo);
+    } else if (accion === 'mi_perfil') {
+      salida = await miPerfil(base44, quien, cuerpo);
     } else if (accion === 'ingreso') {
       salida = await registrarIngreso(base44, quien, cuerpo);
     } else {

@@ -19,7 +19,11 @@ function getCentros(u) {
 // quitaria la visibilidad a uno de los dos lados. Solo Base del Sistema puede
 // crear o editar este perfil (QUIEN_CREA_A_QUIEN), asi que aca se decide
 // unicamente quien alcanza a VERLO en la lista de usuarios.
-const esMovilizacion = (u) => u.role === 'encargado_movilizacion';
+// Movilizacion y sus choferes no caben en ninguna de las tres areas: son el
+// puente entre Salud y Taller. Se los trata aparte para no tener que elegir,
+// porque elegir le quitaria la visibilidad a uno de los dos lados.
+const ROLES_DE_FLOTA = ['encargado_movilizacion', 'chofer'];
+const esMovilizacion = (u) => ROLES_DE_FLOTA.includes(u.role);
 
 function deriveArea(u) {
   if (u.area === 'salud') return 'salud';
@@ -52,6 +56,10 @@ export default async function (req) {
       permitidos = cp
         ? all.filter(u => !esMovilizacion(u) && deriveArea(u) === 'salud' && getCentros(u).includes(cp))
         : [];
+    } else if (role === 'encargado_movilizacion') {
+      // Ve a sus choferes y a si mismo, y a nadie mas: no administra ni al
+      // personal de Salud ni al del Taller.
+      permitidos = all.filter(u => u.role === 'chofer' || u.id === me.id);
     } else if (role === 'jefe_taller') {
       permitidos = all.filter(u => deriveArea(u) === 'taller' || esMovilizacion(u));
     } else {
