@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { IdCard, Loader2, CheckCircle2, AlertTriangle, Clock, Pencil } from "lucide-react";
+import { IdCard, Loader2, CheckCircle2, AlertTriangle, Clock, Pencil, Truck } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { isSimulandoActivo } from "@/lib/roleSimulator";
 import { estadoLicencia } from "@/pages/Choferes";
@@ -39,8 +39,20 @@ export default function MiLicencia() {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [listo, setListo] = useState(false);
+  const [aCargo, setACargo] = useState([]);
 
   const soloLectura = isSimulandoActivo();
+
+  // Los vehiculos que tiene a cargo. Se filtra por chofer_id ADEMAS de confiar
+  // en la policy (que ya limita a `chofer_id = mi_id()`): pedir solo lo propio
+  // es correcto aunque la capa de abajo cambie, y es lo que hace que esto
+  // tambien se comporte bien en modo local, donde no hay RLS.
+  useEffect(() => {
+    if (!user?.id) return;
+    base44.entities.AsignacionChofer
+      .filter({ chofer_id: user.id, estado: "activa" }, "-created_date", 50)
+      .then(setACargo).catch(() => setACargo([]));
+  }, [user?.id]);
 
   useEffect(() => {
     setForm({
@@ -112,6 +124,27 @@ export default function MiLicencia() {
           <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
             <CheckCircle2 className="w-4 h-4 text-green-700 shrink-0" />
             <p className="text-sm text-green-800">Listo, quedó guardado.</p>
+          </div>
+        )}
+
+        {aCargo.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+              {aCargo.length === 1 ? "Vehículo a tu cargo" : "Vehículos a tu cargo"}
+            </p>
+            <div className="space-y-2">
+              {aCargo.map(a => (
+                <p key={a.id} className="flex items-center gap-2 text-sm text-slate-700">
+                  <Truck className="w-4 h-4 text-slate-400 shrink-0" />
+                  {a.equipo_label || "Vehículo"}
+                </p>
+              ))}
+            </div>
+            {lic.clave === "vencida" && (
+              <p className="text-xs text-red-700 mt-3">
+                Con la licencia vencida no deberías conducirlo. Avísale a Movilización.
+              </p>
+            )}
           </div>
         )}
 

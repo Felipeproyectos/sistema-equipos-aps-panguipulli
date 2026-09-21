@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { base44 } from "@/api/base44Client";
-import { Truck, Plus, Search, RefreshCw, Lock } from "lucide-react";
+import { Truck, Plus, Search, RefreshCw, Lock, UserCheck, UserX, AlertTriangle } from "lucide-react";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { TIPOS_VEHICULO, TIPOS_VEHICULO_CORPORATIVO, ESTADOS_EQUIPO, TIPOS_EQUIPO, esVehiculo } from "@/lib/centros";
 import EquipoCard from "@/components/equipos2/EquipoCard";
@@ -8,6 +8,8 @@ import EquipoFormModal from "@/components/equipos2/EquipoFormModal";
 import EquipoDetalleModal from "@/components/equipos2/EquipoDetalleModal";
 import { useAuth } from "@/lib/AuthContext";
 import { isSimulandoActivo } from "@/lib/roleSimulator";
+import AsignarChoferModal from "@/components/flota/AsignarChoferModal";
+import { estadoLicencia } from "@/pages/Choferes";
 
 // Las fichas de la flota, para el Encargado de Movilización.
 //
@@ -36,6 +38,9 @@ export default function Flota() {
   const { user } = useAuth();
   const [equipos, setEquipos] = useState([]);
   const [parches, setParches] = useState([]);
+  const [asignaciones, setAsignaciones] = useState([]);
+  const [choferes, setChoferes] = useState([]);
+  const [asignando, setAsignando] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
@@ -52,6 +57,14 @@ export default function Flota() {
   const soloLectura = isSimulandoActivo();
 
   const reload = useCallback(async () => {
+    // Las asignaciones vigentes y los choferes, para poder decir en cada
+    // tarjeta quien tiene el vehiculo a cargo y si su licencia sigue al dia.
+    base44.entities.AsignacionChofer.filter({ estado: "activa" }, "-created_date", 500)
+      .then(setAsignaciones).catch(() => setAsignaciones([]));
+    base44.functions.invoke("getUsuariosPorCentro")
+      .then(r => setChoferes((Array.isArray(r?.data) ? r.data : []).filter(u => u.role === "chofer")))
+      .catch(() => base44.entities.User.list("full_name", 500)
+        .then(us => setChoferes(us.filter(u => u.role === "chofer"))).catch(() => setChoferes([])));
     try {
       const res = await base44.functions.invoke("getEquiposPorCentro");
       const data = res.data || {};
@@ -75,6 +88,18 @@ export default function Flota() {
   /** ¿Esta ficha la mantiene Movilización? La ambulancia es de Calidad. */
   const puedeEditar = (eq) => !soloLectura && TIPOS_VEHICULO_CORPORATIVO.includes(eq.tipo);
 
+  const asignacionDe = (eq) => asignaciones.find(a => a.equipo_id === eq.id) || null;
+
+  /** Estado de la licencia de quien tiene el vehículo a cargo, si hay alguien.
+   *  Se mira ACÁ y no solo al asignar: una licencia puede vencer despues, con
+   *  la asignacion ya hecha, y eso es justo lo que hay que ver a tiempo. */
+  const licenciaDelAsignado = (eq) => {
+    const a = asignacionDe(eq);
+    if (!a) return null;
+    const c = choferes.find(x => x.id === a.chofer_id);
+    return c ? estadoLicencia(c.licencia_vencimiento) : null;
+  };
+
   const visibles = equipos.filter(e => {
     if (filtroGrupo === SOLO_CORPORATIVOS && !TIPOS_VEHICULO_CORPORATIVO.includes(e.tipo)) return false;
     if (filtroGrupo === SOLO_AMBULANCIAS && e.tipo !== "ambulancia") return false;
@@ -89,6 +114,11 @@ export default function Flota() {
   });
 
   const cuantas = (fn) => equipos.filter(fn).length;
+
+  const conLicenciaCaida = equipos.filter(e => {
+    const lic = licenciaDelAsignado(e);
+    return lic && (lic.clave === "vencida" || lic.clave === "sin_datos");
+  });
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
@@ -133,6 +163,27 @@ export default function Flota() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 lg:px-10 pt-5 pb-10">
+        {/* Un chofer puede quedar con la licencia vencida DESPUES de que se le
+            asigno el vehiculo. El sistema no deshace la asignacion solo — eso
+            dejaria un turno sin cubrir sin que nadie se entere — pero tampoco
+            se queda callado. */}
+        {conLicenciaCaida.length > 0 && (
+          <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 mb-5">
+            <AlertTriangle className="w-5 h-5 text-red-700 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm text-red-900">
+                <strong>{conLicenciaCaida.length}</strong>{" "}
+                {conLicenciaCaida.length === 1 ? "vehículo está asignado" : "vehículos están asignados"}
+                {" "}a alguien que hoy no puede conducir.
+              </p>
+              <p className="text-xs text-red-700 mt-1">
+                {conLicenciaCaida.map(e => e.patente || `${e.marca} ${e.modelo}`).join(" · ")}
+                {" "}— la asignación sigue en pie hasta que la cambies.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2 mb-5">
           {[
             { v: "todos", label: "Todos" },
@@ -197,8 +248,35 @@ export default function Flota() {
                     ? () => { setEquipoEditar(eq); setShowForm(true); }
                     : undefined}
                 />
+                {/* Quien lo tiene a cargo. Va debajo de la tarjeta y no dentro
+                    para no tocar EquipoCard, que Equipos comparte. */}
+                {(() => {
+                  const a = asignacionDe(eq);
+                  const lic = licenciaDelAsignado(eq);
+                  const problema = lic && (lic.clave === "vencida" || lic.clave === "sin_datos");
+                  return (
+                    <div className="mt-1.5 flex items-center justify-between gap-2 px-1">
+                      <p className={`flex items-center gap-1.5 text-[11px] min-w-0 ${
+                        problema ? "text-red-600 font-semibold" : "text-slate-400"}`}>
+                        {a
+                          ? <>{problema ? <AlertTriangle className="w-3 h-3 shrink-0" />
+                                        : <UserCheck className="w-3 h-3 shrink-0" />}
+                              <span className="truncate">{a.chofer_nombre}</span>
+                              {problema && <span className="shrink-0">· {lic.clave === "vencida" ? "licencia vencida" : "sin licencia"}</span>}</>
+                          : <><UserX className="w-3 h-3 shrink-0" /> Sin chofer asignado</>}
+                      </p>
+                      {!soloLectura && (
+                        <button onClick={() => setAsignando({ equipo: eq, actual: a })}
+                          className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 shrink-0">
+                          {a ? "Cambiar" : "Asignar"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {eq.tipo === "ambulancia" && (
-                  <p className="flex items-center justify-center gap-1.5 mt-1.5 text-[11px] text-slate-400">
+                  <p className="flex items-center justify-center gap-1.5 mt-1 text-[11px] text-slate-400">
                     <Lock className="w-3 h-3" />
                     Su ficha la mantiene Calidad
                   </p>
@@ -208,6 +286,15 @@ export default function Flota() {
           </div>
         )}
       </div>
+
+      {asignando && (
+        <AsignarChoferModal
+          equipo={asignando.equipo}
+          asignacionActual={asignando.actual}
+          onClose={() => setAsignando(null)}
+          onGuardado={reload}
+        />
+      )}
 
       {showForm && (
         <EquipoFormModal
