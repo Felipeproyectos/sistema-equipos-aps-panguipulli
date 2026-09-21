@@ -178,54 +178,80 @@ export function generarPDFEquipo({ equipo, actividades, parches, prestamos = [],
         </tr>`;
       }).join("");
 
-  // ── Prestamos entre centros ──────────────────────────────────────────
-  // Va destacado y arriba de las demas secciones a proposito: cuando alguien
-  // saca el informe de un vehiculo para explicar un gasto, lo primero que
-  // necesita saber es si en ese periodo el vehiculo estaba en otro centro y
-  // quien lo estaba pagando.
+  // ── Donde estuvo el vehiculo, y quien lo uso ─────────────────────────
+  // Lo que se necesita al sacar el informe de un vehiculo es reconstruir su
+  // historia: donde estaba y quien lo manejaba en cada periodo. El centro de
+  // costo es un dato mas de la tabla, no el titular — sirve cuando hay que
+  // explicar un gasto, pero no es lo que se viene a buscar.
   const fechaCorta = (v) => {
     if (!v) return "—";
     const d = new Date(`${v}T00:00:00`);
     return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("es-CL");
   };
+  const hoyISO = hoy.toISOString().split("T")[0];
+
   const prestamosOrdenados = [...prestamos]
     .filter(p => p.equipo_id === equipo.id)
     .sort((a, b) => String(b.desde || "").localeCompare(String(a.desde || "")));
   const prestamoVigente = prestamosOrdenados.find(p => p.estado === "vigente") || null;
 
+  const asignacionesOrdenadas = [...asignaciones]
+    .filter(a => a.equipo_id === equipo.id)
+    .sort((a, b) => String(b.desde || "").localeCompare(String(a.desde || "")));
+
+  // Todos los choferes que pasaron por un prestamo, no solo el primero: un
+  // prestamo largo puede haber cambiado de chofer en el camino.
+  const choferesDe = (p) => {
+    const nombres = asignacionesOrdenadas
+      .filter(a => a.prestamo_id === p.id)
+      .map(a => a.chofer_nombre)
+      .filter(Boolean);
+    return [...new Set(nombres)].join(", ") || "—";
+  };
+
   const filasPrestamos = prestamosOrdenados.map(p => {
     const vigente = p.estado === "vigente";
-    const chofer = asignaciones.find(a => a.prestamo_id === p.id);
     const estadoTxt = vigente
-      ? (p.hasta_previsto && p.hasta_previsto < hoy.toISOString().split("T")[0]
-          ? "EN CURSO (atrasado)" : "EN CURSO")
+      ? (p.hasta_previsto && p.hasta_previsto < hoyISO ? "Allá todavía (atrasado)" : "Allá ahora")
       : p.estado === "cancelado" ? "Cancelado" : "Devuelto";
     return `<tr style="border-bottom:1px solid #f1f5f9${vigente ? ";background:#fffbeb" : ""}">
       <td style="padding:5px 6px">${fechaCorta(p.desde)}</td>
       <td style="padding:5px 6px">${p.devuelto_el ? fechaCorta(p.devuelto_el)
         : p.hasta_previsto ? `${fechaCorta(p.hasta_previsto)} (previsto)` : "—"}</td>
       <td style="padding:5px 6px;font-weight:700">${p.centro_destino || "—"}</td>
-      <td style="padding:5px 6px;font-weight:700;color:#b45309">${p.centro_costo || "—"}</td>
-      <td style="padding:5px 6px">${chofer ? (chofer.chofer_nombre || "—") : "—"}</td>
+      <td style="padding:5px 6px">${choferesDe(p)}</td>
       <td style="padding:5px 6px">${estadoTxt}</td>
+      <td style="padding:5px 6px;color:#94a3b8">${p.centro_costo || "—"}</td>
     </tr>`;
   }).join("");
 
-  // Un aviso arriba del todo cuando el vehiculo NO esta en su centro. Sin
-  // esto habria que leer la tabla para darse cuenta.
+  const filasAsignaciones = asignacionesOrdenadas.map(a => {
+    const activa = a.estado === "activa";
+    const pres = a.prestamo_id ? prestamosOrdenados.find(x => x.id === a.prestamo_id) : null;
+    return `<tr style="border-bottom:1px solid #f1f5f9${activa ? ";background:#f0fdf4" : ""}">
+      <td style="padding:5px 6px">${fechaCorta(a.desde)}</td>
+      <td style="padding:5px 6px">${a.hasta ? fechaCorta(a.hasta) : activa ? "en curso" : "—"}</td>
+      <td style="padding:5px 6px;font-weight:700">${a.chofer_nombre || "—"}</td>
+      <td style="padding:5px 6px">${pres ? `Cedido a ${pres.centro_destino}` : "En su centro"}</td>
+    </tr>`;
+  }).join("");
+
+  // El aviso de arriba: donde esta y con quien. Sin esto habria que leer la
+  // tabla para darse cuenta de que el vehiculo no esta en su centro.
   const avisoPrestamo = prestamoVigente ? `
     <div style="margin-top:14px;padding:12px 16px;border-radius:8px;background:#fffbeb;border-left:5px solid #d97706">
-      <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:3px">
-        ⇄ ESTE VEHÍCULO ESTÁ PRESTADO
+      <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:4px">
+        ⇄ VEHÍCULO CEDIDO A ${String(prestamoVigente.centro_destino || "").toUpperCase()}
       </div>
-      <div style="font-size:10px;color:#78350f;line-height:1.55">
-        Cedido a <strong>${prestamoVigente.centro_destino}</strong>
-        desde el <strong>${fechaCorta(prestamoVigente.desde)}</strong>${
+      <div style="font-size:10.5px;color:#78350f;line-height:1.6">
+        Desde el <strong>${fechaCorta(prestamoVigente.desde)}</strong>${
           prestamoVigente.hasta_previsto
-            ? `, con devolución acordada para el <strong>${fechaCorta(prestamoVigente.hasta_previsto)}</strong>` : ""}.
-        Durante este período el gasto lo asume
-        <strong>${prestamoVigente.centro_costo || "—"}</strong>.${
-          prestamoVigente.motivo ? `<br/>Motivo: ${prestamoVigente.motivo}` : ""}
+            ? ` hasta el <strong>${fechaCorta(prestamoVigente.hasta_previsto)}</strong>${
+                prestamoVigente.hasta_previsto < hoyISO ? " — todavía no vuelve" : ""}`
+            : ", sin fecha de devolución acordada"}.
+        ${choferesDe(prestamoVigente) !== "—"
+          ? `A cargo de <strong>${choferesDe(prestamoVigente)}</strong>.` : ""}${
+          prestamoVigente.motivo ? `<br/><span style="color:#92400e">Motivo: ${prestamoVigente.motivo}</span>` : ""}
       </div>
     </div>` : "";
 
@@ -292,10 +318,15 @@ export function generarPDFEquipo({ equipo, actividades, parches, prestamos = [],
 
   ${avisoPrestamo}
 
-  <!-- PRESTAMOS ENTRE CENTROS -->
-  ${filasPrestamos ? seccionTable("Préstamos entre centros","⇄","#b45309","#d97706",
-      ["Salió","Volvió","Centro que lo recibió","Centro que pagó","Chofer a cargo","Estado"],
+  <!-- DONDE ESTUVO -->
+  ${filasPrestamos ? seccionTable("Dónde ha estado este vehículo","⇄","#b45309","#d97706",
+      ["Salió","Volvió","Centro que lo recibió","Chofer a cargo","Estado","Centro de costo"],
       filasPrestamos) : ""}
+
+  <!-- QUIEN LO HA TENIDO A CARGO -->
+  ${filasAsignaciones ? seccionTable("Quién ha tenido este vehículo a cargo","👤","#15803d","#22c55e",
+      ["Desde","Hasta","Chofer","Dónde estaba"],
+      filasAsignaciones) : ""}
 
   <!-- INSPECCIONES -->
   ${seccionTable("Últimas Inspecciones (5 más recientes)","✓","#1565c0","#0288d1",["Fecha","Tipo","Responsable","Observaciones"],filasInsp)}
