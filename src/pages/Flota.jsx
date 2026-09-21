@@ -11,6 +11,7 @@ import { isSimulandoActivo } from "@/lib/roleSimulator";
 import AsignarChoferModal from "@/components/flota/AsignarChoferModal";
 import PrestamoModal from "@/components/flota/PrestamoModal";
 import { estadoLicencia } from "@/pages/Choferes";
+import { asignacionDeHoy } from "@/lib/calendarioFlota";
 
 // Las fichas de la flota, para el Encargado de Movilización.
 //
@@ -62,7 +63,7 @@ export default function Flota() {
   const reload = useCallback(async () => {
     // Las asignaciones vigentes y los choferes, para poder decir en cada
     // tarjeta quien tiene el vehiculo a cargo y si su licencia sigue al dia.
-    base44.entities.AsignacionChofer.filter({ estado: "activa" }, "-created_date", 500)
+    base44.entities.AsignacionChofer.filter({ estado: "activa" }, "-desde", 1000)
       .then(setAsignaciones).catch(() => setAsignaciones([]));
     base44.entities.PrestamoVehiculo.filter({ estado: "vigente" }, "-desde", 500)
       .then(setPrestamos).catch(() => setPrestamos([]));
@@ -93,7 +94,10 @@ export default function Flota() {
   /** ¿Esta ficha la mantiene Movilización? La ambulancia es de Calidad. */
   const puedeEditar = (eq) => !soloLectura && TIPOS_VEHICULO_CORPORATIVO.includes(eq.tipo);
 
-  const asignacionDe = (eq) => asignaciones.find(a => a.equipo_id === eq.id) || null;
+  // La que cubre HOY, no la primera activa: desde que existe el calendario
+  // un vehiculo puede tener varias activas a la vez (la de esta semana y la
+  // de la proxima), y "quien lo tiene" es solo una de ellas.
+  const asignacionDe = (eq) => asignacionDeHoy(asignaciones, eq.id);
   const prestamoDe = (eq) => prestamos.find(p => p.equipo_id === eq.id) || null;
 
   const hoyISO = new Date().toISOString().split("T")[0];

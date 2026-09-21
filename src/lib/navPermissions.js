@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Monitor, Bell, ClipboardList, FileText,
-  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart, Route, Truck, IdCard
+  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart, Route, Truck, IdCard, CalendarDays
 } from "lucide-react";
 import { ROLES } from "@/lib/roles";
 
@@ -17,6 +17,9 @@ export const NAV_ITEMS = [
     roles: [ROLES.SUPER_ADMIN, ROLES.ENCARGADO_MOVILIZACION] },
 
   { label: "Vehículos", page: "Flota", path: "/Flota", icon: Truck,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ENCARGADO_MOVILIZACION] },
+
+  { label: "Calendario", page: "Calendario", path: "/Calendario", icon: CalendarDays,
     roles: [ROLES.SUPER_ADMIN, ROLES.ENCARGADO_MOVILIZACION] },
 
   { label: "Choferes", page: "Choferes", path: "/Choferes", icon: IdCard,
@@ -88,7 +91,7 @@ const ROLE_ORDER = {
   // Su pantalla principal es el Monitor; en el orden general quedaba despues
   // de Reportes, y ese orden decide tambien a donde se lo manda de vuelta.
   [ROLES.MONITOR_CORPORATIVO]: ["MonitorCorporativo"],
-  [ROLES.ENCARGADO_MOVILIZACION]: ["Movilizacion", "Flota", "Choferes"],
+  [ROLES.ENCARGADO_MOVILIZACION]: ["Movilizacion", "Flota", "Calendario", "Choferes"],
   [ROLES.CHOFER]: ["MiLicencia"],
 };
 

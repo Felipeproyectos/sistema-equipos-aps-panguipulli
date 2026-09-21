@@ -41,6 +41,28 @@
       "default": "activa",
       "description": "Un vehiculo tiene una sola asignacion 'activa' a la vez"
     },
+    "turno": {
+      "type": "string",
+      "enum": [
+        "completo",
+        "manana",
+        "tarde"
+      ],
+      "default": "completo",
+      "description": "El caso principal es 'completo' (el dia entero). Los otros dos dejan partir la jornada entre dos choferes sin que el sistema lo trate como un choque."
+    },
+    "hora_salida": {
+      "type": "string",
+      "description": "Descriptivo, no entra en el calculo del choque"
+    },
+    "hora_regreso": {
+      "type": "string",
+      "description": "Descriptivo, no entra en el calculo del choque"
+    },
+    "destino": {
+      "type": "string",
+      "description": "A donde va. Descriptivo."
+    },
     "prestamo_id": {
       "type": "string",
       "description": "Si esta asignacion es por un prestamo, cual. Deja que la bitacora del chofer diga 'durante el prestamo a X' y no solo el vehiculo."
