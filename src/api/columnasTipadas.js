@@ -14,6 +14,7 @@ export const COLUMNAS_NO_TEXTO = {
   alerta: new Set(["created_date", "fecha_resolucion", "is_sample", "notificacion_enviada", "updated_date"]),
   app_config: new Set(["created_date", "is_sample", "updated_date"]),
   asignacion_chofer: new Set(["created_date", "desde", "hasta", "is_sample", "updated_date"]),
+  bitacora_flota: new Set(["combustible_litros", "combustible_monto", "created_date", "fecha", "is_sample", "km_regreso", "km_salida", "updated_date"]),
   centro: new Set(["created_date", "emails_contacto", "is_sample", "sucursales", "updated_date"]),
   comentario: new Set(["created_date", "is_sample", "updated_date"]),
   config_alerta: new Set(["created_date", "emails", "is_sample", "updated_date"]),

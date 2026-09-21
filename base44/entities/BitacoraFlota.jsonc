@@ -1,0 +1,94 @@
+{
+  "name": "BitacoraFlota",
+  "type": "object",
+  "description": "La bitacora de operacion de la flota: cada salida de un vehiculo, quien la hizo, a donde fue y con cuanto kilometraje volvio. Es la bitacora de MOVILIZACION y es distinta de la bitacora de Calidad (Kilometraje / InspeccionPendiente), que sigue funcionando tal cual para las ambulancias y el equipamiento clinico.",
+  "properties": {
+    "equipo_id": {
+      "type": "string"
+    },
+    "equipo_label": {
+      "type": "string",
+      "description": "Marca, modelo y patente, para mostrar sin cruzar"
+    },
+    "chofer_id": {
+      "type": "string",
+      "description": "Id del usuario que condujo"
+    },
+    "chofer_nombre": {
+      "type": "string",
+      "description": "Se guarda ademas del id para que la pantalla no cruce con usuario en cada fila"
+    },
+    "asignacion_id": {
+      "type": "string",
+      "description": "La asignacion vigente al momento de la salida, si habia una. Enlaza la salida con la programacion del calendario."
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date",
+      "description": "El dia de la salida"
+    },
+    "hora_salida": {
+      "type": "string"
+    },
+    "hora_regreso": {
+      "type": "string"
+    },
+    "km_salida": {
+      "type": "number",
+      "description": "Kilometraje del odometro al salir"
+    },
+    "km_regreso": {
+      "type": "number",
+      "description": "Kilometraje al volver. Vacio mientras la salida sigue abierta."
+    },
+    "destino": {
+      "type": "string"
+    },
+    "motivo": {
+      "type": "string",
+      "description": "Para que se saco el vehiculo"
+    },
+    "combustible_litros": {
+      "type": "number",
+      "description": "Litros cargados durante la salida, si se cargo"
+    },
+    "combustible_monto": {
+      "type": "number",
+      "description": "Lo que costo esa carga"
+    },
+    "prestamo_id": {
+      "type": "string",
+      "description": "Si el vehiculo estaba prestado ese dia, cual prestamo. Lo llena un disparador en la base: nadie lo escribe a mano."
+    },
+    "prestamo_destino": {
+      "type": "string",
+      "description": "Nombre del centro que tenia el vehiculo, congelado al registrar la salida, para que la bitacora diga 'durante el prestamo a Conaripe' sin cruzar con nada."
+    },
+    "centro_costo": {
+      "type": "string",
+      "description": "Que centro asumia el vehiculo ese dia. Congelado al registrar, igual que en orden_trabajo."
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "en_ruta",
+        "cerrada"
+      ],
+      "default": "en_ruta",
+      "description": "'en_ruta' mientras falte el regreso. No se cierra sola: el vehiculo que no volvio tiene que verse."
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "equipo_id",
+    "chofer_id",
+    "fecha"
+  ]
+  // Sin bloque "rls" a proposito, igual que asignacion_chofer y
+  // prestamo_vehiculo: las policies de esta tabla estan escritas a mano en
+  // migracion/18_bitacora_flota.sql, porque una de ellas deja escribir al
+  // propio chofer (chofer_id = mi_id()) y este formato solo sabe expresar
+  // condiciones sobre el rol de quien escribe.
+}

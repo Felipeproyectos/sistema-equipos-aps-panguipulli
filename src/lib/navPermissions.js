@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Monitor, Bell, ClipboardList, FileText,
-  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart, Route, Truck, IdCard, CalendarDays
+  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart, Route, Truck, IdCard, CalendarDays, NotebookPen
 } from "lucide-react";
 import { ROLES } from "@/lib/roles";
 
@@ -25,9 +25,19 @@ export const NAV_ITEMS = [
   { label: "Choferes", page: "Choferes", path: "/Choferes", icon: IdCard,
     roles: [ROLES.SUPER_ADMIN, ROLES.ENCARGADO_MOVILIZACION] },
 
-  // La unica pantalla del chofer. Sin ninguna, el control de acceso lo
+  // La bitacora de operacion de la flota. Es otra que la de Calidad (la del
+  // enlace publico, que revisa el Encargado de Salud en "Revision Bitacora"):
+  // miden cosas distintas y las miran personas distintas.
+  { label: "Bitácora", page: "BitacoraFlota", path: "/BitacoraFlota", icon: NotebookPen,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ENCARGADO_MOVILIZACION] },
+
+  // La primera pantalla del chofer. Sin ninguna, el control de acceso lo
   // mandaba al Dashboard, que tampoco es suyo, y lo rebotaba en bucle.
   { label: "Mi licencia", page: "MiLicencia", path: "/MiLicencia", icon: IdCard,
+    roles: [ROLES.SUPER_ADMIN, ROLES.CHOFER] },
+
+  // La que usa todos los dias: anotar la salida y cerrarla al volver.
+  { label: "Mi bitácora", page: "MiBitacora", path: "/MiBitacora", icon: Route,
     roles: [ROLES.SUPER_ADMIN, ROLES.CHOFER] },
 
   { label: "Taller", page: "Taller", path: "/Taller", icon: Wrench,
@@ -91,8 +101,10 @@ const ROLE_ORDER = {
   // Su pantalla principal es el Monitor; en el orden general quedaba despues
   // de Reportes, y ese orden decide tambien a donde se lo manda de vuelta.
   [ROLES.MONITOR_CORPORATIVO]: ["MonitorCorporativo"],
-  [ROLES.ENCARGADO_MOVILIZACION]: ["Movilizacion", "Flota", "Calendario", "Choferes"],
-  [ROLES.CHOFER]: ["MiLicencia"],
+  [ROLES.ENCARGADO_MOVILIZACION]: ["Movilizacion", "Flota", "Calendario", "Choferes", "BitacoraFlota"],
+  // "Mi licencia" primero a proposito: es el tramite que lo habilita, y es
+  // ademas a donde se lo manda cuando llega a una pantalla que no es suya.
+  [ROLES.CHOFER]: ["MiLicencia", "MiBitacora"],
 };
 
 export function getNavItemsForRole(role) {
