@@ -54,6 +54,7 @@ import Configuracion from './pages/Configuracion';
 import Dashboard from './pages/Dashboard';
 import Equipos2 from './pages/Equipos2';
 import Movilizacion from './pages/Movilizacion';
+import Flota from './pages/Flota';
 import SolicitudesV2 from './pages/SolicitudesV2';
 import Solicitudes from './pages/Solicitudes';
 import Usuarios from './pages/Usuarios';
@@ -69,6 +70,7 @@ export const PAGES = {
     "Dashboard": Dashboard,
     "Equipos2": Equipos2,
     "Movilizacion": Movilizacion,
+    "Flota": Flota,
     "Solicitudes": Solicitudes,
     "SolicitudesV2": SolicitudesV2,
     "Usuarios": Usuarios,

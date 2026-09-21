@@ -19,6 +19,15 @@ export default async function (req) {
 
     if (role === 'super_admin' || role === 'admin' || role === 'monitor_corporativo') {
       equipos = await base44.asServiceRole.entities.Equipo.list('-created_date', 500);
+    } else if (role === 'encargado_movilizacion') {
+      // Movilizacion administra la flota completa, de todos los centros: una
+      // camioneta se mueve entre centros y el Encargado tiene que verla igual.
+      // Se acota por TIPO, no por centro: los DEA y los monitores no son
+      // asunto suyo. La ambulancia si, porque tambien es un vehiculo — la ve,
+      // aunque su ficha la edite Calidad (ver migracion/13_flota.sql).
+      equipos = await base44.asServiceRole.entities.Equipo.filter(
+        { tipo: { $in: ['ambulancia', 'camioneta', 'furgon', 'camion_3_4'] } }, '-created_date', 500
+      );
     } else if (role === 'jefe_taller' || role === 'mecanico' || role === 'encargado_compras_taller') {
       // Taller: solo ambulancias
       equipos = await base44.asServiceRole.entities.Equipo.filter({ tipo: 'ambulancia' }, '-created_date', 500);

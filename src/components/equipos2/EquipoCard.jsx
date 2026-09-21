@@ -24,7 +24,12 @@ const TIPO_COLORS = {
 
 export default function EquipoCard({ equipo, parches, onClick, onEdit }) {
   const hoy = new Date();
-  const estado = ESTADOS_EQUIPO.find(e => e.value === equipo.estado) || ESTADOS_EQUIPO[0];
+  // Un estado que no esta en la lista NO se muestra como "Operativo": esa es
+  // la respuesta tranquilizadora equivocada para un equipo que podria estar
+  // fuera de servicio. Se muestra tal cual vino, en gris, igual que la barra
+  // de color de mas abajo — que ya caia en gris y contradecia a la etiqueta.
+  const estado = ESTADOS_EQUIPO.find(e => e.value === equipo.estado)
+    || { value: equipo.estado, label: equipo.estado || "Sin estado", color: "#64748B", bg: "#F1F5F9" };
   const tipoLabel = TIPOS_EQUIPO.find(t => t.value === equipo.tipo)?.label || equipo.tipo;
   const Icon = TIPO_ICONS[equipo.tipo] || Monitor;
   const iconStyle = TIPO_COLORS[equipo.tipo] || { icon: "#2563EB", bg: "#EFF6FF" };

@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { X, Upload, Loader2 } from "lucide-react";
-import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO, esVehiculo } from "@/lib/centros";
-import { esAdministrador } from "@/lib/roles";
+import { getCentrosEstructura, TIPOS_EQUIPO, TIPOS_VEHICULO_CORPORATIVO, ESTADOS_EQUIPO, esVehiculo } from "@/lib/centros";
+import { esAdministrador, esEncargadoMovilizacion } from "@/lib/roles";
 
 // Los centros que la ficha de una persona puede tener, en los tres formatos que
 // dejó la migración: `centro_principal` (el que usan las policies), la lista
@@ -23,12 +23,25 @@ export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
   // Pueden elegir cualquier centro: super_admin y admin. El encargado de salud
   // queda fijo a su centro (solo lectura). Antes solo se permitía a "admin",
   // lo que dejaba el campo en blanco para super_admin y encargado_salud.
-  const puedeElegirCentro = esAdministrador(user?.role);
+  // Movilizacion elige el centro igual que un administrador: una camioneta
+  // no pertenece al centro de quien la carga, y este perfil no tiene centro
+  // propio — administra la flota de toda la red. La policy no mira
+  // `centro_principal` para este rol, solo el tipo, asi que elegirlo no le
+  // abre nada que no tuviera.
+  const puedeElegirCentro = esAdministrador(user?.role) || esEncargadoMovilizacion(user?.role);
+
+  // Movilizacion mantiene los vehiculos corporativos y nada mas. Ofrecerle un
+  // DEA o una ambulancia seria ofrecerle algo que la base le va a rechazar
+  // (migracion/13_flota.sql), y el error llegaria recien al guardar.
+  const soloFlota = esEncargadoMovilizacion(user?.role);
+  const tiposDisponibles = soloFlota
+    ? TIPOS_EQUIPO.filter(t => TIPOS_VEHICULO_CORPORATIVO.includes(t.value))
+    : TIPOS_EQUIPO;
   const centrosPropios = centrosDelUsuario(user);
   const centroFijoUsuario = centrosPropios[0] || "";
   const [centrosEstructura, setCentrosEstructura] = useState([]);
   const [form, setForm] = useState({
-    numero_inventario: "", tipo: "dea", marca: "", modelo: "", numero_serie: "",
+    numero_inventario: "", tipo: tiposDisponibles[0].value, marca: "", modelo: "", numero_serie: "",
     anio_adquisicion: new Date().getFullYear(), estado: "operativo",
     centro_principal: puedeElegirCentro ? "" : centroFijoUsuario,
     subsede: "", ubicacion_especifica: "", fecha_vencimiento_bateria: "",
@@ -97,7 +110,11 @@ export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="px-7 pt-7 pb-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
-          <h2 className="text-lg font-bold text-slate-900">{equipo ? "Editar Equipo" : "Nuevo Equipo"}</h2>
+          {/* Para Movilizacion esto siempre es un vehiculo: llamarlo "equipo"
+              es el vocabulario de Calidad, no el suyo. */}
+          <h2 className="text-lg font-bold text-slate-900">
+            {equipo ? "Editar " : "Nuevo "}{soloFlota ? "Vehículo" : "Equipo"}
+          </h2>
           <button onClick={onClose}><X className="w-5 h-5 text-slate-400 hover:text-slate-700" /></button>
         </div>
         <form onSubmit={handleSubmit} className="px-7 py-5 space-y-4">
@@ -107,9 +124,11 @@ export default function EquipoFormModal({ equipo, onClose, onSaved, user }) {
               <input required className={inputCls} value={form.numero_inventario} onChange={e => set("numero_inventario", e.target.value)} />
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Tipo de Equipo *</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1">
+                Tipo de {soloFlota ? "Vehículo" : "Equipo"} *
+              </label>
               <select required className={selectCls} value={form.tipo} onChange={e => set("tipo", e.target.value)}>
-                {TIPOS_EQUIPO.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                {tiposDisponibles.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div>
