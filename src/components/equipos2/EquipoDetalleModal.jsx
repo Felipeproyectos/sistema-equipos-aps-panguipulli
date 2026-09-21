@@ -130,11 +130,17 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
                   style={{ border: "1px solid rgba(255,255,255,0.3)" }}>
                   <Printer className="w-3.5 h-3.5" /> Imprimir
                 </button>
-                <button onClick={onEdit}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:bg-white/20"
-                  style={{ border: "1px solid rgba(255,255,255,0.3)" }}>
-                  <Edit className="w-3.5 h-3.5" /> Editar
-                </button>
+                {/* Sin `onEdit` no hay a donde ir: el boton se dibujaba igual
+                    y no hacia nada. Lo usa Flota, donde Movilizacion ve la
+                    ficha de la ambulancia pero no la edita — esa es de
+                    Calidad. Equipos siempre lo pasa, asi que ahi no cambia. */}
+                {onEdit && (
+                  <button onClick={onEdit}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:bg-white/20"
+                    style={{ border: "1px solid rgba(255,255,255,0.3)" }}>
+                    <Edit className="w-3.5 h-3.5" /> Editar
+                  </button>
+                )}
                 {/* Antes decia `user?.role === "admin"` a secas, asi que Base
                     del Sistema, que esta por encima, no veia el boton. Ahora
                     sale de la matriz, que es espejo de la policy. */}
