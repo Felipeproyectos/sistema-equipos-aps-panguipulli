@@ -14,6 +14,13 @@ function getCentros(u) {
   return [...new Set([...principal, ...arr, ...legacy])].filter(Boolean);
 }
 
+// Movilizacion no cabe en ninguna de las tres areas: es el puente entre Salud
+// y Taller. Se la trata aparte para no tener que elegir, porque elegir le
+// quitaria la visibilidad a uno de los dos lados. Solo Base del Sistema puede
+// crear o editar este perfil (QUIEN_CREA_A_QUIEN), asi que aca se decide
+// unicamente quien alcanza a VERLO en la lista de usuarios.
+const esMovilizacion = (u) => u.role === 'encargado_movilizacion';
+
 function deriveArea(u) {
   if (u.area === 'salud') return 'salud';
   if (u.area === 'taller') return 'taller';
@@ -37,12 +44,16 @@ export default async function (req) {
     if (role === 'super_admin') {
       permitidos = all;
     } else if (role === 'admin') {
-      permitidos = all.filter(u => deriveArea(u) !== 'taller');
+      permitidos = all.filter(u => deriveArea(u) !== 'taller' || esMovilizacion(u));
     } else if (role === 'encargado_salud') {
       const cp = me.centro_principal;
-      permitidos = cp ? all.filter(u => deriveArea(u) === 'salud' && getCentros(u).includes(cp)) : [];
+      // Movilizacion queda fuera aunque comparta centro: no es personal de
+      // Salud, y este rol solo administra a los suyos.
+      permitidos = cp
+        ? all.filter(u => !esMovilizacion(u) && deriveArea(u) === 'salud' && getCentros(u).includes(cp))
+        : [];
     } else if (role === 'jefe_taller') {
-      permitidos = all.filter(u => deriveArea(u) === 'taller');
+      permitidos = all.filter(u => deriveArea(u) === 'taller' || esMovilizacion(u));
     } else {
       permitidos = [];
     }
