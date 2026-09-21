@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { X, Loader2, IdCard, AlertTriangle, UserCheck, Ban, ArrowLeftRight } from "lucide-react";
 import { ROLES } from "@/lib/roles";
 import { estadoLicencia } from "@/pages/Choferes";
+import { TURNOS } from "@/lib/calendarioFlota";
 
 // Asignar un chofer a un vehículo.
 //
@@ -15,7 +16,7 @@ import { estadoLicencia } from "@/pages/Choferes";
 // es para que la persona entienda, no para impedir — una validación que solo
 // está en el navegador se salta recargando.
 
-export default function AsignarChoferModal({ equipo, asignacionActual, prestamoVigente, onClose, onGuardado }) {
+export default function AsignarChoferModal({ equipo, asignacionActual, prestamoVigente, desdeSugerido, onClose, onGuardado }) {
   const [choferes, setChoferes] = useState([]);
   const [elegido, setElegido] = useState("");
   // Si el vehiculo esta prestado, la asignacion nace con la ventana del
@@ -27,11 +28,18 @@ export default function AsignarChoferModal({ equipo, asignacionActual, prestamoV
   // con "la fecha de termino no puede ser anterior a la de inicio" — justo
   // cuando hay que asignarle un chofer al vehiculo que no ha vuelto. En ese
   // caso se deja abierta y el Encargado pone la que corresponda.
+  // `desdeSugerido` llega del calendario: es el dia en que la persona hizo
+  // clic, y es lo que espera ver puesto.
   const hoyISO = new Date().toISOString().split("T")[0];
   const [desde, setDesde] = useState(
-    prestamoVigente?.desde > hoyISO ? prestamoVigente.desde : hoyISO);
+    desdeSugerido || (prestamoVigente?.desde > hoyISO ? prestamoVigente.desde : hoyISO));
   const [hasta, setHasta] = useState(
     prestamoVigente?.hasta_previsto > hoyISO ? prestamoVigente.hasta_previsto : "");
+  const [turno, setTurno] = useState("completo");
+  const [horaSalida, setHoraSalida] = useState("");
+  const [horaRegreso, setHoraRegreso] = useState("");
+  const [destino, setDestino] = useState("");
+  const [detalle, setDetalle] = useState(false);
   const [observaciones, setObservaciones] = useState("");
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -68,9 +76,10 @@ export default function AsignarChoferModal({ equipo, asignacionActual, prestamoV
     setError("");
     setGuardando(true);
     try {
-      // Primero se cierra la que estaba: el índice único de la base solo
-      // admite una asignación 'activa' por vehículo, así que al revés
-      // fallaría.
+      // Se cierra la anterior SOLO cuando se está reemplazando la vigente
+      // (boton "Cambiar" en la ficha). Desde el calendario no se pasa
+      // `asignacionActual`, porque ahi la gracia es que convivan: la de esta
+      // semana sigue y se agenda la de la proxima.
       if (asignacionActual) {
         await base44.entities.AsignacionChofer.update(asignacionActual.id, {
           estado: "terminada",
@@ -86,6 +95,10 @@ export default function AsignarChoferModal({ equipo, asignacionActual, prestamoV
         equipo_label: etiqueta,
         desde,
         hasta: hasta || null,
+        turno,
+        hora_salida: horaSalida || null,
+        hora_regreso: horaRegreso || null,
+        destino: destino.trim() || null,
         // Queda enlazada al prestamo para que despues se pueda decir "manejando
         // la camioneta durante el prestamo a Conaripe", y no solo el vehiculo.
         prestamo_id: prestamoVigente?.id || null,
@@ -243,6 +256,67 @@ export default function AsignarChoferModal({ equipo, asignacionActual, prestamoV
                                focus:outline-none focus:ring-2 focus:ring-amber-300" />
                 </div>
               </div>
+
+              {!hasta && (
+                <p className="text-xs text-slate-400 -mt-2">
+                  Sin fecha de término queda abierta, y no vas a poder programar
+                  a nadie más en este vehículo después.
+                </p>
+              )}
+
+              {/* El caso principal es el dia entero. El detalle se abre solo
+                  si hace falta, para no pedir cuatro datos cuando basta uno. */}
+              <button type="button" onClick={() => setDetalle(v => !v)}
+                className="text-xs font-semibold text-amber-700 hover:text-amber-900">
+                {detalle ? "− Ocultar detalle" : "+ Turno, horario o destino"}
+              </button>
+
+              {detalle && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                  <div>
+                    <label htmlFor="asig-turno" className="text-xs font-semibold text-slate-600 block mb-1">
+                      Turno
+                    </label>
+                    <select id="asig-turno" value={turno} onChange={e => setTurno(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white
+                                 focus:outline-none focus:ring-2 focus:ring-amber-300">
+                      {TURNOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                    {turno !== "completo" && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Otro chofer puede tener el mismo vehículo en el otro medio día.
+                      </p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label htmlFor="asig-hsal" className="text-xs font-semibold text-slate-600 block mb-1">Sale</label>
+                      <input id="asig-hsal" type="time" value={horaSalida}
+                        onChange={e => setHoraSalida(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white
+                                   focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                    </div>
+                    <div>
+                      <label htmlFor="asig-hreg" className="text-xs font-semibold text-slate-600 block mb-1">Vuelve</label>
+                      <input id="asig-hreg" type="time" value={horaRegreso}
+                        onChange={e => setHoraRegreso(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white
+                                   focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="asig-destino" className="text-xs font-semibold text-slate-600 block mb-1">Destino</label>
+                    <input id="asig-destino" value={destino} onChange={e => setDestino(e.target.value)}
+                      placeholder="Ej: ronda rural Coñaripe."
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white
+                                 focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    La hora y el destino son para dejar constancia: el sistema no
+                    los usa para decidir si dos asignaciones se pisan.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label htmlFor="asig-obs" className="text-xs font-semibold text-slate-600 block mb-1">
