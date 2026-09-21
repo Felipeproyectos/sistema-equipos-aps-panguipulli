@@ -13,6 +13,7 @@ export const COLUMNAS_NO_TEXTO = {
   actividad: new Set(["ambulancia_operativa", "created_date", "fecha", "is_sample", "updated_date"]),
   alerta: new Set(["created_date", "fecha_resolucion", "is_sample", "notificacion_enviada", "updated_date"]),
   app_config: new Set(["created_date", "is_sample", "updated_date"]),
+  asignacion_chofer: new Set(["created_date", "desde", "hasta", "is_sample", "updated_date"]),
   centro: new Set(["created_date", "emails_contacto", "is_sample", "sucursales", "updated_date"]),
   comentario: new Set(["created_date", "is_sample", "updated_date"]),
   config_alerta: new Set(["created_date", "emails", "is_sample", "updated_date"]),

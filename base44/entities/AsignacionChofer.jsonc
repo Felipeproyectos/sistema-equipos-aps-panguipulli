@@ -1,0 +1,57 @@
+{
+  "name": "AsignacionChofer",
+  "type": "object",
+  "description": "Qué chofer tiene a cargo qué vehículo, y desde cuándo. Reemplaza el campo de texto libre `conductor_responsable` de la ficha del equipo, que servía para anotar un nombre pero no para saber nada.",
+  "properties": {
+    "chofer_id": {
+      "type": "string",
+      "description": "Id del usuario con rol 'chofer'"
+    },
+    "chofer_email": {
+      "type": "string"
+    },
+    "chofer_nombre": {
+      "type": "string",
+      "description": "Se guarda ademas del id para que la pantalla no cruce con usuario en cada fila"
+    },
+    "equipo_id": {
+      "type": "string"
+    },
+    "equipo_label": {
+      "type": "string",
+      "description": "Marca, modelo y patente, para mostrar sin cruzar"
+    },
+    "desde": {
+      "type": "string",
+      "format": "date",
+      "description": "Desde cuando tiene el vehiculo a cargo"
+    },
+    "hasta": {
+      "type": "string",
+      "format": "date",
+      "description": "Hasta cuando. Vacio = indefinida, es la asignacion vigente."
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "activa",
+        "terminada",
+        "cancelada"
+      ],
+      "default": "activa",
+      "description": "Un vehiculo tiene una sola asignacion 'activa' a la vez"
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "chofer_id",
+    "equipo_id",
+    "desde"
+  ]
+  // Sin bloque "rls" a proposito, igual que `usuario`: las policies de esta
+  // tabla estan escritas a mano en migracion/15_asignaciones.sql porque una
+  // de ellas llama a licencia_vigente(chofer_id), una regla que este formato
+  // no sabe expresar — solo admite condiciones sobre el rol de quien escribe.
+}
