@@ -1,0 +1,64 @@
+{
+  "name": "PrestamoVehiculo",
+  "type": "object",
+  "description": "Un vehiculo cedido temporalmente a otro centro. Registra donde estuvo, desde cuando, y que centro asumio el costo durante ese periodo.",
+  "properties": {
+    "equipo_id": {
+      "type": "string"
+    },
+    "equipo_label": {
+      "type": "string",
+      "description": "Marca, modelo y patente, para mostrar sin cruzar"
+    },
+    "centro_origen": {
+      "type": "string",
+      "description": "De donde salio. Se copia al abrir el prestamo y no se vuelve a tocar: si el vehiculo cambiara de dueno despues, el prestamo tiene que seguir diciendo de donde salio en su momento."
+    },
+    "centro_destino": {
+      "type": "string",
+      "description": "Quien lo recibe"
+    },
+    "centro_costo": {
+      "type": "string",
+      "description": "Que centro asume el gasto durante el prestamo. Se decide en cada uno: puede ser el que recibe, el dueno, o un tercero."
+    },
+    "desde": {
+      "type": "string",
+      "format": "date"
+    },
+    "hasta_previsto": {
+      "type": "string",
+      "format": "date",
+      "description": "Cuando se acordo devolverlo"
+    },
+    "devuelto_el": {
+      "type": "string",
+      "format": "date",
+      "description": "Cuando volvio de verdad. Distinto de hasta_previsto a proposito: la diferencia entre los dos es lo que hay que poder mirar."
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "vigente",
+        "devuelto",
+        "cancelado"
+      ],
+      "default": "vigente",
+      "description": "Un vehiculo no puede estar prestado en dos lados a la vez"
+    },
+    "motivo": {
+      "type": "string"
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "equipo_id",
+    "centro_destino",
+    "centro_costo",
+    "desde"
+  ]
+  // Sin bloque "rls": las policies estan escritas a mano en
+  // migracion/16_prestamos.sql, junto al resto de lo que necesita esta tabla.
+}

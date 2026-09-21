@@ -113,6 +113,10 @@
       "type": "number",
       "default": 0
     },
+    "centro_costo": {
+      "type": "string",
+      "description": "Centro que paga esta orden. Se congela al crearla (disparador ot_congela_centro): si el vehiculo despues cambia de centro o se presta, esta orden sigue cargada donde correspondia."
+    },
     "total": {
       "type": "number",
       "default": 0

@@ -20,6 +20,7 @@
         "equipo_fuera_servicio",
         "revision_tecnica_vencida",
         "revision_tecnica_por_vencer",
+        "prestamo_vencido",
         "licencia_por_vencer",
         "licencia_vencida",
         "permiso_circulacion_vencido",
