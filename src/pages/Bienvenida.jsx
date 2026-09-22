@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { base44, MODO_SUPABASE } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Mail, Lock, Eye, EyeOff, LogIn, ShieldCheck, Info } from "lucide-react";
+import { Loader2, Mail, Lock, Eye, EyeOff, LogIn, ShieldCheck, Info, Truck, Wrench } from "lucide-react";
 
 import fondo from "@/assets/login/fondo-panguipulli.jpg";
 import logoAreaSalud from "@/assets/login/area-salud.png";
@@ -205,19 +205,40 @@ export default function Bienvenida() {
           <div className="relative z-10">
             <h1 className="text-[15px] leading-snug text-white/80 font-semibold m-0">
               Sistema de Gestión de
-              <strong className="block text-white font-bold text-2xl md:text-[29px] leading-tight mt-0.5">Equipos Vitales</strong>
+              <strong className="block text-white font-bold text-2xl md:text-[29px] leading-tight mt-0.5">Equipamiento Crítico</strong>
             </h1>
             <div className="rounded-sm my-3" style={{ width: 52, height: 3, background: "#f0a92b" }} />
-            <p className="m-0 text-[15px] leading-snug text-white/75">
+            {/* Un sistema, tres áreas: Salud administra los equipos vitales,
+                Movilización la flota, y el Taller la mantención. Antes el
+                título solo nombraba a Salud, y quien entraba desde
+                Movilización o Taller abría una pantalla que parecía no ser
+                la suya. */}
+            <p
+              className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em]"
+              style={{ color: "#f0a92b" }}
+            >
+              Equipos Vitales · Movilización · Taller Mecánico
+            </p>
+            <p className="m-0 mt-3 text-[15px] leading-snug text-white/75">
               Corporación Municipal
               <br />
               de Panguipulli
             </p>
           </div>
-          <p className="relative z-10 hidden md:flex gap-3 items-start mt-6 text-[13.5px] leading-snug text-white/70">
-            <ShieldCheck className="w-[18px] h-[18px] flex-none mt-0.5" style={{ color: "#4aa33f" }} />
-            Sistema para la calidad y seguridad del paciente
-          </p>
+          <div className="relative z-10 hidden md:flex flex-col gap-2.5 mt-6">
+            <p className="flex gap-3 items-start text-[13.5px] leading-snug text-white/70">
+              <ShieldCheck className="w-[18px] h-[18px] flex-none mt-0.5" style={{ color: "#4aa33f" }} />
+              Calidad y seguridad del paciente
+            </p>
+            <p className="flex gap-3 items-start text-[13.5px] leading-snug text-white/70">
+              <Truck className="w-[18px] h-[18px] flex-none mt-0.5" style={{ color: "#e2a03f" }} />
+              Coordinación y programación de la flota
+            </p>
+            <p className="flex gap-3 items-start text-[13.5px] leading-snug text-white/70">
+              <Wrench className="w-[18px] h-[18px] flex-none mt-0.5" style={{ color: "#7ba7d9" }} />
+              Mantención y trazabilidad del taller mecánico
+            </p>
+          </div>
         </aside>
 
         {/* ── Panel de acceso ── */}
