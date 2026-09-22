@@ -4,7 +4,7 @@ import {
   Monitor, AlertTriangle, ClipboardCheck, ClipboardList, Activity,
   Wrench, Package, CheckCircle2, TrendingUp, BarChart3,
   ShieldCheck, RefreshCw, Heart, Stethoscope, ShoppingCart,
-  Car, Search, Hash, MapPin, Eye
+  Car, Search, Hash, MapPin, Eye, Truck, UserX, IdCard, ArrowLeftRight, Gauge
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar,
@@ -16,13 +16,17 @@ import { differenceInDays, parseISO, format } from "date-fns";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import KpiCard from "@/components/monitor/KpiCard";
 import CentroBreakdown from "@/components/monitor/CentroBreakdown";
-import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO } from "@/lib/centros";
+import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO, esVehiculo } from "@/lib/centros";
 import { getNavItemsForRole } from "@/lib/navPermissions";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import ComentariosEquipo from "@/components/monitor/ComentariosEquipo";
+import FlotaSemanaMini from "@/components/monitor/FlotaSemanaMini";
 import SeguimientoCompraModal from "@/components/taller/SeguimientoCompraModal";
 import { MessageCircle } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
+import { estadoLicencia } from "@/pages/Choferes";
+import { asignacionDeHoy, periodosEnTaller, rangosSeTocan, aISO } from "@/lib/calendarioFlota";
+import { resumen as resumenBitacora } from "@/lib/bitacoraFlota";
 
 const ESTADO_EQUIPO_COLORS = {
   operativo: "#16a34a",
@@ -125,6 +129,12 @@ export default function MonitorCorporativo() {
       ordenes: d.ordenes || [],
       repuestos: d.repuestos || [],
       proveedores: d.proveedores || [],
+      // Flota, para la sección de Movilización: la misma llamada a
+      // getMonitorData ya las trae, no hace falta pedirlas aparte.
+      asignaciones: d.asignaciones || [],
+      prestamos: d.prestamos || [],
+      bitacoraFlota: d.bitacoraFlota || [],
+      choferes: d.choferes || [],
       centros,
       solicitudesCompra,
       solicitudesCompraSalud,
@@ -134,7 +144,11 @@ export default function MonitorCorporativo() {
   useEffect(() => { fetchData().finally(() => setLoading(false)); }, [fetchData]);
   const { refreshing } = usePullToRefresh(fetchData, containerRef);
 
-  const { equipos = [], parches = [], alertas = [], solicitudes = [], inspecciones = [], ordenes = [], repuestos = [], proveedores = [], centros = [], solicitudesCompra = [], solicitudesCompraSalud = [] } = data || {};
+  const {
+    equipos = [], parches = [], alertas = [], solicitudes = [], inspecciones = [], ordenes = [],
+    repuestos = [], proveedores = [], centros = [], solicitudesCompra = [], solicitudesCompraSalud = [],
+    asignaciones = [], prestamos = [], bitacoraFlota = [], choferes = [],
+  } = data || {};
   const hoy = new Date();
   const compraPendientes = solicitudesCompra.filter(s => s.estado === "aprobada");
   const compraCompradas = solicitudesCompra.filter(s => s.estado === "comprada");
@@ -198,6 +212,60 @@ export default function MonitorCorporativo() {
     stockBajo, valorInventario, totalCostoOT, proveedoresActivos,
     estadoEquiposData, otEstadosData, alertasPorTipo,
   } = kpis;
+
+  // ── Movilización ─────────────────────────────────────────────────────────
+  // Igual que "kpis" arriba, pero para la flota: vehículos con/sin chofer hoy,
+  // licencias, préstamos atrasados y lo que dejó la bitácora este mes. Usa las
+  // mismas reglas que las pantallas de Movilización (calendarioFlota.js,
+  // bitacoraFlota.js, Choferes.jsx) para que un vehículo no aparezca "libre"
+  // acá y "con chofer" allá.
+  const flota = useMemo(() => {
+    const hoyISO = aISO(hoy);
+    const vehiculos = equipos.filter(e => esVehiculo(e.tipo));
+    const tallerFlota = periodosEnTaller(ordenes);
+
+    const conChoferHoy = [];
+    const sinChoferHoy = [];
+    const enTallerHoy = [];
+    for (const v of vehiculos) {
+      const enTaller = tallerFlota.some(t => t.equipo_id === v.id && rangosSeTocan(t.desde, t.hasta, hoyISO, hoyISO));
+      if (enTaller) { enTallerHoy.push(v); continue; }
+      if (asignacionDeHoy(asignaciones, v.id, hoyISO)) conChoferHoy.push(v);
+      else sinChoferHoy.push(v);
+    }
+
+    const prestamosAtrasados = prestamos.filter(p => p.hasta_previsto && p.hasta_previsto < hoyISO);
+
+    const choferesConLicencia = choferes.map(c => ({ ...c, lic: estadoLicencia(c.licencia_vencimiento) }));
+    const licenciasVencidas = choferesConLicencia.filter(c => c.lic.clave === "vencida");
+    const licenciasPorVencer = choferesConLicencia.filter(c => c.lic.clave === "por_vencer");
+    // Vencida primero (lo más urgente), después por vencer, después el resto.
+    const ORDEN_LIC = { vencida: 0, por_vencer: 1, sin_datos: 2, vigente: 3 };
+    const choferesOrdenados = [...choferesConLicencia].sort((a, b) => ORDEN_LIC[a.lic.clave] - ORDEN_LIC[b.lic.clave]);
+
+    const mesActual = hoyISO.slice(0, 7);
+    const bitacoraMes = bitacoraFlota.filter(r => (r.fecha || "").startsWith(mesActual));
+    const resumenMes = resumenBitacora(bitacoraMes);
+    const salidasSinCerrar = bitacoraFlota.filter(r => r.estado === "en_ruta");
+
+    const estadoFlotaData = [
+      { name: "Con chofer", value: conChoferHoy.length, color: "#16a34a" },
+      { name: "En taller", value: enTallerHoy.length, color: "#dc2626" },
+      { name: "Sin chofer", value: sinChoferHoy.length, color: "#94a3b8" },
+    ].filter(d => d.value > 0);
+
+    return {
+      vehiculos, tallerFlota, conChoferHoy, sinChoferHoy, enTallerHoy,
+      prestamosAtrasados, choferesOrdenados, licenciasVencidas, licenciasPorVencer,
+      resumenMes, salidasSinCerrar, estadoFlotaData,
+    };
+  }, [equipos, ordenes, asignaciones, prestamos, choferes, bitacoraFlota]);
+
+  const {
+    vehiculos: vehiculosFlota, tallerFlota, conChoferHoy, sinChoferHoy,
+    prestamosAtrasados, choferesOrdenados, licenciasVencidas, licenciasPorVencer,
+    resumenMes: resumenFlotaMes, salidasSinCerrar, estadoFlotaData,
+  } = flota;
 
   // ── Listados ──────────────────────────────────────────────────────────────
   // El Monitor solo tenia contadores y graficos: veia "12 equipos" y "5 OT en
@@ -408,6 +476,136 @@ export default function MonitorCorporativo() {
             )}
           </SeccionArea>
         </div>
+
+        {/* ===== ÁREA MOVILIZACIÓN ===== */}
+        <SeccionArea
+          titulo="Área de Movilización" subtitulo="Flota, choferes, licencias y programación · Solo lectura"
+          icon={Truck} color="#b45309" bg="#fffbeb">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+            <KpiCard label="Vehículos de Flota" value={vehiculosFlota.length} icon={Truck} color="#b45309" bg="#fffbeb"
+              sub={`${conChoferHoy.length} con chofer hoy`} />
+            <KpiCard label="Sin Chofer Hoy" value={sinChoferHoy.length} icon={UserX}
+              color={sinChoferHoy.length > 0 ? "#dc2626" : "#16a34a"}
+              bg={sinChoferHoy.length > 0 ? "#fef2f2" : "#dcfce7"} />
+            <KpiCard label="Licencias Vencidas" value={licenciasVencidas.length} icon={IdCard}
+              color={licenciasVencidas.length > 0 ? "#dc2626" : "#16a34a"}
+              bg={licenciasVencidas.length > 0 ? "#fef2f2" : "#dcfce7"}
+              sub={`${licenciasPorVencer.length} por vencer`} />
+            <KpiCard label="Préstamos Atrasados" value={prestamosAtrasados.length} icon={ArrowLeftRight}
+              color={prestamosAtrasados.length > 0 ? "#dc2626" : "#16a34a"}
+              bg={prestamosAtrasados.length > 0 ? "#fef2f2" : "#dcfce7"}
+              sub={`${prestamos.length} préstamos vigentes`} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+            {/* Estado de la flota hoy */}
+            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
+              <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-amber-600" /> Estado de la Flota Hoy
+              </h3>
+              {estadoFlotaData.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs">
+                  <Truck className="w-8 h-8 mx-auto mb-2 text-slate-200" />Sin vehículos de flota
+                </div>
+              ) : (
+                <>
+                  {/* Sin `label` en la torta a propósito: con solo dos o tres
+                      categorías, un reparto parejo (ej. 2 y 2) deja la
+                      etiqueta justo en el borde del área visible y se recorta.
+                      El número queda más seguro en la leyenda de abajo. */}
+                  <ResponsiveContainer width="100%" height={160}>
+                    <PieChart>
+                      <Pie data={estadoFlotaData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={62} innerRadius={34}>
+                        {estadoFlotaData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-wrap justify-center gap-3 mt-2">
+                    {estadoFlotaData.map((d, i) => (
+                      <span key={i} className="flex items-center gap-1.5 text-xs text-slate-600">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
+                        {d.name} <strong className="text-slate-700">({d.value})</strong>
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Choferes y licencias */}
+            <div className="bg-white rounded-2xl p-5 space-y-2" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
+              <h3 className="text-sm font-bold text-slate-700 mb-1 flex items-center gap-2">
+                <IdCard className="w-4 h-4 text-amber-600" /> Choferes y Licencias
+              </h3>
+              {choferesOrdenados.length === 0 ? (
+                <div className="text-center py-6 text-slate-400 text-xs">
+                  <IdCard className="w-8 h-8 mx-auto mb-2 text-slate-200" />Sin choferes registrados
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {choferesOrdenados.slice(0, 8).map(c => (
+                    <div key={c.id} className="flex items-center justify-between text-xs gap-2">
+                      <span className="text-slate-700 truncate">{c.full_name || c.email}</span>
+                      <span className="font-semibold flex-shrink-0" style={{
+                        color: c.lic.clave === "vencida" ? "#dc2626"
+                          : c.lic.clave === "por_vencer" ? "#b45309"
+                          : c.lic.clave === "sin_datos" ? "#94a3b8" : "#16a34a",
+                      }}>
+                        {c.lic.clave === "vencida" ? "Vencida" : c.lic.clave === "por_vencer" ? "Por vencer"
+                          : c.lic.clave === "sin_datos" ? "Sin cargar" : "Vigente"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Bitácora del mes */}
+            <div className="bg-white rounded-2xl p-5 space-y-3" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
+              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <Gauge className="w-4 h-4 text-amber-600" /> Bitácora del Mes
+              </h3>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-500">Salidas registradas</span>
+                  <span className="text-sm font-bold text-slate-700">{resumenFlotaMes.salidas}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-500">Kilómetros recorridos</span>
+                  <span className="text-sm font-bold text-slate-700">{resumenFlotaMes.km.toLocaleString("es-CL")} km</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-500">Combustible cargado</span>
+                  <span className="text-sm font-bold text-slate-700">{resumenFlotaMes.litros.toLocaleString("es-CL")} L</span>
+                </div>
+                <div className="h-px bg-slate-100" />
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-700">Salidas sin cerrar</span>
+                  <span className="text-lg font-bold" style={{ color: salidasSinCerrar.length > 0 ? "#dc2626" : "#16a34a" }}>
+                    {salidasSinCerrar.length}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Programación de los próximos 7 días */}
+          <div className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
+            <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+              <Truck className="w-4 h-4 text-amber-600" /> Programación de los Próximos 7 Días
+            </h3>
+            <FlotaSemanaMini
+              vehiculos={vehiculosFlota}
+              asignaciones={asignaciones}
+              prestamos={prestamos}
+              taller={tallerFlota}
+            />
+            <p className="text-[11px] text-slate-400 mt-3">
+              Vista de solo lectura. La programación la administra Movilización.
+            </p>
+          </div>
+        </SeccionArea>
 
         {/* ===== ÁREA TALLER ===== */}
         <SeccionArea
@@ -636,10 +834,16 @@ export default function MonitorCorporativo() {
               <option value="">Selecciona un equipo para ver/dejar notas...</option>
               {equipos
                 .slice()
-                .sort((a, b) => (a.tipo === "ambulancia" ? -1 : 1))
+                // Ambulancias primero (es lo que más se consulta), después el
+                // resto de la flota, después el equipamiento médico.
+                .sort((a, b) => {
+                  const rango = (e) => e.tipo === "ambulancia" ? 0 : esVehiculo(e.tipo) ? 1 : 2;
+                  return rango(a) - rango(b);
+                })
                 .map((e) => (
                   <option key={e.id} value={e.id}>
-                    {e.tipo === "ambulancia" ? "🚑" : "🩺"} {e.marca} {e.modelo} — {e.centro_principal}{e.subsede ? " / " + e.subsede : ""}
+                    {e.tipo === "ambulancia" ? "🚑" : esVehiculo(e.tipo) ? "🚚" : "🩺"}{" "}
+                    {e.marca} {e.modelo} — {e.centro_principal}{e.subsede ? " / " + e.subsede : ""}
                   </option>
                 ))}
             </select>
