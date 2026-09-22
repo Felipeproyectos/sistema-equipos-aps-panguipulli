@@ -3,6 +3,11 @@ import { differenceInDays, parseISO } from 'date-fns';
 
 // Devuelve los datos consolidados del Monitor Corporativo en una sola llamada
 // (en lugar de 9 round-trips cliente→servidor). Usa asServiceRole con límites.
+//
+// Trae también la flota (asignaciones activas, préstamos vigentes, la
+// bitácora y los choferes): el Monitor tiene que ver Movilización igual que
+// ve Salud y Taller, y sumar esas cuatro llamadas acá evita que la pantalla
+// tenga que hacerlas aparte.
 export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
@@ -14,7 +19,10 @@ export default async function (req) {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const [equipos, parches, alertas, solicitudes, inspecciones, ordenes, repuestos, proveedores] = await Promise.all([
+    const [
+      equipos, parches, alertas, solicitudes, inspecciones, ordenes, repuestos, proveedores,
+      asignaciones, prestamos, bitacoraFlota, choferes,
+    ] = await Promise.all([
       base44.asServiceRole.entities.Equipo.list('-created_date', 500),
       base44.asServiceRole.entities.Parche.list('-created_date', 2000),
       base44.asServiceRole.entities.Alerta.filter({ estado: 'activa' }, '-created_date', 500),
@@ -23,6 +31,10 @@ export default async function (req) {
       base44.asServiceRole.entities.OrdenTrabajo.list('-created_date', 300),
       base44.asServiceRole.entities.Repuesto.list('-created_date', 500),
       base44.asServiceRole.entities.Proveedor.list('-created_date', 200),
+      base44.asServiceRole.entities.AsignacionChofer.filter({ estado: 'activa' }, '-desde', 500),
+      base44.asServiceRole.entities.PrestamoVehiculo.filter({ estado: 'vigente' }, '-desde', 300),
+      base44.asServiceRole.entities.BitacoraFlota.list('-fecha', 500),
+      base44.asServiceRole.entities.User.filter({ role: 'chofer' }, 'full_name', 200),
     ]);
 
     const activos = equipos.filter(e => e.activo !== false);
@@ -37,6 +49,10 @@ export default async function (req) {
       ordenes,
       repuestos,
       proveedores,
+      asignaciones,
+      prestamos,
+      bitacoraFlota,
+      choferes,
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
