@@ -15,6 +15,7 @@ import {
   diasDelMes, diasDeLaSemana, esFinDeSemana, aISO, sumarDias, rangoEntre,
   rangosSeTocan, periodosEnTaller, choquesConTaller, asignacionesDelDia,
 } from "@/lib/calendarioFlota";
+import AyudaPantalla from "@/components/flota/AyudaPantalla";
 
 // El calendario de programación de la flota.
 //
@@ -254,6 +255,11 @@ export default function Calendario() {
       </div>
 
       <div className="px-4 lg:px-10 pt-5 pb-10">
+        <AyudaPantalla clave="calendario">
+          Quién maneja qué vehículo y cuándo. <strong>Arrastra sobre los días</strong> de un vehículo
+          y suelta para programar a un chofer en esas fechas. Un día pintado se toca para
+          cambiarlo o sacarlo. Con <strong>Imprimir</strong> sale la programación de la semana o del mes.
+        </AyudaPantalla>
         {choquesDelPeriodo.length > 0 && (
           <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 mb-5">
             <AlertTriangle className="w-5 h-5 text-red-700 mt-0.5 shrink-0" />

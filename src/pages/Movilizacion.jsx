@@ -4,8 +4,9 @@ import { Route, Wrench, RefreshCw, Clock, CheckCircle2, AlertTriangle, ChevronRi
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import OrdenTrabajoFormModal from "@/components/taller/OrdenTrabajoFormModal";
 import { useAuth } from "@/lib/AuthContext";
-import { esVehiculo } from "@/lib/centros";
+import { esSolicitudDeFlota } from "@/lib/panelFlota";
 import { isSimulandoActivo } from "@/lib/roleSimulator";
+import AyudaPantalla from "@/components/flota/AyudaPantalla";
 
 // La bandeja del Encargado de Movilización.
 //
@@ -23,8 +24,8 @@ import { isSimulandoActivo } from "@/lib/roleSimulator";
 
 // Lo que le toca a Movilización: todo lo que sea de un vehículo, más los tres
 // tipos de mantenimiento aunque la solicitud no apunte a un equipo cargado
-// (una camioneta municipal puede no estar en el inventario).
-const TIPOS_DE_FLOTA = ["mantenimiento_correctivo", "mantenimiento_preventivo", "revision_tecnica"];
+// (una camioneta municipal puede no estar en el inventario). La regla vive en
+// src/lib/panelFlota.js, porque el Panel de Flota cuenta las mismas.
 
 const ETIQUETA_TIPO = {
   mantenimiento_correctivo: "Reparación",
@@ -93,11 +94,7 @@ export default function Movilizacion() {
   const ordenDe = (s) => ordenes.find(o => o.solicitud_id === s.id);
 
   // De Movilización si el equipo es un vehículo, o si el tipo es de flota.
-  const mias = solicitudes.filter(s => {
-    const eq = equipoDe(s);
-    if (eq) return esVehiculo(eq.tipo);
-    return TIPOS_DE_FLOTA.includes(s.tipo);
-  });
+  const mias = solicitudes.filter(s => esSolicitudDeFlota(s, equipoDe(s)));
 
   const visibles = mias.filter(s => (s.estado || "pendiente") === pestana);
   const cuenta = (estado) => mias.filter(s => (s.estado || "pendiente") === estado).length;
@@ -170,7 +167,7 @@ export default function Movilizacion() {
           </div>
           <div>
             <p className="text-amber-200 text-xs font-semibold uppercase tracking-widest">Flota</p>
-            <h1 className="text-2xl lg:text-3xl font-bold text-white">Movilización</h1>
+            <h1 className="text-2xl lg:text-3xl font-bold text-white">Solicitudes al Taller</h1>
             <p className="text-amber-100 text-sm mt-0.5">
               {cuenta("pendiente")} por revisar · {cuenta("en_proceso")} en taller
             </p>
@@ -179,6 +176,12 @@ export default function Movilizacion() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 lg:px-10 pt-5 pb-10">
+        <AyudaPantalla clave="solicitudes">
+          Aquí llegan las <strong>fallas de vehículos que informa Salud</strong>. Revisa cada
+          una: si hay que repararla, usa <strong>Derivar al taller</strong> y se crea la orden de
+          trabajo; si no hace falta, <strong>Cerrar sin taller</strong>. Lo derivado se sigue en la
+          pestaña <em>En taller</em>.
+        </AyudaPantalla>
         <div className="flex gap-2 mb-5 overflow-x-auto">
           {PESTANAS.map(p => {
             const Icono = p.icon;

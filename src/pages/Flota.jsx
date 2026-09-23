@@ -12,6 +12,7 @@ import AsignarChoferModal from "@/components/flota/AsignarChoferModal";
 import PrestamoModal from "@/components/flota/PrestamoModal";
 import { estadoLicencia } from "@/pages/Choferes";
 import { asignacionDeHoy } from "@/lib/calendarioFlota";
+import AyudaPantalla from "@/components/flota/AyudaPantalla";
 
 // Las fichas de la flota, para el Encargado de Movilización.
 //
@@ -180,6 +181,12 @@ export default function Flota() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 lg:px-10 pt-5 pb-10">
+        <AyudaPantalla clave="vehiculos">
+          La ficha de cada vehículo. Con <strong>Nuevo vehículo</strong> cargas la flota; en cada
+          tarjeta, <strong>Asignar</strong> deja a un chofer a cargo desde hoy y <strong>Prestar</strong>
+          lo cede a otro centro. Las ambulancias las mantiene Salud: acá se ven y se asignan,
+          pero su ficha no se edita.
+        </AyudaPantalla>
         {/* Un chofer puede quedar con la licencia vencida DESPUES de que se le
             asigno el vehiculo. El sistema no deshace la asignacion solo — eso
             dejaria un turno sin cubrir sin que nadie se entere — pero tampoco
