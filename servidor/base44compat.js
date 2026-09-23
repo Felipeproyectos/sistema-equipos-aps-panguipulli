@@ -5,6 +5,7 @@
 // auth.me, SendEmail, getConnection, functions.invoke); imitarla cuesta menos
 // que reescribir 21 handlers, y deja el diff de cada uno en dos lineas.
 import { createClient } from '@supabase/supabase-js';
+import { COLUMNAS_NO_TEXTO } from './columnasTipadas.js';
 
 const { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY } = process.env;
 
@@ -52,6 +53,28 @@ function limitar(q, limite) {
   return limite ? q.limit(limite) : q;
 }
 
+// Un `""` en una columna de fecha o numero hace que Postgres rechace la
+// escritura ENTERA ("invalid input syntax for type date"); PostgREST no lo
+// convierte a NULL ni ignora el campo. El navegador ya lo corrige antes de
+// escribir (src/api/clienteSupabase.js); esto es lo mismo para las funciones
+// del servidor, que reciben el cuerpo tal como lo manda un formulario y lo
+// pasan a la base. En las columnas de texto `""` es valido y se respeta.
+//
+// La lista sale de base44/entities/*.jsonc via
+// migracion/generar_columnas_tipadas.py, que escribe las dos copias.
+export function limpiarVacios(nombreTabla, obj) {
+  const noTexto = COLUMNAS_NO_TEXTO[nombreTabla];
+  if (!noTexto || !obj || typeof obj !== 'object') return obj;
+  let copia = null;
+  for (const [campo, valor] of Object.entries(obj)) {
+    if (valor === '' && noTexto.has(campo)) {
+      if (!copia) copia = { ...obj };
+      copia[campo] = null;
+    }
+  }
+  return copia || obj;
+}
+
 function entidad(db, nombre) {
   const t = tabla(nombre);
   const sel = () => db.from(t).select('*');
@@ -60,12 +83,13 @@ function entidad(db, nombre) {
     filter: (filtro, sort, limite) =>
       limitar(ordenar(condiciones(sel(), filtro), sort), limite).then(desempacar),
     get: (id) => db.from(t).select('*').eq('id', id).maybeSingle().then(desempacar),
-    create: (obj) => db.from(t).insert(obj).select().single().then(desempacar),
+    create: (obj) => db.from(t).insert(limpiarVacios(t, obj)).select().single().then(desempacar),
     // id y created_date/updated_date los pone Postgres (ver 01_esquema.sql):
     // default gen_random_uuid()::text y el trigger tocar_updated_date.
-    bulkCreate: (arr) => db.from(t).insert(arr).select().then(desempacar),
+    bulkCreate: (arr) =>
+      db.from(t).insert((arr || []).map((o) => limpiarVacios(t, o))).select().then(desempacar),
     update: (id, cambios) =>
-      db.from(t).update(cambios).eq('id', id).select().single().then(desempacar),
+      db.from(t).update(limpiarVacios(t, cambios)).eq('id', id).select().single().then(desempacar),
     delete: (id) => db.from(t).delete().eq('id', id).then(desempacar).then(() => ({})),
   };
 }

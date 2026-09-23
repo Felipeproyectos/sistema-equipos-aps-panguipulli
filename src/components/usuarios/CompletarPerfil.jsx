@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { getCentrosEstructura } from "@/lib/centros";
 import { Stethoscope, Wrench, Shield, Loader2, CheckCircle2, UserPlus, IdCard, AlertCircle } from "lucide-react";
 
-import { esRolFlota, esChofer, esSuperAdmin, ROLES } from "@/lib/roles";
+import { esChofer, areaDeRol } from "@/lib/roles";
 
 // Las clases de licencia municipal chilenas. A1-A5 son de transporte de
 // pasajeros o carga; B es el automovil particular.
@@ -29,10 +29,8 @@ export default function CompletarPerfil({ user, onCompleto }) {
     const sinArea = !user.area || !["salud", "taller", "ambas"].includes(user.area);
     const sinLicencia = esChofer(user.role) && !user.licencia_vencimiento;
     if (sinArea || sinLicencia) {
-      // Pre-derivar área desde el rol
-      if (esRolFlota(user.role)) setArea("taller");
-      else if (esSuperAdmin(user.role) || user.role === ROLES.ADMIN || user.role === ROLES.MONITOR_CORPORATIVO) setArea("ambas");
-      else setArea("salud");
+      // Pre-derivar área desde el rol (misma regla que la pantalla de Usuarios)
+      setArea(areaDeRol(user.role) || "salud");
       setOpen(true);
       getCentrosEstructura().then(setCentrosList).catch(() => {});
     }

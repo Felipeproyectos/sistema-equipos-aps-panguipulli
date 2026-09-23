@@ -67,8 +67,30 @@ export function esRolFlota(role) {
   return FLOTA_ROLES.includes(role);
 }
 
-// Roles que ven ambas áreas (con distintos niveles de acción)
-export const TRANSVERSAL_ROLES = [ROLES.SUPER_ADMIN, ROLES.MONITOR_CORPORATIVO];
+// ── El área que le corresponde a cada rol ──────────────────────────────────
+// `usuario.area` la elige la persona en su primer ingreso (CompletarPerfil) y
+// la pantalla de Usuarios la usa ANTES que el rol para decidir en qué pestaña
+// mostrarla. Si alguien eligió mal, o después se le cambió el rol, queda en la
+// pestaña equivocada: un chofer con area 'salud' aparece en Salud y nadie lo
+// encuentra en Taller. Esta es la regla de cuál corresponde; manda el rol,
+// porque el rol lo asigna quien administra y es lo que decide los permisos.
+//
+// "ambas" es para los perfiles que ven todo. "admin" es el valor heredado de
+// Base44 para lo mismo y se acepta como equivalente.
+export function areaDeRol(role) {
+  if (!role) return null;
+  if (esRolFlota(role)) return "taller";
+  if (role === ROLES.SUPER_ADMIN || role === ROLES.ADMIN || role === ROLES.MONITOR_CORPORATIVO) return "ambas";
+  return "salud";
+}
+
+/** ¿El área guardada contradice la que corresponde al rol? Vacía no cuenta:
+ *  sin área, todas las pantallas caen al rol, que es lo correcto. */
+export function areaDesalineada(usuario) {
+  const esperada = areaDeRol(usuario?.role);
+  const actual = usuario?.area === "admin" ? "ambas" : usuario?.area;
+  return !!(esperada && actual && actual !== esperada);
+}
 
 export function esRolSalud(role) {
   return SALUD_ROLES.includes(role);
@@ -118,87 +140,6 @@ export const QUIEN_CREA_A_QUIEN = {
 // máxima autoridad y solo se gestiona fuera del flujo de invitación de la app.
 export function rolesQuePuedeCrear(creadorRole) {
   return (QUIEN_CREA_A_QUIEN[creadorRole] || []).filter(r => r !== ROLES.SUPER_ADMIN);
-}
-
-export function puedeCrearRol(creadorRole, rolObjetivo) {
-  return rolesQuePuedeCrear(creadorRole).includes(rolObjetivo);
-}
-
-// ── Simular rol: exclusivo de Base del Sistema (super_admin) ────────────────
-export function puedeSimularRol(userRealRole) {
-  return userRealRole === ROLES.SUPER_ADMIN;
-}
-
-// ── Acceso a módulos (para navegación) ──────────────────────────────────────
-// modulo: "salud" | "taller" | "config" | "auditoria"
-export function puedeAccederModulo(role, modulo) {
-  if (esSuperAdmin(role)) return true;
-  if (modulo === "auditoria") return false; // solo Base del Sistema
-  if (esMonitorCorporativo(role)) return modulo === "salud" || modulo === "taller"; // solo lectura
-  if (modulo === "salud") return esRolSalud(role);
-  if (modulo === "taller") return esRolTaller(role);
-  if (modulo === "config") return role === ROLES.ADMIN; // config de Salud/app
-  return false;
-}
-
-// ── Alcance por centro (CESFAM + subsedes asignadas) ────────────────────────
-// Roles con visibilidad total sin importar centro:
-const SIN_RESTRICCION_DE_CENTRO = [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.MONITOR_CORPORATIVO];
-
-/**
- * ¿El usuario puede ver este registro de Salud (Equipo, Solicitud, Alerta, etc.)
- * según su centro_principal + subsedes_asignadas?
- * @param {object} user - usuario autenticado (con centro_principal, subsedes_asignadas)
- * @param {object} registro - objeto con centro_principal (y opcionalmente subsede)
- */
-export function estaEnAlcanceDeCentro(user, registro) {
-  if (!user || !registro) return false;
-  if (SIN_RESTRICCION_DE_CENTRO.includes(user.role)) return true;
-
-  const centroUsuario = user.centro_principal || user.centro_asignado;
-  if (!centroUsuario) return false;
-  if (registro.centro_principal && registro.centro_principal !== centroUsuario) return false;
-
-  // Si el registro tiene subsede, el usuario debe tenerla explícitamente asignada.
-  if (registro.subsede) {
-    const subsedes = user.subsedes_asignadas || [];
-    return subsedes.includes(registro.subsede);
-  }
-  // Sin subsede (registro asociado directamente al CESFAM principal): basta el centro.
-  return true;
-}
-
-const EQUIPOS_MEDICOS = ["dea", "monitor_desfibrilador", "monitor_multiparametros"];
-const VEHICULOS = ["ambulancia", "camioneta", "furgon", "camion_3_4"];
-
-/**
- * ¿El usuario puede ver este Equipo?
- * - Ambulancias: visibles para Salud (según centro) y también para Taller
- *   (Jefe de Taller / Mecánico / Encargado Compras Taller las necesitan para las OT).
- * - Equipos médicos (DEA, monitores): solo Salud, según alcance de centro. Taller no los ve.
- */
-export function puedeVerEquipo(user, equipo) {
-  if (!user || !equipo) return false;
-  if (esSuperAdmin(user.role) || user.role === ROLES.ADMIN || esMonitorCorporativo(user.role)) return true;
-
-  if (VEHICULOS.includes(equipo.tipo)) {
-    if (esRolTaller(user.role)) return true; // Taller necesita ver la flota para las OT
-    if (esRolSalud(user.role)) return estaEnAlcanceDeCentro(user, equipo);
-    return false;
-  }
-
-  // Equipos médicos: exclusivo de Salud
-  if (EQUIPOS_MEDICOS.includes(equipo.tipo)) {
-    if (!esRolSalud(user.role)) return false;
-    return estaEnAlcanceDeCentro(user, equipo);
-  }
-
-  return estaEnAlcanceDeCentro(user, equipo);
-}
-
-/** Filtra una lista de equipos según lo que el usuario puede ver. */
-export function filtrarEquiposVisibles(user, equipos = []) {
-  return equipos.filter((eq) => puedeVerEquipo(user, eq));
 }
 
 // ── Eliminación: quién puede borrar en cada módulo ──────────────────────────
