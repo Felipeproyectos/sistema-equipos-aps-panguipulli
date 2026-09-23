@@ -6,9 +6,10 @@ import usePullToRefresh from "@/hooks/usePullToRefresh";
 import UsuarioCard from "@/components/usuarios/UsuarioCard";
 import InviteUserModal from "@/components/usuarios/InviteUserModal";
 import DiagnosticoAcceso from "@/components/usuarios/DiagnosticoAcceso";
+import NormalizarUsuarios from "@/components/usuarios/NormalizarUsuarios";
 import { ROLES, esRolSalud, esRolFlota, esSuperAdmin, rolesQuePuedeCrear, roleLabel } from "@/lib/roles";
 import { useAuth } from "@/lib/AuthContext";
-import { getEffectiveNavRole } from "@/lib/roleSimulator";
+import { getEffectiveNavRole, isSimulandoActivo } from "@/lib/roleSimulator";
 
 function getCentros(u) {
   const arr = Array.isArray(u.centros_asignados) ? u.centros_asignados : [];
@@ -20,7 +21,7 @@ function getCentros(u) {
 function deriveArea(u) {
   if (u.area === "salud") return "salud";
   if (u.area === "taller") return "taller";
-  if (u.area === "admin") return "admin";
+  if (u.area === "admin" || u.area === "ambas") return "admin";
   if (esRolFlota(u.role)) return "taller";
   if (u.role === ROLES.ADMIN || esSuperAdmin(u.role) || u.role === ROLES.MONITOR_CORPORATIVO) return "admin";
   if (esRolSalud(u.role)) return "salud";
@@ -188,6 +189,13 @@ export default function Usuarios() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 lg:px-10 pt-4 lg:pt-6 pb-10">
+        {/* Cuentas que quedaron en la pestaña equivocada. Solo para quien
+            administra el acceso, y no mientras se simula otro rol: ahí las
+            escrituras están bloqueadas y el botón fallaría. */}
+        {puedeAdministrarAcceso && !isSimulandoActivo() && (
+          <NormalizarUsuarios usuarios={usuariosVisibles} onCompleto={fetchData} />
+        )}
+
         {/* Tabs de área */}
         {TABS.length > 1 && (
           <div className="grid gap-2 mb-4" style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0,1fr))` }}>

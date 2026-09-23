@@ -38,7 +38,13 @@ sys.path.insert(0, os.path.join(RAIZ, "migracion"))
 
 import generar_sql as g  # noqa: E402
 
-DESTINO = os.path.join(RAIZ, "src", "api", "columnasTipadas.js")
+# Dos copias identicas: el servidor se despliega en Railway solo con la
+# carpeta servidor/, asi que no puede importar nada de src/. Las dos salen de
+# aca y --verificar revisa las dos, para que no puedan quedar distintas.
+DESTINOS = [
+    os.path.join(RAIZ, "src", "api", "columnasTipadas.js"),
+    os.path.join(RAIZ, "servidor", "columnasTipadas.js"),
+]
 
 CABECERA = """// Generado por migracion/generar_columnas_tipadas.py. No editar a mano.
 //
@@ -47,8 +53,9 @@ CABECERA = """// Generado por migracion/generar_columnas_tipadas.py. No editar a
 // date"), que es lo que impedia crear un equipo: el formulario manda sus
 // fechas vacias como cadena vacia, no como nulo.
 //
-// clienteSupabase.js las usa para mandar NULL en esos casos. En las columnas
-// de texto `""` es un valor valido y se respeta.
+// src/api/clienteSupabase.js (navegador) y servidor/base44compat.js (Railway)
+// las usan para mandar NULL en esos casos. En las columnas de texto `""` es un
+// valor valido y se respeta.
 """
 
 
@@ -76,18 +83,24 @@ def main():
     verificar = "--verificar" in sys.argv
 
     if verificar:
-        actual = open(DESTINO, encoding="utf-8").read() if os.path.exists(DESTINO) else ""
-        if actual == texto:
-            print("src/api/columnasTipadas.js esta al dia.")
+        desfasados = []
+        for destino in DESTINOS:
+            actual = open(destino, encoding="utf-8").read() if os.path.exists(destino) else ""
+            if actual != texto:
+                desfasados.append(os.path.relpath(destino, RAIZ))
+        if not desfasados:
+            print("columnasTipadas.js (cliente y servidor) esta al dia.")
             return 0
-        print("!! src/api/columnasTipadas.js quedo desfasado de base44/entities/.")
+        for d in desfasados:
+            print(f"!! {d} quedo desfasado de base44/entities/.")
         print("   Volver a generarlo:  python migracion/generar_columnas_tipadas.py")
         return 1
 
-    open(DESTINO, "w", encoding="utf-8").write(texto)
     m = mapa()
-    print(f"src/api/columnasTipadas.js: {len(m)} tablas, "
-          f"{sum(len(v) for v in m.values())} columnas que no son texto")
+    for destino in DESTINOS:
+        open(destino, "w", encoding="utf-8").write(texto)
+        print(f"{os.path.relpath(destino, RAIZ)}: {len(m)} tablas, "
+              f"{sum(len(v) for v in m.values())} columnas que no son texto")
     return 0
 
 

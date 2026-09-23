@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { getCentrosEstructura } from "@/lib/centros";
 import { Shield, Wrench, Stethoscope, ChevronDown, ChevronUp } from "lucide-react";
-import { ROLES, roleLabel, esRolFlota, esSuperAdmin, esRolSalud, rolesQuePuedeCrear } from "@/lib/roles";
+import { ROLES, roleLabel, esRolFlota, esSuperAdmin, esRolSalud, rolesQuePuedeCrear, areaDeRol, areaDesalineada } from "@/lib/roles";
 
 const ROLE_COLORS = {
   [ROLES.SUPER_ADMIN]: "#7c3aed",
@@ -91,10 +91,16 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
         });
       }
 
+      // Si cambia el rol, el área guardada tiene que seguirlo: la pantalla de
+      // Usuarios mira el área antes que el rol, y un encargado de salud que
+      // pasaba a chofer se quedaba en la pestaña Salud. Sin área guardada no
+      // se toca — ahí ya manda el rol.
+      const corregirArea = usuario.area && (rol !== usuario.role || areaDesalineada(usuario));
       const update = {
         role: rol,
         centro_principal: esRolSalud(rol) ? centroPrincipal : "",
         subsedes_asignadas: esRolSalud(rol) ? subsedes : [],
+        ...(corregirArea ? { area: areaDeRol(rol) } : {}),
       };
       await base44.entities.User.update(usuario.id, update);
       onUpdated?.(usuario.id, {
