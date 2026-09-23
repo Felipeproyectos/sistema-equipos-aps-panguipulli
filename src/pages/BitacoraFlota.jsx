@@ -10,6 +10,7 @@ import {
   kmRecorridos, resumen, porVehiculo, porChofer, estadoSalida, etiquetaPrestamo,
 } from "@/lib/bitacoraFlota";
 import SalidaModal from "@/components/flota/SalidaModal";
+import AyudaPantalla from "@/components/flota/AyudaPantalla";
 
 // La bitácora de operación de la flota, para el Encargado de Movilización.
 //
@@ -172,6 +173,12 @@ export default function BitacoraFlota() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 lg:px-10 pt-5 pb-10 space-y-5">
+        <AyudaPantalla clave="bitacora">
+          Cada salida de un vehículo: quién, a dónde, con cuántos kilómetros y cuánto combustible.
+          La registra el chofer desde <em>Mi bitácora</em> en su teléfono; si no alcanza, puedes
+          hacerlo tú con <strong>Registrar salida</strong>. Las que quedaron <em>sin cerrar</em> son vehículos
+          que salieron y no consta que hayan vuelto.
+        </AyudaPantalla>
         {/* Un vehículo que salió y no consta que haya vuelto. No se cierra
             solo por la hora: eso sería inventar el regreso. */}
         {abiertas.length > 0 && (

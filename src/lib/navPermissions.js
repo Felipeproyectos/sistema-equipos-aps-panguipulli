@@ -13,7 +13,13 @@ export const NAV_ITEMS = [
   { label: "Dashboard", page: "Dashboard", path: "/", icon: LayoutDashboard,
     roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.ENCARGADO_SALUD, ROLES.ENCARGADO_COMPRAS_SALUD, ROLES.USER] },
 
-  { label: "Movilización", page: "Movilizacion", path: "/Movilizacion", icon: Route,
+  // La primera pantalla de Movilización: lo de hoy y cómo funciona el resto.
+  { label: "Panel de Flota", page: "PanelFlota", path: "/PanelFlota", icon: LayoutDashboard,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ENCARGADO_MOVILIZACION] },
+
+  // Se llamaba "Movilización", que es el nombre del área y no dice qué se hace
+  // ahí: es la bandeja de fallas que informa Salud y que se derivan al taller.
+  { label: "Solicitudes al Taller", page: "Movilizacion", path: "/Movilizacion", icon: Route,
     roles: [ROLES.SUPER_ADMIN, ROLES.ENCARGADO_MOVILIZACION] },
 
   { label: "Vehículos", page: "Flota", path: "/Flota", icon: Truck,
@@ -101,7 +107,9 @@ const ROLE_ORDER = {
   // Su pantalla principal es el Monitor; en el orden general quedaba despues
   // de Reportes, y ese orden decide tambien a donde se lo manda de vuelta.
   [ROLES.MONITOR_CORPORATIVO]: ["MonitorCorporativo"],
-  [ROLES.ENCARGADO_MOVILIZACION]: ["Movilizacion", "Flota", "Calendario", "Choferes", "BitacoraFlota"],
+  // En el orden en que se usa: lo de hoy, programar, la flota, los choferes,
+  // la bitácora, y al final la bandeja del taller.
+  [ROLES.ENCARGADO_MOVILIZACION]: ["PanelFlota", "Calendario", "Flota", "Choferes", "BitacoraFlota", "Movilizacion"],
   // "Mi licencia" primero a proposito: es el tramite que lo habilita, y es
   // ademas a donde se lo manda cuando llega a una pantalla que no es suya.
   [ROLES.CHOFER]: ["MiLicencia", "MiBitacora"],

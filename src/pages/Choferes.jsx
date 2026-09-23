@@ -6,6 +6,7 @@ import InviteUserModal from "@/components/usuarios/InviteUserModal";
 import { useAuth } from "@/lib/AuthContext";
 import { isSimulandoActivo } from "@/lib/roleSimulator";
 import { ROLES } from "@/lib/roles";
+import AyudaPantalla from "@/components/flota/AyudaPantalla";
 
 // Los choferes de la flota, para el Encargado de Movilización.
 //
@@ -131,6 +132,11 @@ export default function Choferes() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 lg:px-10 pt-5 pb-10">
+        <AyudaPantalla clave="choferes">
+          Las cuentas de los choferes y el estado de su licencia. Con <strong>Nuevo chofer</strong> creas
+          la cuenta y te da una clave para entregarle; al entrar por primera vez, el chofer carga
+          su licencia. Sin licencia vigente no se le puede asignar un vehículo.
+        </AyudaPantalla>
         {porAtender > 0 && (
           <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 mb-5">
             <AlertTriangle className="w-5 h-5 text-amber-700 mt-0.5 shrink-0" />

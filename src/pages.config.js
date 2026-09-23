@@ -54,6 +54,7 @@ import Configuracion from './pages/Configuracion';
 import Dashboard from './pages/Dashboard';
 import Equipos2 from './pages/Equipos2';
 import Movilizacion from './pages/Movilizacion';
+import PanelFlota from './pages/PanelFlota';
 import Flota from './pages/Flota';
 import Choferes from './pages/Choferes';
 import Calendario from './pages/Calendario';
@@ -75,6 +76,7 @@ export const PAGES = {
     "Dashboard": Dashboard,
     "Equipos2": Equipos2,
     "Movilizacion": Movilizacion,
+    "PanelFlota": PanelFlota,
     "Flota": Flota,
     "Choferes": Choferes,
     "Calendario": Calendario,
