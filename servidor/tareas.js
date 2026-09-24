@@ -17,6 +17,9 @@ const TAREAS = [
   { nombre: 'generarAlertasAutomaticas', horario: '0 3 * * *', descripcion: 'alertas de vencimiento' },
   // Repuestos bajo el minimo. Estaba escrita y sin llamador desde siempre.
   { nombre: 'verificarStockRepuestos', horario: '0 7 * * *', descripcion: 'stock bajo de repuestos' },
+  // A cada persona, lo que la espera en el sistema. Días hábiles, antes de que
+  // empiece el turno. Se apaga con RESUMEN_DIARIO=off.
+  { nombre: 'resumenDiarioPendientes', horario: '0 8 * * 1-5', descripcion: 'resumen de pendientes por correo' },
 ];
 
 async function ejecutar({ nombre, descripcion }) {

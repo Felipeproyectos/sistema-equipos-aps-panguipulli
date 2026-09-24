@@ -71,8 +71,21 @@ Lo que en Base44 disparaba la plataforma, aca corre en este mismo proceso.
 |---|---|
 | 03:00 diario | `generarAlertasAutomaticas` — vencimientos de parches y baterias |
 | 07:00 diario | `verificarStockRepuestos` — repuestos bajo el minimo |
+| 08:00 lunes a viernes | `resumenDiarioPendientes` — a cada persona, lo que la espera (solo si hay algo). Se apaga con `RESUMEN_DIARIO=off` |
 
 Necesitan `CRON_SECRET`. Sin esa variable quedan apagadas y el arranque lo avisa.
+Las que mandan correo necesitan además `RESEND_API_KEY` y `EMAIL_FROM`. El
+enlace del resumen diario usa `APP_URL` (o, si no está, la primera dirección de
+`CORS_ORIGIN`).
+
+El resumen diario cuenta con las mismas reglas que el número del menú. Esas
+reglas viven en `src/lib/` y se copian a `servidor/compartido/` (Railway solo
+despliega esta carpeta):
+
+```bash
+python migracion/sincronizar_compartido.py              # copiar
+python migracion/sincronizar_compartido.py --verificar  # revisar que esten iguales
+```
 Para dispararlas a mano sin esperar al horario:
 
 ```bash
