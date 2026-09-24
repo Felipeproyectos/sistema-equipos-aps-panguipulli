@@ -15,6 +15,9 @@ import usePullToRefresh from "@/hooks/usePullToRefresh";
 import TallerDashboard from "@/pages/TallerDashboard";
 import { useAuth } from "@/lib/AuthContext";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
+import { getNavItemsForRole } from "@/lib/navPermissions";
+import { avisosSalud } from "@/lib/paraHoy";
+import ParaHoy from "@/components/ParaHoy";
 
 const TIPO_ACT_LABEL = {
   mantenimiento_preventivo: "Mantenimiento Preventivo",
@@ -55,6 +58,8 @@ export default function Dashboard() {
   const [actividades, setActividades] = useState([]);
   const [alertas, setAlertas] = useState([]);
   const [bitacorasPendientes, setBitacorasPendientes] = useState([]);
+  // Las órdenes del taller, para avisar qué vehículo no va a estar disponible.
+  const [ordenes, setOrdenes] = useState([]);
   const [loading, setLoading] = useState(true);
   const containerRef = useRef(null);
 
@@ -78,12 +83,14 @@ export default function Dashboard() {
       setActividades(a);
       return;
     }
-    const [eq, a, sols, alts, insps] = await Promise.all([
+    const [eq, a, sols, alts, insps, ots] = await Promise.all([
       equiposRes, acts,
       base44.entities.Solicitud.list('-fecha', 200).catch(() => []),
       base44.entities.Alerta.filter({ estado: 'activa' }, '-created_date', 500).catch(() => []),
       base44.entities.InspeccionPendiente.filter({ estado: 'pendiente' }, '-created_date', 500).catch(() => []),
+      base44.entities.OrdenTrabajo.list('-created_date', 300).catch(() => []),
     ]);
+    setOrdenes(ots);
     setEquipos(eq.equipos || []);
     setActividades(a);
     setParches(eq.parches || []);
@@ -128,6 +135,12 @@ export default function Dashboard() {
   // Total notificaciones prioritarias
   const totalNotif = alertas.length + bitacorasPendientes.length + vencidos.length;
 
+  // Lo primero que se ve: qué hay que hacer hoy (src/lib/paraHoy.js).
+  const avisos = avisosSalud({
+    equipos, parches, alertas, inspecciones: bitacorasPendientes, solicitudes, ordenes,
+    paginas: new Set(getNavItemsForRole(effectiveRole).map(i => i.page)),
+  });
+
   return (
     <div ref={containerRef} className="min-h-screen" style={{ background: "#e8f4fd", overscrollBehavior: "none" }}>
       {loading && (
@@ -167,6 +180,12 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {!loading && (
+        <div className="max-w-6xl mx-auto px-4 lg:px-10 pt-4 lg:pt-6">
+          <ParaHoy avisos={avisos} />
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="max-w-6xl mx-auto px-4 lg:px-10 pt-4 lg:pt-6 mb-4 lg:mb-6">
