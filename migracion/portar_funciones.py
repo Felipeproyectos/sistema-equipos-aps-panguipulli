@@ -50,7 +50,19 @@ def portar(codigo):
 # lista el barrido de mas abajo las borraba por "ya no existen en origen":
 # gestionarAcceso reemplaza a base44.users.inviteUser, que la migracion dejo sin
 # equivalente, asi que nunca va a existir un entry.ts del que salga.
-NATIVAS = ["gestionarAcceso"]
+NATIVAS = ["gestionarAcceso", "borrarDatosDePrueba", "resumenDiarioPendientes"]
+
+# Funciones que vienen de Base44 pero que despues se corrigieron directo en
+# servidor/funciones/ (Movilizacion, choferes, licencias, la flota en el
+# Monitor). Su entry.ts quedo atras: portarlas de nuevo borraria esas
+# correcciones sin aviso. Se dejan como estan y se avisa; si hay que cambiarlas,
+# se cambia el .js del servidor, que es hoy la version de verdad.
+EDITADAS_EN_SERVIDOR = [
+    "generarAlertasAutomaticas",
+    "getEquiposPorCentro",
+    "getMonitorData",
+    "getUsuariosPorCentro",
+]
 
 
 def main():
@@ -58,6 +70,10 @@ def main():
     nombres = []
     for ruta in sorted(glob.glob(os.path.join(ORIGEN, "*", "entry.ts"))):
         nombre = os.path.basename(os.path.dirname(ruta))
+        if nombre in EDITADAS_EN_SERVIDOR and os.path.exists(os.path.join(DESTINO, nombre + ".js")):
+            nombres.append(nombre)
+            print(f"  == {nombre} (editada en el servidor: no se sobrescribe)")
+            continue
         try:
             salida = portar(open(ruta, encoding="utf-8").read())
         except ValueError as e:

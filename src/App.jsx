@@ -134,6 +134,11 @@ const AuthenticatedApp = () => {
       <Route path="/SolicitudRepuestos" element={<LayoutWrapper currentPageName="SolicitudRepuestos"><PageWrapper><SolicitudRepuestos /></PageWrapper></LayoutWrapper>} />
       <Route path="/ComprasTablero" element={<LayoutWrapper currentPageName="ComprasTablero"><PageWrapper><ComprasTablero /></PageWrapper></LayoutWrapper>} />
       <Route path="/ComprasSaludTablero" element={<LayoutWrapper currentPageName="ComprasSaludTablero"><PageWrapper><ComprasSaludTablero /></PageWrapper></LayoutWrapper>} />
+      {/* Las pantallas viejas de Base44, reemplazadas por las V2. Quien tenga
+          guardado el enlace llega a la que se usa hoy, no a una copia sin
+          mantener. */}
+      <Route path="/Alertas" element={<Navigate to="/AlertasV2" replace />} />
+      <Route path="/Solicitudes" element={<Navigate to="/SolicitudesV2" replace />} />
       <Route path="*" element={<PageNotFound />} />
     </AnimatedRoutes>
   );

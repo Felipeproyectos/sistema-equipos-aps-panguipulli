@@ -2,6 +2,7 @@
 
 import aprobarInspeccion from './aprobarInspeccion.js';
 import aprobarSolicitudRepuesto from './aprobarSolicitudRepuesto.js';
+import borrarDatosDePrueba from './borrarDatosDePrueba.js';
 import enviarAlertasCESFAM from './enviarAlertasCESFAM.js';
 import enviarCorreo from './enviarCorreo.js';
 import exportarBackup from './exportarBackup.js';
@@ -24,6 +25,7 @@ import verificarStockRepuestos from './verificarStockRepuestos.js';
 export const handlers = {
   aprobarInspeccion,
   aprobarSolicitudRepuesto,
+  borrarDatosDePrueba,
   enviarAlertasCESFAM,
   enviarCorreo,
   exportarBackup,

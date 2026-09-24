@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Upload, Loader2, Save, Settings, Users, Shield, Mail, UserPlus, Trash2, Edit2, X, Check, AlertTriangle, Car, ExternalLink, Copy, CheckCircle, Download, Building2 } from "lucide-react";
 import GestionSedes from "@/components/configuracion/GestionSedes";
 import BackupSection from "@/components/configuracion/BackupSection";
+import DatosDePruebaSection from "@/components/configuracion/DatosDePruebaSection";
 import { QRCodeSVG } from "qrcode.react";
 import { useAuth } from "@/lib/AuthContext";
 import { esAdministrador, roleLabel } from "@/lib/roles";
@@ -312,6 +313,9 @@ export default function Configuracion() {
 
         {/* Copia de Seguridad */}
         <BackupSection />
+
+        {/* Datos de prueba (migraciones 19 y 22) */}
+        <DatosDePruebaSection />
 
         {/* Enlace Bitácora Pública */}
         <BitacoraPublicaLink />

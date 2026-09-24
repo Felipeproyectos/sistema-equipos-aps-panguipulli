@@ -6,6 +6,7 @@ import { TIPOS_VEHICULO, TIPOS_VEHICULO_CORPORATIVO, ESTADOS_EQUIPO, TIPOS_EQUIP
 import EquipoCard from "@/components/equipos2/EquipoCard";
 import EquipoFormModal from "@/components/equipos2/EquipoFormModal";
 import EquipoDetalleModal from "@/components/equipos2/EquipoDetalleModal";
+import useAbrirFichaDesdeEnlace from "@/hooks/useAbrirFichaDesdeEnlace";
 import { useAuth } from "@/lib/AuthContext";
 import { isSimulandoActivo } from "@/lib/roleSimulator";
 import AsignarChoferModal from "@/components/flota/AsignarChoferModal";
@@ -57,6 +58,8 @@ export default function Flota() {
   const [showForm, setShowForm] = useState(false);
   const [equipoEditar, setEquipoEditar] = useState(null);
   const [equipoDetalle, setEquipoDetalle] = useState(null);
+  // El buscador del menú llega con ?abrir=<id>.
+  useAbrirFichaDesdeEnlace(equipos, setEquipoDetalle);
   const containerRef = useRef(null);
 
   const soloLectura = isSimulandoActivo();
