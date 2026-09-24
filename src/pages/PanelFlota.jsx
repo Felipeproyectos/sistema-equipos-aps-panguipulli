@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import {
   LayoutDashboard, RefreshCw, Truck, IdCard, CalendarDays, NotebookPen, Wrench,
   AlertTriangle, CheckCircle2, ArrowRight, ArrowLeftRight, UserX, Clock, Stethoscope,
-  Route, ChevronRight, Printer, HeartPulse,
+  Route, ChevronRight, Printer, HeartPulse, CalendarClock,
 } from "lucide-react";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { createPageUrl } from "@/utils";
@@ -97,6 +97,12 @@ export default function PanelFlota() {
       titulo: `${plural(r.manejandoSinLicencia.length, "chofer tiene", "choferes tienen")} un vehículo hoy con la licencia vencida`,
       detalle: nombres(r.manejandoSinLicencia, rotuloChofer),
       accion: "Cambiar el chofer", pagina: "Calendario",
+    },
+    r.citasPorResponder.length > 0 && {
+      tono: "azul", icono: CalendarClock,
+      titulo: `El taller propone fecha de ingreso para ${plural(r.citasPorResponder.length, "vehículo", "vehículos")}`,
+      detalle: nombres(r.citasPorResponder, o => o.equipo_label || o.numero_ot),
+      accion: "Responder", pagina: "Movilizacion",
     },
     r.porRevisar.length > 0 && {
       tono: "ambar", icono: Stethoscope,
@@ -313,6 +319,8 @@ export default function PanelFlota() {
                 <p className="text-sm text-slate-500 mt-0.5">
                   Salud lo informa desde la ficha del equipo y te llega a <strong>Solicitudes al Taller</strong>.
                   Tú decides: lo derivas al taller (se crea la orden de trabajo) o lo cierras sin reparación.
+                  También puedes pedir una revisión tú mismo. El Jefe de Taller te propone día y hora de
+                  ingreso; tú la confirmas o pides otra, y esos días quedan marcados en el Calendario.
                 </p>
                 <p className="text-xs font-semibold mt-1.5 text-slate-600">
                   {r.porRevisar.length ? `${plural(r.porRevisar.length, "por revisar", "por revisar")}` : "Nada por revisar"}

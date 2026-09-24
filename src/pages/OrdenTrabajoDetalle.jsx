@@ -15,6 +15,7 @@ import LineaTiempo from "@/components/taller/LineaTiempo";
 import RepuestosUtilizados from "@/components/taller/RepuestosUtilizados";
 import ComentariosOT from "@/components/taller/ComentariosOT";
 import ReporteAvance from "@/components/taller/ReporteAvance";
+import AgendaMovilizacion from "@/components/taller/AgendaMovilizacion";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { isSimulandoActivo, getEffectiveNavRole, MENSAJE_BLOQUEO_SIMULACION } from "@/lib/roleSimulator";
@@ -344,7 +345,7 @@ export default function OrdenTrabajoDetalle() {
               <p className="text-sm text-slate-600 whitespace-pre-wrap">{ot.problema_reportado || "Sin descripción"}</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-slate-400">
                 {ot.reportado_por_nombre && <span>Reportado por: <b className="text-slate-600">{ot.reportado_por_nombre}</b></span>}
-                {ot.origen && <span>Origen: <b className="text-slate-600 capitalize">{ot.origen.replace(/_/g, " ")}</b></span>}
+                {ot.origen && <span>Origen: <b className="text-slate-600 capitalize">{ot.origen === "movilizacion" ? "Movilización" : ot.origen === "inspeccion" ? "Inspección" : ot.origen === "bitacora" ? "Bitácora" : ot.origen.replace(/_/g, " ")}</b></span>}
                 <span>Creada: <b className="text-slate-600">{fmtFecha(ot.created_date)}</b></span>
               </div>
             </div>
@@ -402,6 +403,10 @@ export default function OrdenTrabajoDetalle() {
 
           {/* Columna lateral */}
           <div className="space-y-4">
+            {/* Cuándo entra el vehículo, acordado con Movilización. */}
+            <AgendaMovilizacion ot={ot} puedeProponer={esJefe} user={user}
+              onGuardado={(update) => setOt(o => ({ ...o, ...update }))} />
+
             {/* Asignación mecánico — solo el Jefe de Taller la gestiona.
                 Cuando ya hay un mecánico asignado se muestra un resumen simple
                 en lugar del formulario editable. */}

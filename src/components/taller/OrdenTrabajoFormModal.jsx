@@ -86,6 +86,10 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
     setError("");
   }, [editando, open, equipos, semilla]);
 
+  // Un pedido de Movilización lleva además desde cuándo puede soltar el
+  // vehículo: con eso el Jefe de Taller propone la fecha de ingreso.
+  const pedidoDeMovilizacion = !editando && form.origen === "movilizacion";
+
   const categoria = CATEGORIAS.find(c => c.value === form.tipo_activo) || CATEGORIAS[0];
   const esExterno = form.tipo_activo === "externo";
 
@@ -175,6 +179,7 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
         });
       } else {
         base.estado = "pendiente";
+        if (pedidoDeMovilizacion) base.cita_estado = "por_agendar";
         base.linea_tiempo = [{
           fecha: new Date().toISOString(),
           evento: "Orden de trabajo creada",
@@ -198,7 +203,7 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
         <div className="sticky top-0 bg-white px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <h2 className="font-bold text-slate-800 flex items-center gap-2">
             <Wrench className="w-5 h-5 text-blue-600" />
-            {editando ? `Editar ${editando.numero_ot}` : "Nueva Orden de Trabajo"}
+            {editando ? `Editar ${editando.numero_ot}` : pedidoDeMovilizacion ? "Pedir revisión al taller" : "Nueva Orden de Trabajo"}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
         </div>
@@ -300,6 +305,21 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
               className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm resize-none" />
           </div>
 
+          {pedidoDeMovilizacion && (
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                ¿Desde qué día puedes llevarlo al taller?
+              </label>
+              <input type="date" value={form.fecha_preferida || ""}
+                min={new Date().toISOString().split("T")[0]}
+                onChange={e => setForm(f => ({ ...f, fecha_preferida: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm" />
+              <p className="text-[11px] text-slate-400 mt-1.5">
+                El Jefe de Taller te va a proponer día y hora de ingreso a partir de esa fecha. Tú la confirmas o pides otra.
+              </p>
+            </div>
+          )}
+
           {/* Diagnóstico (solo editar) */}
           {editando && (
             <div>
@@ -320,7 +340,7 @@ export default function OrdenTrabajoFormModal({ open, onClose, onGuardar, equipo
           <button onClick={handleSubmit} disabled={saving}
             className="flex-1 py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50"
             style={{ background: "#2563EB" }}>
-            {saving ? "Guardando..." : (editando ? "Guardar Cambios" : "Crear Orden")}
+            {saving ? "Guardando..." : (editando ? "Guardar Cambios" : pedidoDeMovilizacion ? "Enviar al taller" : "Crear Orden")}
           </button>
         </div>
       </div>

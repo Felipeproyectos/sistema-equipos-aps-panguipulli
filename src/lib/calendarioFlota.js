@@ -5,6 +5,7 @@
 // (migracion/17_calendario.sql). Acá sirve para avisar antes de guardar; la
 // regla de verdad es la de allá, porque una validación que solo está en el
 // navegador se salta recargando.
+import { tramoDeCita } from "./agendaTaller.js";
 
 export const TURNOS = [
   { value: "completo", label: "Todo el día" },
@@ -56,18 +57,32 @@ const soloFecha = (v) => (typeof v === "string" ? v.split("T")[0] : "");
 
 /** Convierte las órdenes de trabajo en bandas de "este vehículo está en el
  *  taller entre tal y tal". Sin fecha de término la banda queda abierta:
- *  una reparación sin cerrar sigue ocupando el vehículo. */
+ *  una reparación sin cerrar sigue ocupando el vehículo.
+ *
+ *  Una orden que todavía no empieza pero tiene cita con Movilización (ver
+ *  agendaTaller.js) ocupa el vehículo del ingreso a la entrega estimada,
+ *  aunque siga `pendiente`: así el calendario muestra con días de
+ *  anticipación que ese vehículo no va a estar. */
 export function periodosEnTaller(ordenes) {
   return ordenes
-    .filter(o => ESTADOS_EN_TALLER.includes(o.estado))
-    .map(o => ({
-      equipo_id: o.equipo_id,
-      numero_ot: o.numero_ot,
-      estado: o.estado,
-      desde: soloFecha(o.fecha_inicio) || soloFecha(o.fecha_asignacion) || soloFecha(o.created_date),
-      hasta: soloFecha(o.fecha_fin) || null,
-    }))
-    .filter(p => p.desde && p.equipo_id);
+    .map(o => {
+      const cita = tramoDeCita(o);
+      if (cita) {
+        return {
+          equipo_id: o.equipo_id, numero_ot: o.numero_ot, estado: o.estado,
+          desde: cita.desde, hasta: cita.hasta, cita: true, porConfirmar: cita.porConfirmar,
+        };
+      }
+      if (!ESTADOS_EN_TALLER.includes(o.estado)) return null;
+      return {
+        equipo_id: o.equipo_id,
+        numero_ot: o.numero_ot,
+        estado: o.estado,
+        desde: soloFecha(o.fecha_inicio) || soloFecha(o.fecha_asignacion) || soloFecha(o.created_date),
+        hasta: soloFecha(o.fecha_fin) || null,
+      };
+    })
+    .filter(p => p && p.desde && p.equipo_id);
 }
 
 /** Las asignaciones que caen encima de un paso por el taller. No impide
@@ -256,6 +271,17 @@ export function _selfCheck() {
   ]);
   debe(choquesConTaller(asigs, tallerCerrado).length === 1,
     "con fecha de cierre solo choca la asignacion que lo cruza");
+
+  // Una cita con Movilizacion ocupa el vehiculo antes de que la orden empiece.
+  const conCita = periodosEnTaller([
+    { equipo_id: "e1", numero_ot: "OT-C", estado: "pendiente", origen: "movilizacion",
+      cita_estado: "confirmada", cita_fecha: "2026-09-08T09:00:00", cita_entrega: "2026-09-09" },
+    { equipo_id: "e1", numero_ot: "OT-R", estado: "pendiente", origen: "movilizacion",
+      cita_estado: "reagendar", cita_fecha: "2026-09-02T09:00:00" },
+  ]);
+  debe(conCita.length === 1 && conCita[0].cita, "solo la cita vigente ocupa el vehiculo");
+  debe(conCita[0].desde === "2026-09-08" && conCita[0].hasta === "2026-09-09", "del ingreso a la entrega");
+  debe(choquesConTaller(asigs, conCita).length === 1, "y avisa si alguien tenia ese vehiculo esos dias");
 
   // ── Semanas, rangos y tramos ───────────────────────────────────────
   // El 2026-09-21 es lunes; el 2026-09-27, domingo.

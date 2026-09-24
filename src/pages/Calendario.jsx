@@ -356,8 +356,9 @@ export default function Calendario() {
                   // la siguiente, es una sola franja con su nombre, no dos.
                   const rotulo = ({ asigs, prestamo, enTaller, conChoque }) => {
                     if (enTaller) {
-                      const t = enTaller.numero_ot || "En taller";
-                      return { clave: `t:${t}`, texto: t, corto: "Taller", tipo: "taller" };
+                      const n = enTaller.numero_ot || "En taller";
+                      const t = enTaller.cita ? `Cita taller ${n}${enTaller.porConfirmar ? " (por confirmar)" : ""}` : n;
+                      return { clave: `t:${t}`, texto: t, corto: enTaller.porConfirmar ? "Taller?" : "Taller", tipo: "taller" };
                     }
                     if (asigs.length) {
                       const turno = (a) => (ABREV_TURNO[a.turno] ? ` (${ABREV_TURNO[a.turno]})` : "");

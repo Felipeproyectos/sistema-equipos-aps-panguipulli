@@ -54,11 +54,21 @@ export default function DiaFlotaModal({
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
               <p className="text-sm text-red-900 flex items-start gap-2">
                 <Wrench className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>
-                  En el taller por <strong>{taller.numero_ot}</strong> desde el {corta(taller.desde)}
-                  {taller.hasta ? `, hasta el ${corta(taller.hasta)}` : ", sin fecha de salida todavía"}.
-                  {" "}Se puede programar igual, pero conviene saberlo.
-                </span>
+                {taller.cita ? (
+                  <span>
+                    {taller.porConfirmar ? "El taller propone recibirlo" : "Tiene cita en el taller"} por{" "}
+                    <strong>{taller.numero_ot}</strong> del {corta(taller.desde)} al {corta(taller.hasta)}.
+                    {" "}{taller.porConfirmar
+                      ? "Respóndela en Solicitudes al Taller."
+                      : "Se puede programar igual, pero conviene saberlo."}
+                  </span>
+                ) : (
+                  <span>
+                    En el taller por <strong>{taller.numero_ot}</strong> desde el {corta(taller.desde)}
+                    {taller.hasta ? `, hasta el ${corta(taller.hasta)}` : ", sin fecha de salida todavía"}.
+                    {" "}Se puede programar igual, pero conviene saberlo.
+                  </span>
+                )}
               </p>
             </div>
           )}

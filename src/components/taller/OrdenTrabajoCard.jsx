@@ -7,6 +7,7 @@ import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { etiquetaEquipo } from "@/utils/etiquetaEquipo";
 import { CATEGORIAS_ACTIVO_TALLER, normalizarTipoActivo } from "@/lib/centros";
+import { CITA, estadoCita, estaAbierta, textoCita } from "@/lib/agendaTaller";
 
 const ESTADO_CFG = {
   pendiente: { label: "Pendiente", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A" },
@@ -73,6 +74,18 @@ export default function OrdenTrabajoCard({ ot, onActualizar, onEditar, puedeCerr
                 const cat = CATEGORIAS_ACTIVO_TALLER.find(c => c.value === normalizarTipoActivo(ot.tipo_activo)) || CATEGORIAS_ACTIVO_TALLER[0];
                 return (
                   <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: cat.bg, color: cat.color }}>{cat.label}</span>
+                );
+              })()}
+              {(() => {
+                // La agenda con Movilización, mientras el vehículo no llega.
+                const cita = estaAbierta(ot) && !ot.fecha_inicio ? estadoCita(ot) : null;
+                if (!cita) return null;
+                const cfg = CITA[cita];
+                const cuando = (cita === "propuesta" || cita === "confirmada") && ot.cita_fecha ? ` · ${textoCita(ot.cita_fecha)}` : "";
+                return (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full border" style={{ background: cfg.fondo, color: cfg.color, borderColor: cfg.borde }}>
+                    {cfg.corto}{cuando}
+                  </span>
                 );
               })()}
             </div>
