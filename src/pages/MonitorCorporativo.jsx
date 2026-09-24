@@ -4,7 +4,7 @@ import {
   Monitor, AlertTriangle, ClipboardCheck, ClipboardList, Activity,
   Wrench, Package, CheckCircle2, TrendingUp, BarChart3,
   ShieldCheck, RefreshCw, Heart, Stethoscope, ShoppingCart,
-  Car, Search, Hash, MapPin, Eye, Truck, UserX, IdCard, ArrowLeftRight, Gauge
+  Car, Search, Hash, MapPin, Eye, Truck, UserX, IdCard, ArrowLeftRight, Gauge, CalendarClock
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar,
@@ -21,6 +21,9 @@ import { getNavItemsForRole } from "@/lib/navPermissions";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import ComentariosEquipo from "@/components/monitor/ComentariosEquipo";
 import FlotaSemanaMini from "@/components/monitor/FlotaSemanaMini";
+import CoordinacionTaller from "@/components/monitor/CoordinacionTaller";
+import { resumenCoordinacion } from "@/lib/agendaTaller";
+import { esSolicitudDeFlota } from "@/lib/panelFlota";
 import SeguimientoCompraModal from "@/components/taller/SeguimientoCompraModal";
 import { MessageCircle } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
@@ -260,6 +263,17 @@ export default function MonitorCorporativo() {
       resumenMes, salidasSinCerrar, estadoFlotaData,
     };
   }, [equipos, ordenes, asignaciones, prestamos, choferes, bitacoraFlota]);
+
+  // ── Coordinación Movilización ↔ Taller ──────────────────────────────────
+  // Quién tiene que moverse en cada pedido de Movilización al Taller. Las
+  // solicitudes que llegan acá ya son solo las pendientes (getMonitorData).
+  const coordinacion = useMemo(() => {
+    const porId = new Map(equipos.map(e => [e.id, e]));
+    return {
+      resumen: resumenCoordinacion(ordenes),
+      porRevisar: solicitudes.filter(s => esSolicitudDeFlota(s, porId.get(s.equipo_id))).length,
+    };
+  }, [ordenes, solicitudes, equipos]);
 
   const {
     vehiculos: vehiculosFlota, tallerFlota, conChoferHoy, sinChoferHoy,
@@ -605,6 +619,18 @@ export default function MonitorCorporativo() {
               Vista de solo lectura. La programación la administra Movilización.
             </p>
           </div>
+        </SeccionArea>
+
+        {/* ===== COORDINACIÓN MOVILIZACIÓN ↔ TALLER ===== */}
+        <SeccionArea
+          titulo="Coordinación Movilización ↔ Taller"
+          subtitulo="Pedidos al taller, fechas de ingreso y quién debe responder · Solo lectura"
+          icon={CalendarClock} color="#1d4ed8" bg="#eff6ff">
+          <CoordinacionTaller
+            resumen={coordinacion.resumen}
+            porRevisar={coordinacion.porRevisar}
+            verDetalle={paginasAlcanzables.has("Taller") || paginasAlcanzables.has("OrdenesTrabajo")}
+          />
         </SeccionArea>
 
         {/* ===== ÁREA TALLER ===== */}

@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { esSolicitudDeFlota } from "@/lib/panelFlota";
 import { rangosSeTocan } from "@/lib/calendarioFlota";
 import {
-  CITA, estadoCita, esperaRespuesta, estaAbierta, tramoDeCita, eventoDeAgenda,
+  CITA, EVENTO, estadoCita, esperaRespuesta, estaAbierta, tramoDeCita, eventoDeAgenda,
   textoCita, casosDeMovilizacion, pesoDelCaso,
 } from "@/lib/agendaTaller";
 import { esVehiculo } from "@/lib/centros";
@@ -201,7 +201,7 @@ export default function Movilizacion() {
   };
 
   const confirmar = (ot) => responder(ot, { cita_estado: "confirmada" },
-    "Movilización confirma la fecha de ingreso", textoCita(ot.cita_fecha));
+    EVENTO.confirma, textoCita(ot.cita_fecha));
 
   const pedirOtraFecha = () => {
     const { ot, motivo, desde } = pidiendoOtra;
@@ -211,7 +211,7 @@ export default function Movilizacion() {
     }
     const nota = [motivo.trim(), desde ? `Puedo llevarlo desde el ${textoCita(desde, false)}.` : ""].filter(Boolean).join(" ");
     responder(ot, { cita_estado: "reagendar", cita_nota: nota, ...(desde ? { fecha_preferida: desde } : {}) },
-      "Movilización pide otra fecha", nota);
+      EVENTO.pideOtra, nota);
   };
 
   const cerrarSolicitud = async (s, texto) => {

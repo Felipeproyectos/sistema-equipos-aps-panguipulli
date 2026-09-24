@@ -62,6 +62,15 @@ export function tramoDeCita(ot) {
   return { desde, hasta: entrega && entrega >= desde ? entrega : desde, porConfirmar: c === "propuesta" };
 }
 
+// Los nombres de los eventos de la agenda en la línea de tiempo. El Monitor
+// los lee para medir cuánto tarda cada lado en responder, así que se escriben
+// siempre desde acá.
+export const EVENTO = {
+  propone: "Taller propone fecha a Movilización",
+  confirma: "Movilización confirma la fecha de ingreso",
+  pideOtra: "Movilización pide otra fecha",
+};
+
 /** Un evento para la línea de tiempo de la orden. */
 export function eventoDeAgenda(user, evento, notas = "") {
   return {
@@ -123,6 +132,69 @@ export function pesoDelCaso(c) {
   return 3;
 }
 
+const DIA_MS = 86400000;
+const aFecha = (v) => { const d = new Date(v); return Number.isNaN(d.getTime()) ? null : d; };
+
+/** Cuándo pasó lo último en la orden: el último evento, o su creación. */
+function ultimoMovimiento(ot) {
+  const fechas = (ot.linea_tiempo || []).map(e => aFecha(e.fecha)).filter(Boolean);
+  const creada = aFecha(ot.created_date);
+  if (creada) fechas.push(creada);
+  return fechas.length ? new Date(Math.max(...fechas.map(f => f.getTime()))) : null;
+}
+
+function primerEvento(ot, nombre) {
+  const f = (ot.linea_tiempo || []).filter(e => e.evento === nombre).map(e => aFecha(e.fecha)).filter(Boolean);
+  return f.length ? new Date(Math.min(...f.map(x => x.getTime()))) : null;
+}
+
+const promedio = (xs) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null);
+
+/**
+ * La foto de la coordinación Movilización ↔ Taller para el Monitor
+ * Corporativo: quién tiene la pelota en cada pedido, qué entra al taller en
+ * los próximos días, qué lleva demasiado esperando y cuánto tarda cada lado.
+ */
+export function resumenCoordinacion(ordenes = [], { ahora = new Date(), diasAtasco = 3 } = {}) {
+  const deMovilizacion = ordenes.filter(o => o.origen === "movilizacion");
+  const abiertas = deMovilizacion.filter(estaAbierta);
+
+  const porAgendar = abiertas.filter(o => necesitaAgenda(o) && estadoCita(o) === "por_agendar");
+  const reagendar = abiertas.filter(o => necesitaAgenda(o) && estadoCita(o) === "reagendar");
+  const esperanMovilizacion = abiertas.filter(esperaRespuesta);
+  const confirmadas = abiertas.filter(o => !o.fecha_inicio && estadoCita(o) === "confirmada");
+  const enTaller = abiertas.filter(o => o.fecha_inicio);
+
+  const proximos = [...esperanMovilizacion, ...confirmadas]
+    .filter(o => o.cita_fecha)
+    .sort((a, b) => String(a.cita_fecha).localeCompare(String(b.cita_fecha)));
+
+  const dias = (o) => {
+    const u = ultimoMovimiento(o);
+    return u ? Math.floor((ahora.getTime() - u.getTime()) / DIA_MS) : 0;
+  };
+  const atascados = [
+    ...[...porAgendar, ...reagendar].map(o => ({ ot: o, quien: "taller", dias: dias(o) })),
+    ...esperanMovilizacion.map(o => ({ ot: o, quien: "movilizacion", dias: dias(o) })),
+  ].filter(a => a.dias >= diasAtasco).sort((a, b) => b.dias - a.dias);
+
+  const respuestaTaller = [];
+  const respuestaMovilizacion = [];
+  for (const o of deMovilizacion) {
+    const creada = aFecha(o.created_date);
+    const propuso = primerEvento(o, EVENTO.propone);
+    const confirmo = primerEvento(o, EVENTO.confirma);
+    if (creada && propuso) respuestaTaller.push((propuso - creada) / DIA_MS);
+    if (propuso && confirmo) respuestaMovilizacion.push((confirmo - propuso) / DIA_MS);
+  }
+
+  return {
+    porAgendar, reagendar, esperanMovilizacion, confirmadas, enTaller, proximos, atascados,
+    diasRespuestaTaller: promedio(respuestaTaller),
+    diasRespuestaMovilizacion: promedio(respuestaMovilizacion),
+  };
+}
+
 export function _selfCheck() {
   const fallos = [];
   const debe = (c, q) => { if (!c) fallos.push(q); };
@@ -175,6 +247,28 @@ export function _selfCheck() {
   debe(etapa("o:o6") === "cerradas", "un pedido directo terminado se cierra solo");
   const conTaller = casos.filter(c => c.etapa === "con_taller").sort((a, b) => pesoDelCaso(a) - pesoDelCaso(b));
   debe(conTaller[0].id === "s:s2", "lo que espera tu respuesta va primero");
+
+  // ── Resumen para el Monitor ────────────────────────────────────────
+  const ahora = new Date("2026-09-24T12:00:00Z");
+  const ev = (evento, fecha) => ({ evento, fecha });
+  const rc = resumenCoordinacion([
+    { id: "a", origen: "movilizacion", estado: "pendiente", cita_estado: "por_agendar", created_date: "2026-09-19T12:00:00Z" },
+    { id: "b", origen: "movilizacion", estado: "pendiente", cita_estado: "propuesta", cita_fecha: "2026-09-28T12:00:00Z",
+      created_date: "2026-09-20T12:00:00Z", linea_tiempo: [ev(EVENTO.propone, "2026-09-22T12:00:00Z")] },
+    { id: "c", origen: "movilizacion", estado: "asignada", cita_estado: "confirmada", cita_fecha: "2026-09-25T12:00:00Z",
+      created_date: "2026-09-20T12:00:00Z",
+      linea_tiempo: [ev(EVENTO.propone, "2026-09-21T12:00:00Z"), ev(EVENTO.confirma, "2026-09-22T00:00:00Z")] },
+    { id: "d", origen: "movilizacion", estado: "en_proceso", fecha_inicio: "2026-09-23", created_date: "2026-09-10T12:00:00Z" },
+    { id: "e", origen: "movilizacion", estado: "pendiente", cita_estado: "reagendar", created_date: "2026-09-23T12:00:00Z" },
+    { id: "f", origen: "solicitud_directa", estado: "pendiente", created_date: "2026-09-01T12:00:00Z" },
+  ], { ahora });
+  debe(rc.porAgendar.length === 1 && rc.reagendar.length === 1, "uno por agendar y uno por reagendar");
+  debe(rc.esperanMovilizacion.length === 1 && rc.confirmadas.length === 1 && rc.enTaller.length === 1, "una en cada etapa");
+  debe(rc.proximos.map(o => o.id).join() === "c,b", "los próximos ingresos van por fecha");
+  debe(rc.atascados.map(a => a.ot.id).join() === "a", `solo 'a' lleva 3 días o más esperando, hubo ${rc.atascados.map(a => a.ot.id)}`);
+  debe(rc.atascados[0].quien === "taller" && rc.atascados[0].dias === 5, "y la tiene el taller hace 5 días");
+  debe(rc.diasRespuestaTaller === 1.5, `el taller tarda 1,5 días en promedio, dio ${rc.diasRespuestaTaller}`);
+  debe(rc.diasRespuestaMovilizacion === 0.5, `Movilización medio día, dio ${rc.diasRespuestaMovilizacion}`);
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("agendaTaller: autotest ok");
