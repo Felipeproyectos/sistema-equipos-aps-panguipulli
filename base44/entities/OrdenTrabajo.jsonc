@@ -79,6 +79,35 @@
       "type": "string",
       "description": "Solicitud de Calidad que Movilización derivó a taller, si vino de ahí"
     },
+    "fecha_preferida": {
+      "type": "string",
+      "format": "date",
+      "description": "Desde cuándo Movilización puede llevar el vehículo al taller"
+    },
+    "cita_estado": {
+      "type": "string",
+      "enum": [
+        "por_agendar",
+        "propuesta",
+        "confirmada",
+        "reagendar"
+      ],
+      "description": "Agenda con Movilización: en qué punto está el acuerdo de la fecha de ingreso"
+    },
+    "cita_fecha": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Día y hora en que el taller recibe el vehículo"
+    },
+    "cita_entrega": {
+      "type": "string",
+      "format": "date",
+      "description": "Entrega estimada del vehículo a Movilización"
+    },
+    "cita_nota": {
+      "type": "string",
+      "description": "Último mensaje de la agenda: indicación del taller o motivo para pedir otra fecha"
+    },
     "reportado_por_email": {
       "type": "string"
     },

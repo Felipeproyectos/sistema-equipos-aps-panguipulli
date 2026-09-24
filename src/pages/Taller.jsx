@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import {
   Wrench, ClipboardList, CheckCircle2, AlertTriangle,
   Package, Plus, RefreshCw, TrendingUp, Activity,
-  ChevronRight, Building2
+  ChevronRight, Building2, CalendarClock
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -14,9 +14,14 @@ import SolicitudRepuestoModule from "@/components/taller/SolicitudRepuestoModule
 import HistorialSolicitudesModal from "@/components/taller/HistorialSolicitudesModal";
 import { useAuth } from "@/lib/AuthContext";
 import { esVehiculo } from "@/lib/centros";
+import { necesitaAgenda } from "@/lib/agendaTaller";
 import { getEffectiveNavRole, isSimulandoActivo } from "@/lib/roleSimulator";
 
+// "Por agendar" no es un estado de la orden: son los pedidos de Movilización
+// que esperan que el Jefe de Taller proponga fecha de ingreso (nuevos, o cuya
+// fecha Movilización pidió cambiar). Ver src/lib/agendaTaller.js.
 const FILTROS = [
+  { value: "por_agendar", label: "Por agendar" },
   { value: "pendiente", label: "Pendientes" },
   { value: "asignada", label: "Asignadas" },
   { value: "en_proceso", label: "En Proceso" },
@@ -31,7 +36,7 @@ export default function Taller() {
   const [repuestos, setRepuestos] = useState([]);
   const [equipos, setEquipos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState("pendiente");
+  const [filtroElegido, setFiltro] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editando, setEditando] = useState(null);
   const [solicitudesOpen, setSolicitudesOpen] = useState(false);
@@ -57,7 +62,13 @@ export default function Taller() {
   // Solo el Jefe de Taller (o super_admin) puede cerrar una OT (marcarla como completada)
   const esJefe = !isSimulandoActivo() && ["super_admin", "jefe_taller"].includes(getEffectiveNavRole(user?.role));
   const stockBajo = repuestos.filter(r => (r.stock_actual || 0) <= (r.stock_minimo || 0));
-  const filtradas = filtro === "todas" ? ordenes : ordenes.filter(o => o.estado === filtro);
+  const porAgendar = ordenes.filter(necesitaAgenda);
+  // Se abre en lo que espera al Jefe: primero lo que hay que agendar.
+  const filtro = filtroElegido || (esJefe && porAgendar.length ? "por_agendar" : "pendiente");
+  const deFiltro = (valor) => valor === "todas" ? ordenes
+    : valor === "por_agendar" ? porAgendar
+    : ordenes.filter(o => o.estado === valor);
+  const filtradas = deFiltro(filtro);
   const pendientes = ordenes.filter(o => o.estado === "pendiente").length;
   const enProceso = ordenes.filter(o => o.estado === "en_proceso" || o.estado === "asignada").length;
   const completadas = ordenes.filter(o => o.estado === "completada").length;
@@ -148,6 +159,16 @@ export default function Taller() {
       <div className="max-w-6xl mx-auto px-4 lg:px-10 pb-10 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
         {/* Columna principal: Órdenes de Trabajo */}
         <div className="lg:col-span-2 space-y-4">
+          {esJefe && porAgendar.length > 0 && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
+              <CalendarClock className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>
+                <strong>{porAgendar.length} {porAgendar.length === 1 ? "vehículo espera" : "vehículos esperan"} fecha de ingreso.</strong>
+                {" "}Abre la orden (<em>Ver Detalle</em>) y en <em>Agenda con Movilización</em> propón día, hora y entrega estimada.
+                Movilización la confirma o te pide otra.
+              </span>
+            </div>
+          )}
           {/* Filtros */}
           <div className="flex flex-wrap gap-2">
             {FILTROS.map(f => (
@@ -158,7 +179,7 @@ export default function Taller() {
                   : { background: "white", color: "#64748B", border: "1px solid #E2E8F0" }}>
                 {f.label}
                 {f.value !== "todas" && (
-                  <span className="ml-1.5 text-xs">({ordenes.filter(o => o.estado === f.value).length})</span>
+                  <span className="ml-1.5 text-xs">({deFiltro(f.value).length})</span>
                 )}
               </button>
             ))}

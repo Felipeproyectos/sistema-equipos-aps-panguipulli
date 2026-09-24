@@ -6,6 +6,7 @@
 // tiene el vehículo hoy, qué está en el taller) y la de Choferes.jsx (estado
 // de la licencia, que se pasa como función para no importar una pantalla).
 import { asignacionDeHoy, periodosEnTaller, rangosSeTocan } from "./calendarioFlota.js";
+import { esperaRespuesta } from "./agendaTaller.js";
 
 // Los tipos de solicitud que son de la flota aunque no apunten a un vehículo
 // cargado (una camioneta municipal puede no estar en el inventario).
@@ -62,12 +63,14 @@ export function resumenDelDia({
   const porId = new Map(equipos.map(e => [e.id, e]));
   const deFlota = solicitudes.filter(s => esSolicitudDeFlota(s, porId.get(s.equipo_id)));
   const porRevisar = deFlota.filter(s => (s.estado || "pendiente") === "pendiente");
+  // Fechas de ingreso que el Taller propuso y Movilización no ha respondido.
+  const citasPorResponder = ordenes.filter(o => o.origen === "movilizacion" && esperaRespuesta(o));
 
   return {
     dia,
     vehiculos, conChofer, sinChofer, enTaller,
     choferes, habilitados, licenciaVencida, licenciaPorVencer, sinLicencia, manejandoSinLicencia,
-    prestamosAtrasados, salidasAbiertas, salidasDelMes, porRevisar,
+    prestamosAtrasados, salidasAbiertas, salidasDelMes, porRevisar, citasPorResponder,
   };
 }
 

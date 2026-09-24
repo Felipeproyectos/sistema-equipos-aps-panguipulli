@@ -10,6 +10,7 @@ import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { etiquetaEquipo } from "@/utils/etiquetaEquipo";
+import { CITA, estadoCita, textoCita } from "@/lib/agendaTaller";
 
 const ESTADO_OT = {
   pendiente: { label: "Pendiente", color: "#D97706", bg: "#FEF3C7" },
@@ -158,12 +159,22 @@ export default function TallerDashboard({ user }) {
                               <span className="text-xs text-slate-400 flex items-center gap-1"><User className="w-3 h-3" />{ot.reportado_por_nombre}</span>
                             )}
                             {ot.origen && (
-                              <span className="text-xs text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" />{ot.origen === "bitacora" ? "Bitácora" : ot.origen === "inspeccion" ? "Inspección" : "Solicitud directa"}</span>
+                              <span className="text-xs text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" />{ot.origen === "bitacora" ? "Bitácora" : ot.origen === "inspeccion" ? "Inspección" : ot.origen === "movilizacion" ? "Movilización" : "Solicitud directa"}</span>
                             )}
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
+                          {(() => {
+                            const cita = estadoCita(ot);
+                            if (!cita) return null;
+                            const c = CITA[cita];
+                            return (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-full border whitespace-nowrap" style={{ background: c.fondo, color: c.color, borderColor: c.borde }}>
+                                {c.corto}{(cita === "propuesta" || cita === "confirmada") && ot.cita_fecha ? ` · ${textoCita(ot.cita_fecha, false)}` : ""}
+                              </span>
+                            );
+                          })()}
                           <span className="text-xs text-slate-400 whitespace-nowrap">{timeAgo(ot.created_date)}</span>
                         </div>
                       </div>
