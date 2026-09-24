@@ -18,6 +18,7 @@ import notificarSolicitudRepuesto from './notificarSolicitudRepuesto.js';
 import registrarConsumoDirecto from './registrarConsumoDirecto.js';
 import registrarHistorial from './registrarHistorial.js';
 import reportarIncidenteAmbulancia from './reportarIncidenteAmbulancia.js';
+import resumenDiarioPendientes from './resumenDiarioPendientes.js';
 import subirInspeccionDrive from './subirInspeccionDrive.js';
 import submitPublicBitacora from './submitPublicBitacora.js';
 import verificarStockRepuestos from './verificarStockRepuestos.js';
@@ -41,6 +42,7 @@ export const handlers = {
   registrarConsumoDirecto,
   registrarHistorial,
   reportarIncidenteAmbulancia,
+  resumenDiarioPendientes,
   subirInspeccionDrive,
   submitPublicBitacora,
   verificarStockRepuestos,

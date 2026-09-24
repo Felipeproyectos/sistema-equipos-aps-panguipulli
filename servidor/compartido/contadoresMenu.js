@@ -1,3 +1,6 @@
+// Copia de src/lib/contadoresMenu.js, generada por migracion/sincronizar_compartido.py.
+// No editar a mano: se edita el original y se vuelve a correr el script.
+
 // Los números que aparecen al lado de cada opción del menú: cuántas cosas
 // esperan a la persona en esa pantalla. Separado del menú para poder probarlo
 // sin navegador: `node src/lib/contadoresMenu.js`.

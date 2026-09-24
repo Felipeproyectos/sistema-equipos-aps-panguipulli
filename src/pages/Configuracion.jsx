@@ -4,6 +4,7 @@ import { Upload, Loader2, Save, Settings, Users, Shield, Mail, UserPlus, Trash2,
 import GestionSedes from "@/components/configuracion/GestionSedes";
 import BackupSection from "@/components/configuracion/BackupSection";
 import DatosDePruebaSection from "@/components/configuracion/DatosDePruebaSection";
+import ResumenDiarioSection from "@/components/configuracion/ResumenDiarioSection";
 import { QRCodeSVG } from "qrcode.react";
 import { useAuth } from "@/lib/AuthContext";
 import { esAdministrador, roleLabel } from "@/lib/roles";
@@ -313,6 +314,9 @@ export default function Configuracion() {
 
         {/* Copia de Seguridad */}
         <BackupSection />
+
+        {/* Resumen diario de pendientes por correo */}
+        <ResumenDiarioSection />
 
         {/* Datos de prueba (migraciones 19 y 22) */}
         <DatosDePruebaSection />
