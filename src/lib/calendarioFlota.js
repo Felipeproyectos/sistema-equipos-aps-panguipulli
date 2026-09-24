@@ -176,6 +176,26 @@ export function tramosDelPeriodo(asignaciones, equipoId, desde, hasta) {
     .sort((x, y) => (x.desde < y.desde ? -1 : x.desde > y.desde ? 1 : 0));
 }
 
+/**
+ * Agrupa días seguidos que muestran lo mismo en una sola franja.
+ *
+ * En la vista del mes cada día mide menos de un centímetro: no cabe un nombre
+ * en una celda, pero sí en una franja de varios días. Recibe una clave por día
+ * (null = no hay nada que rotular) y devuelve dónde empieza cada franja y
+ * cuántos días abarca, para escribir el nombre una sola vez, sobre toda la
+ * franja, como en una agenda.
+ */
+export function agruparEnFranjas(claves) {
+  const franjas = [];
+  let actual = null;
+  claves.forEach((clave, i) => {
+    if (clave && actual && actual.clave === clave) { actual.largo++; return; }
+    actual = clave ? { inicio: i, largo: 1, clave } : null;
+    if (actual) franjas.push(actual);
+  });
+  return franjas;
+}
+
 /** Autotest: corre con `node src/lib/calendarioFlota.js`. Las reglas de
  *  choque son fáciles de romper sin darse cuenta, y un error acá se traduce
  *  en dos choferes citados al mismo vehículo el mismo día. */
@@ -262,6 +282,15 @@ export function _selfCheck() {
   debe(tr[1].recortado === true, "y queda marcada como recortada");
   debe(tramosDelPeriodo(asigs, "e1", "2026-09-12", "2026-09-18").length === 0,
     "una semana libre no tiene tramos");
+
+  // ── Franjas del mes ─────────────────────────────────────────────────
+  const fr = agruparEnFranjas(["a", "a", "a", null, "b", "b", "a", null, null]);
+  debe(fr.length === 3, `tres franjas, hubo ${fr.length}`);
+  debe(fr[0].inicio === 0 && fr[0].largo === 3, "la primera abarca tres dias");
+  debe(fr[1].inicio === 4 && fr[1].largo === 2, "un dia vacio corta la franja");
+  debe(fr[2].inicio === 6 && fr[2].largo === 1, "la misma clave despues de otra es otra franja");
+  debe(agruparEnFranjas([null, null]).length === 0, "sin nada, sin franjas");
+  debe(agruparEnFranjas([]).length === 0, "un mes vacio no rompe");
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("calendarioFlota: autotest ok");

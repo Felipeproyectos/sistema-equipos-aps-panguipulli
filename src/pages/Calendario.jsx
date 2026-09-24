@@ -13,7 +13,7 @@ import DiaFlotaModal from "@/components/flota/DiaFlotaModal";
 import { generarProgramacionFlota } from "@/utils/generarProgramacionFlota";
 import {
   diasDelMes, diasDeLaSemana, esFinDeSemana, aISO, sumarDias, rangoEntre,
-  rangosSeTocan, periodosEnTaller, choquesConTaller, asignacionesDelDia,
+  rangosSeTocan, periodosEnTaller, choquesConTaller, asignacionesDelDia, agruparEnFranjas,
 } from "@/lib/calendarioFlota";
 import AyudaPantalla from "@/components/flota/AyudaPantalla";
 
@@ -53,6 +53,17 @@ const COLOR_TURNO = {
 };
 
 const ABREV_TURNO = { manana: "AM", tarde: "PM" };
+
+/** "ALEJANDRO CARDENAS" -> "Alejandro C.": lo que cabe en una franja corta y
+ *  todavía se reconoce. Respeta el nombre tal como está si es de una palabra. */
+function nombreCorto(nombre) {
+  // Sin etiquetas como "[PRUEBA]": ocupan el poco espacio que hay.
+  const partes = String(nombre || "?").trim().split(/\s+/).filter(x => !/^\[.*\]$/.test(x));
+  if (!partes.length) return "?";
+  const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1).toLowerCase();
+  if (partes.length === 1) return cap(partes[0]);
+  return `${cap(partes[0])} ${partes[1].charAt(0).toUpperCase()}.`;
+}
 
 export default function Calendario() {
   const hoy = aISO(new Date());
@@ -327,22 +338,68 @@ export default function Calendario() {
                 </tr>
               </thead>
               <tbody>
-                {equipos.map(eq => (
+                {equipos.map(eq => {
+                  // Lo de cada día se calcula una vez por fila: lo usan la
+                  // celda, el rótulo de la franja y la columna del vehículo.
+                  const info = dias.map(d => {
+                    const asigs = asignacionesDelDia(activas, eq.id, d);
+                    const prestamo = prestamos.find(p => p.equipo_id === eq.id
+                      && rangosSeTocan(p.desde, p.hasta_previsto, d, d)) || null;
+                    const enTaller = taller.find(t => t.equipo_id === eq.id
+                      && rangosSeTocan(t.desde, t.hasta, d, d)) || null;
+                    const conChoque = asigs.some(a => idsEnChoque.has(a.id));
+                    return { d, asigs, prestamo, enTaller, conChoque };
+                  });
+
+                  // Qué se lee sobre la franja. La clave es lo que se LEE, no el
+                  // id de la asignación: si el mismo chofer tiene esta semana y
+                  // la siguiente, es una sola franja con su nombre, no dos.
+                  const rotulo = ({ asigs, prestamo, enTaller, conChoque }) => {
+                    if (enTaller) {
+                      const t = enTaller.numero_ot || "En taller";
+                      return { clave: `t:${t}`, texto: t, corto: "Taller", tipo: "taller" };
+                    }
+                    if (asigs.length) {
+                      const turno = (a) => (ABREV_TURNO[a.turno] ? ` (${ABREV_TURNO[a.turno]})` : "");
+                      const texto = asigs.map(a => `${a.chofer_nombre || "?"}${turno(a)}`).join(" / ")
+                        + (prestamo ? ` · en ${prestamo.centro_destino}` : "");
+                      const corto = asigs.map(a => nombreCorto(a.chofer_nombre)).join(" / ");
+                      return { clave: `a:${texto}|${conChoque}`, texto, corto, tipo: "chofer", conChoque };
+                    }
+                    if (prestamo) {
+                      return { clave: `p:${prestamo.id}`, texto: `Prestado · ${prestamo.centro_destino}`, corto: "Prestado", tipo: "prestamo" };
+                    }
+                    return null;
+                  };
+                  const rotulos = info.map(rotulo);
+                  const franjas = vista === "mes" ? agruparEnFranjas(rotulos.map(r => r?.clave || null)) : [];
+                  const franjaQueEmpieza = new Map(franjas.map(f => [f.inicio, f]));
+
+                  // Quién lo tiene hoy, bajo el nombre del vehículo: responde
+                  // la pregunta sin tener que buscar el día en la grilla.
+                  const deHoy = rotulo({
+                    asigs: asignacionesDelDia(activas, eq.id, hoy),
+                    prestamo: null,
+                    enTaller: taller.find(t => t.equipo_id === eq.id && rangosSeTocan(t.desde, t.hasta, hoy, hoy)) || null,
+                    conChoque: false,
+                  });
+
+                  return (
                   <tr key={eq.id}>
                     <td className="sticky left-0 z-10 bg-white border-b border-r border-slate-200 px-3 py-2">
                       <p className="text-xs font-bold text-slate-800 leading-tight">
                         {eq.marca} {eq.modelo}
                       </p>
                       <p className="text-[10px] text-slate-400">{eq.patente || eq.numero_inventario || "—"}</p>
+                      <p className={`text-[10px] font-semibold mt-0.5 truncate max-w-[10rem] ${
+                        !deHoy ? "text-amber-700" : deHoy.tipo === "taller" ? "text-red-700" : "text-green-700"}`}>
+                        {!deHoy ? "Hoy: sin chofer"
+                          : deHoy.tipo === "taller" ? `Hoy: en taller`
+                          : `Hoy: ${deHoy.texto}`}
+                      </p>
                     </td>
-                    {dias.map(d => {
-                      const asigs = asignacionesDelDia(activas, eq.id, d);
-                      const prestamo = prestamos.find(p => p.equipo_id === eq.id
-                        && rangosSeTocan(p.desde, p.hasta_previsto, d, d)) || null;
-                      const enTaller = taller.find(t => t.equipo_id === eq.id
-                        && rangosSeTocan(t.desde, t.hasta, d, d)) || null;
+                    {info.map(({ d, asigs, prestamo, enTaller, conChoque }, i) => {
                       const finde = esFinDeSemana(d);
-                      const conChoque = asigs.some(a => idsEnChoque.has(a.id));
                       const tooltip = [
                         ...asigs.map(a => `${a.chofer_nombre}${a.turno && a.turno !== "completo" ? ` (${a.turno})` : ""}`),
                         prestamo ? `Prestado a ${prestamo.centro_destino}` : "",
@@ -363,12 +420,14 @@ export default function Calendario() {
                       } else if (prestamo) { fondo = "#fed7aa"; borde = "#ea580c"; }
 
                       const seleccionado = marcado(eq.id, d);
+                      const franja = franjaQueEmpieza.get(i);
+                      const r = franja ? rotulos[i] : null;
 
                       return (
                         <td key={d} title={tooltip}
                           onMouseDown={() => empezarArrastre(eq, d)}
                           onMouseEnter={() => extenderArrastre(eq, d)}
-                          className={`border-b border-slate-100 p-0 align-top
+                          className={`border-b border-slate-100 p-0 align-top relative
                                       ${vista === "semana" ? "h-14 min-w-[7.5rem]" : "h-9 w-7"}
                                       ${soloLectura ? "" : "cursor-pointer"}`}
                           style={{
@@ -404,18 +463,30 @@ export default function Calendario() {
                                 </span>
                               )}
                             </div>
-                          ) : (
-                            <span className="flex items-center justify-center h-full">
-                              {conChoque && <AlertTriangle className="w-3 h-3 text-red-700" />}
-                              {!conChoque && prestamo && asigs.length > 0 &&
-                                <ArrowLeftRight className="w-2.5 h-2.5 text-orange-700" />}
+                          ) : r ? (
+                            // El nombre va una sola vez, al empezar la franja, y
+                            // se extiende sobre los días que abarca. No recibe
+                            // clics: los días de abajo siguen respondiendo al
+                            // arrastre y al toque como siempre.
+                            <span
+                              className={`absolute left-0 top-0 h-full z-[1] pointer-events-none flex items-center gap-1 px-1.5
+                                          text-[10.5px] font-semibold whitespace-nowrap overflow-hidden ${
+                                r.tipo === "taller" ? "text-red-800" : r.tipo === "prestamo" ? "text-orange-800" : "text-green-900"}`}
+                              style={{ width: `${franja.largo * 100}%` }}>
+                              {r.tipo === "taller" && <Wrench className="w-3 h-3 shrink-0" />}
+                              {r.tipo === "prestamo" && <ArrowLeftRight className="w-3 h-3 shrink-0" />}
+                              {r.conChoque && <AlertTriangle className="w-3 h-3 shrink-0 text-red-700" />}
+                              {/* En pocos días no cabe el nombre entero: "Alejandro C."
+                                  se reconoce, "Alejandro Cárd…" no. */}
+                              <span className="truncate">{franja.largo >= 4 ? r.texto : r.corto}</span>
                             </span>
-                          )}
+                          ) : null}
                         </td>
                       );
                     })}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
