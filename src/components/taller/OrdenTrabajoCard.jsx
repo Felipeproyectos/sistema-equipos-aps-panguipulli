@@ -8,6 +8,7 @@ import { es } from "date-fns/locale";
 import { etiquetaEquipo } from "@/utils/etiquetaEquipo";
 import { CATEGORIAS_ACTIVO_TALLER, normalizarTipoActivo } from "@/lib/centros";
 import { CITA, estadoCita, estaAbierta, textoCita } from "@/lib/agendaTaller";
+import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
 
 const ESTADO_CFG = {
   pendiente: { label: "Pendiente", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A" },
@@ -51,6 +52,7 @@ export default function OrdenTrabajoCard({ ot, onActualizar, onEditar, puedeCerr
       if (nuevoEstado === "en_proceso" && !ot.fecha_inicio) update.fecha_inicio = new Date().toISOString().split("T")[0];
       await base44.entities.OrdenTrabajo.update(ot.id, update);
       onActualizar();
+      avisarCambioEnPendientes();
     } catch (e) {
       console.error(e);
     }

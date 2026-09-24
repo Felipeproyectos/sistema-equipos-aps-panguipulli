@@ -16,6 +16,7 @@ import RepuestosUtilizados from "@/components/taller/RepuestosUtilizados";
 import ComentariosOT from "@/components/taller/ComentariosOT";
 import ReporteAvance from "@/components/taller/ReporteAvance";
 import AgendaMovilizacion from "@/components/taller/AgendaMovilizacion";
+import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { isSimulandoActivo, getEffectiveNavRole, MENSAJE_BLOQUEO_SIMULACION } from "@/lib/roleSimulator";
@@ -190,6 +191,7 @@ export default function OrdenTrabajoDetalle() {
       await base44.entities.OrdenTrabajo.update(ot.id, update);
       setOt({ ...ot, ...update });
       setObsAsignacion("");
+      avisarCambioEnPendientes();
       toast({ title: "Asignación guardada", description: mec?.full_name ? `Mecánico: ${mec.full_name}` : "Sin asignar" });
     } catch (e) {
       toast({ title: "No se pudo guardar la asignación", description: e.message, variant: "destructive" });
@@ -231,6 +233,7 @@ export default function OrdenTrabajoDetalle() {
       }
       await base44.entities.OrdenTrabajo.update(ot.id, update);
       setOt({ ...ot, ...update });
+      avisarCambioEnPendientes();
       toast({ title: `Estado: ${ESTADO_CFG[nuevoEstado].label}` });
     } catch (e) {
       toast({ title: "No se pudo cambiar el estado", description: e.message, variant: "destructive" });

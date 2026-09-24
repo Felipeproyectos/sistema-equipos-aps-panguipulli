@@ -19,6 +19,7 @@ import {
 import { esVehiculo } from "@/lib/centros";
 import { isSimulandoActivo } from "@/lib/roleSimulator";
 import AyudaPantalla from "@/components/flota/AyudaPantalla";
+import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
 
 // La bandeja del Encargado de Movilización: lo que va y viene con el Taller.
 //
@@ -180,6 +181,7 @@ export default function Movilizacion() {
     }
     setPestana("con_taller");
     await cargar();
+    avisarCambioEnPendientes();
   };
 
   // ── Responder al taller ────────────────────────────────────────────
@@ -193,6 +195,7 @@ export default function Movilizacion() {
       });
       setPidiendoOtra(null);
       await cargar();
+      avisarCambioEnPendientes();
     } catch (e) {
       toast({ title: "No se pudo guardar la respuesta", description: e.message, variant: "destructive" });
     } finally {
@@ -222,6 +225,7 @@ export default function Movilizacion() {
         ...(texto ? { respuesta_admin: [s.respuesta_admin, texto].filter(Boolean).join("\n") } : {}),
       });
       await cargar();
+      avisarCambioEnPendientes();
     } catch (e) {
       toast({ title: "No se pudo cerrar", description: e.message, variant: "destructive" });
     } finally {
