@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { getNavItemsForRole } from "@/lib/navPermissions";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import { useAuth } from "@/lib/AuthContext";
+import useContadoresMenu from "@/hooks/useContadoresMenu";
+import { rotuloContador } from "@/lib/contadoresMenu";
 
 export default function MobileNav() {
   const location = useLocation();
@@ -20,6 +22,7 @@ export default function MobileNav() {
   }, []);
 
   const items = role === null ? [] : getNavItemsForRole(getEffectiveNavRole(role)).slice(0, 4);
+  const contadores = useContadoresMenu(role === null ? null : getEffectiveNavRole(role), user?.email, location.pathname);
 
   const handleTap = (e, item, isActive) => {
     e.preventDefault();
@@ -72,6 +75,11 @@ export default function MobileNav() {
                 className="w-5 h-5 transition-colors"
                 style={{ color: isActive ? "#2563EB" : "#94A3B8" }}
               />
+              {contadores[item.page] > 0 && (
+                <span className="absolute top-1.5 ml-6 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center bg-amber-400 text-amber-950">
+                  {rotuloContador(contadores[item.page])}
+                </span>
+              )}
             </div>
             <span
               className="text-[10px] font-bold transition-colors"

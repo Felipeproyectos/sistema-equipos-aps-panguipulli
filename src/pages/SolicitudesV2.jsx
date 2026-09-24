@@ -6,6 +6,8 @@ import NativePicker from "@/components/NativePicker";
 import { useAuth } from "@/lib/AuthContext";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import { puedeEliminar } from "@/lib/roles";
+import { esSolicitudDeFlota } from "@/lib/panelFlota";
+import SeguimientoTaller from "@/components/salud/SeguimientoTaller";
 
 const ESTADO_CONFIG = {
   pendiente: { label: "Pendiente", color: "#d97706", bg: "#fffbeb" },
@@ -22,14 +24,19 @@ export default function SolicitudesV2() {
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   const [editando, setEditando] = useState(null);
+  // Las órdenes del taller, para mostrar en qué va lo que se informó de un
+  // vehículo (lo resuelven Movilización y el Taller, no esta pantalla).
+  const [ordenes, setOrdenes] = useState([]);
 
   useEffect(() => {
     Promise.all([
       base44.entities.Solicitud.list("-fecha", 200),
-      base44.entities.Equipo.list("-created_date", 500)
-    ]).then(([sol, eq]) => {
+      base44.entities.Equipo.list("-created_date", 500),
+      base44.entities.OrdenTrabajo.list("-created_date", 500).catch(() => []),
+    ]).then(([sol, eq, ots]) => {
       setSolicitudes(sol);
       setEquipos(eq);
+      setOrdenes(ots);
       setLoading(false);
     });
   }, []);
@@ -125,7 +132,7 @@ export default function SolicitudesV2() {
             return (
               <div key={sol.id} className="bg-white rounded-2xl shadow border border-slate-100 p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: cfg.color, background: cfg.bg }}>{cfg.label}</span>
                       <span className="text-xs text-slate-500">{tipoLabel}</span>
@@ -145,6 +152,9 @@ export default function SolicitudesV2() {
                     {sol.observaciones && <p className="text-xs text-slate-500 mt-1">{sol.observaciones}</p>}
                     {sol.respuesta_admin && (
                       <p className="text-xs text-blue-600 mt-1 bg-blue-50 rounded-lg px-2 py-1">Resp: {sol.respuesta_admin}</p>
+                    )}
+                    {esSolicitudDeFlota(sol, equipo) && (
+                      <SeguimientoTaller solicitud={sol} ot={ordenes.find(o => o.solicitud_id === sol.id) || null} />
                     )}
                   </div>
                   <div className="flex flex-col gap-1.5 flex-shrink-0">

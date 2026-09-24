@@ -6,6 +6,23 @@ import { Link } from "react-router-dom";
 import InformarMovilizacion from "@/components/equipos2/InformarMovilizacion";
 import { useAuth } from "@/lib/AuthContext";
 import { esRolFlota } from "@/lib/roles";
+import { estaAbierta } from "@/lib/agendaTaller";
+import SeguimientoTaller from "@/components/salud/SeguimientoTaller";
+
+// Lo que hoy está pasando con el vehículo, si algo: una orden abierta (con la
+// solicitud que la originó), un aviso a Movilización que nadie resolvió, o una
+// reparación que terminó en la última semana.
+function casoActual(ordenes, solicitudes) {
+  const abierta = ordenes.find(estaAbierta);
+  if (abierta) return { ot: abierta, solicitud: solicitudes.find(s => s.id === abierta.solicitud_id) || null };
+  const conOrden = new Set(ordenes.map(o => o.solicitud_id).filter(Boolean));
+  const sinResolver = solicitudes.find(s => !conOrden.has(s.id) && (s.estado || "pendiente") !== "finalizada");
+  if (sinResolver) return { ot: null, solicitud: sinResolver };
+  const semana = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+  const reciente = ordenes.find(o => o.estado === "completada" && (o.fecha_fin || "") >= semana);
+  if (reciente) return { ot: reciente, solicitud: solicitudes.find(s => s.id === reciente.solicitud_id) || null };
+  return null;
+}
 
 const ESTADOS = {
   pendiente: { label: "Pendiente", color: "#64748B", bg: "#F1F5F9", icon: Clock },
@@ -28,6 +45,10 @@ export default function TallerTab({ equipo }) {
   const [ordenes, setOrdenes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [informando, setInformando] = useState(false);
+  const [solicitudes, setSolicitudes] = useState([]);
+  // Sube cuando se envía un aviso a Movilización, para que el estado de
+  // arriba lo muestre sin recargar la ficha (y sin tapar el aviso de "listo").
+  const [recarga, setRecarga] = useState(0);
 
   // El aviso a Movilización es para quien mira el vehículo desde afuera del
   // área de flota: Calidad, que detecta el problema y no tiene por qué abrir
@@ -36,12 +57,16 @@ export default function TallerTab({ equipo }) {
 
   useEffect(() => {
     if (!equipo?.id) return;
-    setLoading(true);
-    base44.entities.OrdenTrabajo.filter({ equipo_id: equipo.id }, "-created_date", 100)
-      .then(setOrdenes)
-      .catch(() => setOrdenes([]))
+    if (recarga === 0) setLoading(true);
+    Promise.all([
+      base44.entities.OrdenTrabajo.filter({ equipo_id: equipo.id }, "-created_date", 100).catch(() => []),
+      base44.entities.Solicitud.filter({ equipo_id: equipo.id }, "-created_date", 50).catch(() => []),
+    ])
+      .then(([ots, sols]) => { setOrdenes(ots); setSolicitudes(sols); })
       .finally(() => setLoading(false));
-  }, [equipo?.id]);
+  }, [equipo?.id, recarga]);
+
+  const actual = casoActual(ordenes, solicitudes);
 
   const stats = {
     total: ordenes.length,
@@ -70,6 +95,13 @@ export default function TallerTab({ equipo }) {
         </p>
       </div>
 
+      {actual && (
+        <div>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Qué está pasando con este vehículo</p>
+          <SeguimientoTaller solicitud={actual.solicitud} ot={actual.ot} />
+        </div>
+      )}
+
       {/* Calidad no le habla al Taller: le informa a Movilización, que decide
           si el vehículo entra al taller y con qué prioridad. */}
       {puedeInformar && (
@@ -83,6 +115,7 @@ export default function TallerTab({ equipo }) {
       {informando && (
         <InformarMovilizacion
           equipo={equipo}
+          onEnviado={() => setRecarga(n => n + 1)}
           onClose={() => setInformando(false)}
         />
       )}

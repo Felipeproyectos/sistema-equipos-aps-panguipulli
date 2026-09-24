@@ -195,6 +195,55 @@ export function resumenCoordinacion(ordenes = [], { ahora = new Date(), diasAtas
   };
 }
 
+// ── Lo que ve Salud ─────────────────────────────────────────────────────
+// Salud informa la falla y hasta ahora no sabía más. Esto traduce el estado
+// de la solicitud y de su orden a una línea que responde lo que le importa:
+// ¿cuándo deja de estar disponible el vehículo y cuándo vuelve?
+
+export const PASOS_SALUD = ["Informado", "Movilización", "Fecha de ingreso", "En el taller", "Listo"];
+
+const ultimaLinea = (t) => String(t || "").split("\n").map(x => x.trim()).filter(Boolean).pop() || "";
+
+/** { paso, titulo, detalle, tono } — `paso` es el índice en PASOS_SALUD. */
+export function seguimientoParaSalud(solicitud, ot) {
+  if (!ot) {
+    if ((solicitud?.estado || "pendiente") === "finalizada") {
+      return { paso: 1, cerrado: true, tono: "gris", titulo: "Movilización lo cerró sin pasar por el taller",
+        detalle: ultimaLinea(solicitud?.respuesta_admin) };
+    }
+    return { paso: 1, tono: "ambar", titulo: "Movilización lo está revisando",
+      detalle: "Va a decidir si el vehículo entra al taller." };
+  }
+  if (ot.estado === "cancelada") {
+    return { paso: 2, cerrado: true, tono: "gris", titulo: "La orden del taller se canceló", detalle: ultimaLinea(ot.notas_cierre) };
+  }
+  if (ot.estado === "completada") {
+    return { paso: 4, tono: "verde",
+      titulo: `Reparado${ot.fecha_fin ? ` el ${textoCita(ot.fecha_fin, false)}` : ""}. El vehículo ya está disponible.`,
+      detalle: ot.notas_cierre || "" };
+  }
+  if (ot.fecha_inicio) {
+    return { paso: 3, tono: "violeta",
+      titulo: `En el taller desde el ${textoCita(ot.fecha_inicio, false)}${ot.estado === "en_revision" ? " · en revisión final" : ""}`,
+      detalle: ot.cita_entrega ? `Entrega estimada: ${textoCita(ot.cita_entrega, false)}.` : "Sin fecha de entrega todavía." };
+  }
+  const c = estadoCita(ot);
+  if (c === "confirmada" && ot.cita_fecha) {
+    return { paso: 2, hecho: true, tono: "azul",
+      titulo: `Entra al taller el ${textoCita(ot.cita_fecha)}${ot.cita_entrega ? ` · vuelve el ${textoCita(ot.cita_entrega, false)}` : ""}`,
+      detalle: "Esos días el vehículo no va a estar disponible." };
+  }
+  if (c === "propuesta" && ot.cita_fecha) {
+    return { paso: 2, tono: "azul",
+      titulo: `El taller propuso recibirlo el ${textoCita(ot.cita_fecha)}`,
+      detalle: "Movilización lo está confirmando; la fecha todavía puede cambiar." };
+  }
+  if (c === "por_agendar" || c === "reagendar") {
+    return { paso: 2, tono: "ambar", titulo: "Derivado al taller. Esperando fecha de ingreso", detalle: "" };
+  }
+  return { paso: 2, tono: "ambar", titulo: "En la fila del taller", detalle: "" };
+}
+
 export function _selfCheck() {
   const fallos = [];
   const debe = (c, q) => { if (!c) fallos.push(q); };
@@ -269,6 +318,18 @@ export function _selfCheck() {
   debe(rc.atascados[0].quien === "taller" && rc.atascados[0].dias === 5, "y la tiene el taller hace 5 días");
   debe(rc.diasRespuestaTaller === 1.5, `el taller tarda 1,5 días en promedio, dio ${rc.diasRespuestaTaller}`);
   debe(rc.diasRespuestaMovilizacion === 0.5, `Movilización medio día, dio ${rc.diasRespuestaMovilizacion}`);
+
+  // ── Lo que ve Salud ────────────────────────────────────────────────
+  debe(seguimientoParaSalud({ estado: "pendiente" }, null).paso === 1, "sin orden, lo tiene Movilización");
+  debe(seguimientoParaSalud({ estado: "finalizada", respuesta_admin: "a\nNo era falla" }, null).detalle === "No era falla",
+    "cerrada sin taller muestra la última respuesta");
+  const conf = seguimientoParaSalud({}, { origen: "movilizacion", estado: "asignada", cita_estado: "confirmada",
+    cita_fecha: "2026-10-01T12:00:00Z", cita_entrega: "2026-10-02" });
+  debe(conf.paso === 2 && conf.hecho && /vuelve el/.test(conf.titulo), "confirmada dice cuándo entra y cuándo vuelve");
+  debe(/puede cambiar/.test(seguimientoParaSalud({}, { origen: "movilizacion", estado: "pendiente", cita_estado: "propuesta",
+    cita_fecha: "2026-10-01T12:00:00Z" }).detalle), "una propuesta avisa que no es firme");
+  debe(seguimientoParaSalud({}, { estado: "en_proceso", fecha_inicio: "2026-09-20" }).paso === 3, "empezada: en el taller");
+  debe(seguimientoParaSalud({}, { estado: "completada", fecha_fin: "2026-09-22" }).tono === "verde", "terminada: disponible");
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("agendaTaller: autotest ok");

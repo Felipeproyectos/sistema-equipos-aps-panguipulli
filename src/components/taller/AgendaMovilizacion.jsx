@@ -4,6 +4,7 @@ import { CalendarClock, Loader2, Send } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { CITA, EVENTO, estadoCita, estaAbierta, eventoDeAgenda, textoCita } from "@/lib/agendaTaller";
 import { etiquetaEquipo } from "@/utils/etiquetaEquipo";
+import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
 
 // La mitad del Taller en la agenda con Movilización: el Jefe de Taller
 // propone cuándo recibe el vehículo y cuándo lo devuelve. Movilización
@@ -78,6 +79,7 @@ export default function AgendaMovilizacion({ ot, puedeProponer, user, onGuardado
       await base44.entities.OrdenTrabajo.update(ot.id, update);
       setNota("");
       onGuardado(update);
+      avisarCambioEnPendientes();
       toast({ title: "Fecha propuesta", description: "Movilización la verá en Solicitudes al Taller para confirmarla." });
     } catch (e) {
       toast({ title: "No se pudo proponer la fecha", description: e.message, variant: "destructive" });

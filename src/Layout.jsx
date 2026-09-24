@@ -11,6 +11,21 @@ import { roleLabel } from "@/lib/roles";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import useInactivityLogout from "@/hooks/useInactivityLogout";
+import useContadoresMenu from "@/hooks/useContadoresMenu";
+import { rotuloContador } from "@/lib/contadoresMenu";
+
+// El número al lado de una opción del menú: cuántas cosas esperan ahí.
+function Contador({ n, activo }) {
+  if (!n) return null;
+  return (
+    <span
+      className={`ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full text-xs font-bold flex items-center justify-center ${
+        activo ? "bg-white text-blue-700" : "bg-amber-400 text-amber-950"}`}
+      title={`${n} pendiente${n === 1 ? "" : "s"}`}>
+      {rotuloContador(n)}
+    </span>
+  );
+}
 
 export default function Layout({ children, currentPageName }) {
   // El usuario ya se obtiene una sola vez en AuthContext (a nivel de App),
@@ -40,6 +55,7 @@ export default function Layout({ children, currentPageName }) {
 
   const effectiveRole = getEffectiveNavRole(user?.role);
   const visibleItems = userLoading ? [] : getNavItemsForRole(effectiveRole);
+  const contadores = useContadoresMenu(userLoading || !user ? null : effectiveRole, user?.email, currentPageName);
   const navigate = useNavigate();
 
   // Ninguna pantalla del menú de otro rol se abre escribiendo su URL.
@@ -111,6 +127,7 @@ export default function Layout({ children, currentPageName }) {
 
                 <Icon className={`w-5 h-5 ${isActive ? "text-white" : "text-white/90"}`} />
                 <span className={`text-base font-semibold ${isActive ? "text-white" : "text-white/95"}`}>{item.label}</span>
+                <Contador n={contadores[item.page]} activo={isActive} />
               </Link>);
 
           })}
@@ -146,8 +163,12 @@ export default function Layout({ children, currentPageName }) {
           </div>
           <span className="text-white font-semibold text-sm">{appConfig?.nombre_app || "Sistema de Gestión de Equipos"}</span>
         </div>
-        <button onClick={() => setMenuOpen(!menuOpen)} className="text-white">
+        <button onClick={() => setMenuOpen(!menuOpen)} className="text-white relative" aria-label="Menú">
           {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          {/* Hay algo pendiente en alguna opción del menú. */}
+          {!menuOpen && Object.keys(contadores).length > 0 && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-blue-600" />
+          )}
         </button>
       </div>
 
@@ -167,6 +188,7 @@ export default function Layout({ children, currentPageName }) {
 
                   <Icon className={`w-5 h-5 ${isActive ? "text-white" : "text-white/90"}`} />
                   <span className={`text-base font-semibold ${isActive ? "text-white" : "text-white/95"}`}>{item.label}</span>
+                  <Contador n={contadores[item.page]} activo={isActive} />
                 </Link>);
 
           })}

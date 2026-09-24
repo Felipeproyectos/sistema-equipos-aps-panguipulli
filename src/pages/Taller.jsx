@@ -15,6 +15,7 @@ import HistorialSolicitudesModal from "@/components/taller/HistorialSolicitudesM
 import { useAuth } from "@/lib/AuthContext";
 import { esVehiculo } from "@/lib/centros";
 import { necesitaAgenda } from "@/lib/agendaTaller";
+import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
 import { getEffectiveNavRole, isSimulandoActivo } from "@/lib/roleSimulator";
 
 // "Por agendar" no es un estado de la orden: son los pedidos de Movilización
@@ -82,6 +83,7 @@ export default function Taller() {
     setEditando(null);
     setModalOpen(false);
     fetchData();
+    avisarCambioEnPendientes();
   };
 
   if (loading) return (
