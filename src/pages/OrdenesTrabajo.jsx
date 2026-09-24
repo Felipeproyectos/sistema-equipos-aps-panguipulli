@@ -7,6 +7,9 @@ import {
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import OrdenTrabajoCard from "@/components/taller/OrdenTrabajoCard";
 import { useAuth } from "@/lib/AuthContext";
+import TrabajoAhora from "@/components/taller/TrabajoAhora";
+import { trabajoDelMecanico } from "@/lib/paraHoy";
+import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
 
 const FILTROS = [
   { value: "asignada", label: "Asignadas" },
@@ -41,6 +44,7 @@ export default function OrdenesTrabajo() {
   const completadas = mias.filter(o => o.estado === "completada").length;
 
   const irDetalle = (ot) => navigate(`/OrdenTrabajoDetalle/${ot.id}`);
+  const { ahora, despues } = trabajoDelMecanico(ordenes, user?.email);
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
@@ -69,6 +73,12 @@ export default function OrdenesTrabajo() {
             <p className="text-slate-300 text-xs lg:text-sm mt-0.5">Órdenes asignadas por el Jefe de Taller</p>
           </div>
         </div>
+      </div>
+
+      {/* Lo primero: la orden en la que tiene que estar ahora. */}
+      <div className="max-w-3xl mx-auto px-4 lg:px-10 mt-4 lg:mt-6">
+        <TrabajoAhora ahora={ahora} despues={despues} user={user}
+          onActualizado={() => { fetchData(); avisarCambioEnPendientes(); }} />
       </div>
 
       {/* Stats */}

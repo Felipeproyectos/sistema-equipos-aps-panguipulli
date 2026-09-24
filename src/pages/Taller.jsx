@@ -15,6 +15,9 @@ import HistorialSolicitudesModal from "@/components/taller/HistorialSolicitudesM
 import { useAuth } from "@/lib/AuthContext";
 import { esVehiculo } from "@/lib/centros";
 import { necesitaAgenda } from "@/lib/agendaTaller";
+import { avisosJefeTaller, cargaDeMecanicos } from "@/lib/paraHoy";
+import ParaHoy from "@/components/ParaHoy";
+import { useNavigate } from "react-router-dom";
 import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
 import { getEffectiveNavRole, isSimulandoActivo } from "@/lib/roleSimulator";
 
@@ -26,6 +29,7 @@ const FILTROS = [
   { value: "pendiente", label: "Pendientes" },
   { value: "asignada", label: "Asignadas" },
   { value: "en_proceso", label: "En Proceso" },
+  { value: "pausada", label: "Pausadas" },
   { value: "en_revision", label: "En Revisión" },
   { value: "completada", label: "Completadas" },
   { value: "todas", label: "Todas" },
@@ -43,15 +47,25 @@ export default function Taller() {
   const [solicitudesOpen, setSolicitudesOpen] = useState(false);
   const containerRef = useRef(null);
 
+  // Para el "Para hoy" del Jefe: repuestos por aprobar y quién está libre.
+  const [solicitudesRepuesto, setSolicitudesRepuesto] = useState([]);
+  const [mecanicos, setMecanicos] = useState([]);
+  const listaRef = useRef(null);
+  const navigate = useNavigate();
+
   const fetchData = useCallback(async () => {
-    const [ots, reps, eqs] = await Promise.all([
+    const [ots, reps, eqs, sols, gente] = await Promise.all([
       base44.entities.OrdenTrabajo.list("-created_date", 100).catch(() => []),
       base44.entities.Repuesto.list("-created_date", 200).catch(() => []),
       base44.entities.Equipo.list("-created_date", 500).catch(() => []),
+      base44.entities.SolicitudRepuesto.list("-created_date", 200).catch(() => []),
+      base44.functions.invoke("getUsuariosPorCentro").then(r => (Array.isArray(r?.data) ? r.data : [])).catch(() => []),
     ]);
     setOrdenes(ots);
     setRepuestos(reps);
     setEquipos(eqs.filter(e => esVehiculo(e.tipo)));
+    setSolicitudesRepuesto(sols);
+    setMecanicos(gente.filter(u => u.role === "mecanico"));
   }, []);
 
   useEffect(() => {
@@ -131,6 +145,30 @@ export default function Taller() {
         </div>
       </div>
 
+      {/* Para hoy: lo que espera al Jefe de Taller (src/lib/paraHoy.js). */}
+      {esJefe && (
+        <div className="max-w-6xl mx-auto px-4 lg:px-10 mt-4 lg:mt-6 space-y-3">
+          <ParaHoy
+            avisos={avisosJefeTaller({ ordenes, repuestos: solicitudesRepuesto, email: user?.email })}
+            onAccion={(a) => {
+              if (a.pagina !== "Taller") { navigate(`/${a.pagina}`); return; }
+              if (a.filtro) setFiltro(a.filtro);
+              listaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          />
+          {mecanicos.length > 0 && (
+            <p className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-1">
+              <span className="font-semibold text-slate-600">Mecánicos:</span>
+              {cargaDeMecanicos(mecanicos, ordenes).map(m => (
+                <span key={m.email} className={m.abiertas === 0 ? "text-green-700 font-semibold" : ""}>
+                  {m.nombre} {m.abiertas === 0 ? "(libre)" : `(${m.abiertas} ${m.abiertas === 1 ? "orden" : "órdenes"})`}
+                </span>
+              ))}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Stats Cards */}
       <div className="max-w-6xl mx-auto px-4 lg:px-10 mt-4 lg:mt-6 mb-4 lg:mb-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
@@ -161,17 +199,17 @@ export default function Taller() {
       <div className="max-w-6xl mx-auto px-4 lg:px-10 pb-10 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
         {/* Columna principal: Órdenes de Trabajo */}
         <div className="lg:col-span-2 space-y-4">
-          {esJefe && porAgendar.length > 0 && (
-            <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
-              <CalendarClock className="w-4 h-4 mt-0.5 shrink-0" />
+          {esJefe && porAgendar.length > 0 && filtro === "por_agendar" && (
+            <p className="text-xs text-slate-500 flex items-start gap-1.5">
+              <CalendarClock className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-600" />
               <span>
-                <strong>{porAgendar.length} {porAgendar.length === 1 ? "vehículo espera" : "vehículos esperan"} fecha de ingreso.</strong>
-                {" "}Abre la orden (<em>Ver Detalle</em>) y en <em>Agenda con Movilización</em> propón día, hora y entrega estimada.
-                Movilización la confirma o te pide otra.
+                Abre la orden (<em>Ver Detalle</em>) y en <em>Agenda con Movilización</em> propón día, hora y entrega
+                estimada. Movilización la confirma o te pide otra.
               </span>
-            </div>
+            </p>
           )}
           {/* Filtros */}
+          <div ref={listaRef} style={{ scrollMarginTop: 16 }} />
           <div className="flex flex-wrap gap-2">
             {FILTROS.map(f => (
               <button key={f.value} onClick={() => setFiltro(f.value)}
