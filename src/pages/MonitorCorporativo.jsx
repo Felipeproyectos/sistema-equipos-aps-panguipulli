@@ -1,20 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import {
-  Monitor, AlertTriangle, ClipboardCheck, ClipboardList, Activity,
-  Wrench, Package, CheckCircle2, TrendingUp, BarChart3,
-  ShieldCheck, RefreshCw, Heart, Stethoscope, ShoppingCart,
-  Car, Search, Hash, MapPin, Eye, Truck, UserX, IdCard, ArrowLeftRight, Gauge, CalendarClock
+  Monitor, AlertTriangle, ClipboardList, Wrench, CheckCircle2, ShieldCheck, RefreshCw,
+  Car, Search, Hash, MapPin, Eye, Truck, HeartPulse, Briefcase, ChevronDown, MessageCircle,
+  ShoppingCart, Circle,
 } from "lucide-react";
-import {
-  PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar,
-  XAxis, YAxis, Tooltip, CartesianGrid
-} from "recharts";
 import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
-import { differenceInDays, parseISO, format } from "date-fns";
+import { parseISO, format } from "date-fns";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
-import KpiCard from "@/components/monitor/KpiCard";
 import CentroBreakdown from "@/components/monitor/CentroBreakdown";
 import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO, esVehiculo } from "@/lib/centros";
 import { getNavItemsForRole } from "@/lib/navPermissions";
@@ -22,25 +15,24 @@ import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import ComentariosEquipo from "@/components/monitor/ComentariosEquipo";
 import FlotaSemanaMini from "@/components/monitor/FlotaSemanaMini";
 import CoordinacionTaller from "@/components/monitor/CoordinacionTaller";
-import { resumenCoordinacion } from "@/lib/agendaTaller";
-import { esSolicitudDeFlota } from "@/lib/panelFlota";
 import SeguimientoCompraModal from "@/components/taller/SeguimientoCompraModal";
-import { MessageCircle } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { estadoLicencia } from "@/pages/Choferes";
-import { asignacionDeHoy, periodosEnTaller, rangosSeTocan, aISO } from "@/lib/calendarioFlota";
-import { resumen as resumenBitacora } from "@/lib/bitacoraFlota";
+import { areaCalidad, areaGestion, areaMovilizacion, areaTaller } from "@/lib/monitorResumen";
+import { esSolicitudDeFlota } from "@/lib/panelFlota";
 
-const ESTADO_EQUIPO_COLORS = {
-  operativo: "#16a34a",
-  mantenimiento: "#d97706",
-  fuera_de_servicio: "#dc2626",
-};
+// El Monitor Corporativo, en cuatro áreas: Calidad, Gestión, Movilización y
+// Taller Mecánico.
+//
+// Antes mostraba todo lo que había — gráficos, contadores, listados — y no
+// decía nada: había que mirar veinte números para saber si algo andaba mal.
+// Ahora cada área responde tres preguntas, en este orden:
+//   1. ¿Cómo está?        un semáforo con una frase
+//   2. ¿Qué hay que mirar? la lista de lo que requiere atención, con nombres
+//   3. ¿Cuánto?           cuatro indicadores, cada uno con su contexto
+// Los listados completos siguen estando, pero plegados: son para buscar, no
+// para leer al entrar. Las reglas viven en src/lib/monitorResumen.js.
 
-// "en_revision" es un estado real del taller (ReporteAvance lo escribe cuando
-// el mecanico termina y lo manda al Jefe de Taller). El Monitor no lo tenia en
-// esta tabla, asi que esas OT no aparecian en el grafico ni en ningun KPI: se
-// perdian entre "en proceso" y "completada".
 const OT_ESTADO_LABELS = {
   pendiente: "Pendiente",
   asignada: "Asignada",
@@ -59,45 +51,48 @@ const OT_ESTADO_COLORS = {
   completada: "#16a34a",
   cancelada: "#dc2626",
 };
-
-// Una OT sigue viva mientras no este cerrada.
 const OT_ESTADOS_ABIERTOS = ["pendiente", "asignada", "en_proceso", "pausada", "en_revision"];
-
 const OT_PRIORIDAD = {
   baja: { label: "Baja", color: "#64748b", bg: "#f1f5f9" },
   media: { label: "Media", color: "#2563eb", bg: "#eff6ff" },
   alta: { label: "Alta", color: "#d97706", bg: "#fffbeb" },
   critica: { label: "Crítica", color: "#dc2626", bg: "#fef2f2" },
 };
-
 const FILTROS_OT = [
   { value: "abiertas", label: "Abiertas" },
   ...Object.keys(OT_ESTADO_LABELS).map(k => ({ value: k, label: OT_ESTADO_LABELS[k] })),
   { value: "todas", label: "Todas" },
 ];
-
-const ALERTA_TIPO_LABELS = {
-  parche_vencido: "Parche vencido",
-  parche_por_vencer: "Parche por vencer",
-  bateria_vencida: "Batería vencida",
-  bateria_por_vencer: "Batería por vencer",
-  mantenimiento_requerido: "Mant. requerido",
-  equipo_fuera_servicio: "Fuera de servicio",
-};
-
 const COMPRA_ESTADO = {
-  pendiente: { label: "Pendiente", color: "#D97706", bg: "#FEF3C7", icon: ClipboardList },
-  aprobada: { label: "Pendiente de Compra", color: "#D97706", bg: "#FEF3C7", icon: ShoppingCart },
-  comprada: { label: "Comprada", color: "#2563EB", bg: "#DBEAFE", icon: Package },
-  recibida: { label: "Recibida en Bodega", color: "#16A34A", bg: "#DCFCE7", icon: CheckCircle2 },
-  rechazada: { label: "Rechazada", color: "#DC2626", bg: "#FEE2E2", icon: AlertTriangle },
+  pendiente: { label: "Pendiente", color: "#D97706", bg: "#FEF3C7" },
+  aprobada: { label: "Por comprar", color: "#D97706", bg: "#FEF3C7" },
+  comprada: { label: "En camino", color: "#2563EB", bg: "#DBEAFE" },
+  recibida: { label: "En bodega", color: "#16A34A", bg: "#DCFCE7" },
+  rechazada: { label: "Rechazada", color: "#DC2626", bg: "#FEE2E2" },
 };
+
+const AREAS = [
+  { clave: "calidad", titulo: "Calidad", sub: "Equipos vitales", icono: HeartPulse, color: "#0f766e" },
+  { clave: "gestion", titulo: "Gestión", sub: "Solicitudes, compras y coordinación", icono: Briefcase, color: "#4f46e5" },
+  { clave: "movilizacion", titulo: "Movilización", sub: "Flota y choferes", icono: Truck, color: "#b45309" },
+  { clave: "taller", titulo: "Taller Mecánico", sub: "Reparaciones y repuestos", icono: Wrench, color: "#7c3aed" },
+];
+
+const TONO = {
+  rojo:  { punto: "#dc2626", fondo: "#fef2f2", borde: "#fecaca", texto: "#991b1b" },
+  ambar: { punto: "#d97706", fondo: "#fffbeb", borde: "#fde68a", texto: "#92400e" },
+  verde: { punto: "#16a34a", fondo: "#f0fdf4", borde: "#bbf7d0", texto: "#166534" },
+  gris:  { punto: "#94a3b8", fondo: "#f8fafc", borde: "#e2e8f0", texto: "#334155" },
+};
+const PESO = { rojo: 0, ambar: 1, verde: 2 };
+const sombra = { boxShadow: "0 4px 20px rgba(15,45,107,0.06)" };
 
 export default function MonitorCorporativo() {
   const { user: currentUser } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
+  const [areaElegida, setAreaElegida] = useState(null);
   const [equipoSeleccionado, setEquipoSeleccionado] = useState("");
   const [busquedaEquipo, setBusquedaEquipo] = useState("");
   const [filtroTipoEquipo, setFiltroTipoEquipo] = useState("todos");
@@ -105,21 +100,19 @@ export default function MonitorCorporativo() {
   const [busquedaOT, setBusquedaOT] = useState("");
   const [filtroEstadoOT, setFiltroEstadoOT] = useState("abiertas");
   const [selSeguimiento, setSelSeguimiento] = useState(null);
-  const [selSeguimientoSalud, setSelSeguimientoSalud] = useState(null);
   const containerRef = useRef(null);
+  const panelRef = useRef(null);
 
-  // Todo el tablero sale de getMonitorData. Si esa llamada falla y el error se
-  // traga en silencio, la pantalla muestra 0 equipos, 0 alertas y 0 órdenes —
-  // indistinguible de "todo en orden". En un sistema de equipamiento crítico
-  // eso es peor que no mostrar nada: alguien puede concluir que no hay alertas
-  // activas cuando en realidad no se sabe. Se guarda el fallo y se avisa.
+  // Todo sale de getMonitorData. Si esa llamada falla y el error se traga en
+  // silencio, la pantalla muestra todo en verde — indistinguible de "todo en
+  // orden". En equipamiento crítico eso es peor que no mostrar nada: se avisa.
   const fetchData = useCallback(async () => {
     let fallo = null;
-    const [res, centros, solicitudesCompra, solicitudesCompraSalud] = await Promise.all([
+    const [res, centros, comprasTaller, comprasSalud] = await Promise.all([
       base44.functions.invoke('getMonitorData').catch((e) => { fallo = e; return { data: {} }; }),
       getCentrosEstructura().catch(() => []),
-      base44.entities.SolicitudRepuesto.list("-created_date", 100).catch(() => []),
-      base44.entities.SolicitudRepuestoSalud.list("-created_date", 100).catch(() => []),
+      base44.entities.SolicitudRepuesto.list("-created_date", 200).catch(() => []),
+      base44.entities.SolicitudRepuestoSalud.list("-created_date", 200).catch(() => []),
     ]);
     setErrorCarga(fallo ? (fallo.message || "No se pudo contactar al servidor") : null);
     const d = res.data || {};
@@ -131,16 +124,13 @@ export default function MonitorCorporativo() {
       inspecciones: d.inspecciones || [],
       ordenes: d.ordenes || [],
       repuestos: d.repuestos || [],
-      proveedores: d.proveedores || [],
-      // Flota, para la sección de Movilización: la misma llamada a
-      // getMonitorData ya las trae, no hace falta pedirlas aparte.
       asignaciones: d.asignaciones || [],
       prestamos: d.prestamos || [],
       bitacoraFlota: d.bitacoraFlota || [],
       choferes: d.choferes || [],
       centros,
-      solicitudesCompra,
-      solicitudesCompraSalud,
+      comprasTaller: comprasTaller.map(s => ({ ...s, _area: "Taller" })),
+      comprasSalud: comprasSalud.map(s => ({ ...s, _area: "Salud", _entidad: "SolicitudRepuestoSalud" })),
     });
   }, []);
 
@@ -149,144 +139,25 @@ export default function MonitorCorporativo() {
 
   const {
     equipos = [], parches = [], alertas = [], solicitudes = [], inspecciones = [], ordenes = [],
-    repuestos = [], proveedores = [], centros = [], solicitudesCompra = [], solicitudesCompraSalud = [],
+    repuestos = [], centros = [], comprasTaller = [], comprasSalud = [],
     asignaciones = [], prestamos = [], bitacoraFlota = [], choferes = [],
   } = data || {};
-  const hoy = new Date();
-  const compraPendientes = solicitudesCompra.filter(s => s.estado === "aprobada");
-  const compraCompradas = solicitudesCompra.filter(s => s.estado === "comprada");
-  const compraRecibidas = solicitudesCompra.filter(s => s.estado === "recibida");
-  const compraSaludPendientes = solicitudesCompraSalud.filter(s => s.estado === "aprobada");
-  const compraSaludCompradas = solicitudesCompraSalud.filter(s => s.estado === "comprada");
-  const compraSaludRecibidas = solicitudesCompraSalud.filter(s => s.estado === "recibida");
 
-  const kpis = useMemo(() => {
-    const operativos = equipos.filter(e => e.estado === "operativo");
-    const enMantenimiento = equipos.filter(e => e.estado === "mantenimiento");
-    const fueraServicio = equipos.filter(e => e.estado === "fuera_de_servicio");
-    const ambulancias = equipos.filter(e => e.tipo === "ambulancia");
-    const deas = equipos.filter(e => e.tipo === "dea" || e.tipo === "monitor_desfibrilador");
-    const parchesVencidos = parches.filter(p => differenceInDays(parseISO(p.fecha_vencimiento), hoy) < 0);
-    const alertasCriticas = alertas.filter(a => a.nivel === "critica");
+  const areas = useMemo(() => ({
+    calidad: areaCalidad({ equipos, parches, alertas, inspecciones }),
+    gestion: areaGestion({ solicitudes, comprasTaller, comprasSalud, ordenes }),
+    movilizacion: areaMovilizacion({ equipos, ordenes, asignaciones, prestamos, bitacora: bitacoraFlota, choferes, estadoLicencia }),
+    taller: areaTaller({ ordenes, repuestos }),
+  }), [equipos, parches, alertas, inspecciones, solicitudes, comprasTaller, comprasSalud, ordenes, asignaciones, prestamos, bitacoraFlota, choferes, repuestos]);
 
-    const otPendientes = ordenes.filter(o => o.estado === "pendiente");
-    const otEnProceso = ordenes.filter(o => ["asignada", "en_proceso"].includes(o.estado));
-    // "En gestion" es todo lo que no esta cerrado: sumar solo pendientes + en
-    // proceso dejaba fuera las pausadas y las que esperan revision del Jefe de
-    // Taller, que son justamente las que conviene mirar.
-    const otAbiertas = ordenes.filter(o => OT_ESTADOS_ABIERTOS.includes(o.estado));
-    const otCompletadas = ordenes.filter(o => o.estado === "completada");
-    const otPorInspeccion = ordenes.filter(o => o.origen === "inspeccion");
-    const stockBajo = repuestos.filter(r => (r.stock_actual || 0) <= (r.stock_minimo || 0));
-    const valorInventario = repuestos.reduce((s, r) => s + (r.precio_unitario || 0) * (r.stock_actual || 0), 0);
-    const totalCostoOT = ordenes.reduce((s, o) => s + (o.total || 0), 0);
-    const proveedoresActivos = proveedores.filter(p => p.activo !== false);
+  // Se abre en el área que peor está; después manda la persona.
+  const peor = AREAS.map(a => a.clave).sort((x, y) => PESO[areas[x].estado.tono] - PESO[areas[y].estado.tono])[0];
+  const area = areaElegida || peor;
+  const elegir = (clave) => {
+    setAreaElegida(clave);
+    requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
 
-    const estadoEquiposData = [
-      { name: "Operativos", value: operativos.length, color: ESTADO_EQUIPO_COLORS.operativo },
-      { name: "En Mantención", value: enMantenimiento.length, color: ESTADO_EQUIPO_COLORS.mantenimiento },
-      { name: "Fuera Servicio", value: fueraServicio.length, color: ESTADO_EQUIPO_COLORS.fuera_de_servicio },
-    ];
-
-    const otEstadosData = Object.keys(OT_ESTADO_LABELS).map(k => ({
-      name: OT_ESTADO_LABELS[k],
-      value: ordenes.filter(o => o.estado === k).length,
-      color: OT_ESTADO_COLORS[k],
-    })).filter(d => d.value > 0);
-
-    const alertasPorTipo = Object.keys(ALERTA_TIPO_LABELS).map(k => ({
-      name: ALERTA_TIPO_LABELS[k],
-      value: alertas.filter(a => a.tipo === k).length,
-    })).filter(d => d.value > 0);
-
-    return {
-      operativos, enMantenimiento, fueraServicio, ambulancias, deas,
-      parchesVencidos, alertasCriticas,
-      otPendientes, otEnProceso, otAbiertas, otCompletadas, otPorInspeccion,
-      stockBajo, valorInventario, totalCostoOT, proveedoresActivos,
-      estadoEquiposData, otEstadosData, alertasPorTipo,
-    };
-  }, [equipos, parches, alertas, ordenes, repuestos, proveedores]);
-
-  const {
-    operativos, enMantenimiento, fueraServicio, ambulancias, deas,
-    parchesVencidos, alertasCriticas,
-    otPendientes, otEnProceso, otAbiertas, otCompletadas, otPorInspeccion,
-    stockBajo, valorInventario, totalCostoOT, proveedoresActivos,
-    estadoEquiposData, otEstadosData, alertasPorTipo,
-  } = kpis;
-
-  // ── Movilización ─────────────────────────────────────────────────────────
-  // Igual que "kpis" arriba, pero para la flota: vehículos con/sin chofer hoy,
-  // licencias, préstamos atrasados y lo que dejó la bitácora este mes. Usa las
-  // mismas reglas que las pantallas de Movilización (calendarioFlota.js,
-  // bitacoraFlota.js, Choferes.jsx) para que un vehículo no aparezca "libre"
-  // acá y "con chofer" allá.
-  const flota = useMemo(() => {
-    const hoyISO = aISO(hoy);
-    const vehiculos = equipos.filter(e => esVehiculo(e.tipo));
-    const tallerFlota = periodosEnTaller(ordenes);
-
-    const conChoferHoy = [];
-    const sinChoferHoy = [];
-    const enTallerHoy = [];
-    for (const v of vehiculos) {
-      const enTaller = tallerFlota.some(t => t.equipo_id === v.id && rangosSeTocan(t.desde, t.hasta, hoyISO, hoyISO));
-      if (enTaller) { enTallerHoy.push(v); continue; }
-      if (asignacionDeHoy(asignaciones, v.id, hoyISO)) conChoferHoy.push(v);
-      else sinChoferHoy.push(v);
-    }
-
-    const prestamosAtrasados = prestamos.filter(p => p.hasta_previsto && p.hasta_previsto < hoyISO);
-
-    const choferesConLicencia = choferes.map(c => ({ ...c, lic: estadoLicencia(c.licencia_vencimiento) }));
-    const licenciasVencidas = choferesConLicencia.filter(c => c.lic.clave === "vencida");
-    const licenciasPorVencer = choferesConLicencia.filter(c => c.lic.clave === "por_vencer");
-    // Vencida primero (lo más urgente), después por vencer, después el resto.
-    const ORDEN_LIC = { vencida: 0, por_vencer: 1, sin_datos: 2, vigente: 3 };
-    const choferesOrdenados = [...choferesConLicencia].sort((a, b) => ORDEN_LIC[a.lic.clave] - ORDEN_LIC[b.lic.clave]);
-
-    const mesActual = hoyISO.slice(0, 7);
-    const bitacoraMes = bitacoraFlota.filter(r => (r.fecha || "").startsWith(mesActual));
-    const resumenMes = resumenBitacora(bitacoraMes);
-    const salidasSinCerrar = bitacoraFlota.filter(r => r.estado === "en_ruta");
-
-    const estadoFlotaData = [
-      { name: "Con chofer", value: conChoferHoy.length, color: "#16a34a" },
-      { name: "En taller", value: enTallerHoy.length, color: "#dc2626" },
-      { name: "Sin chofer", value: sinChoferHoy.length, color: "#94a3b8" },
-    ].filter(d => d.value > 0);
-
-    return {
-      vehiculos, tallerFlota, conChoferHoy, sinChoferHoy, enTallerHoy,
-      prestamosAtrasados, choferesOrdenados, licenciasVencidas, licenciasPorVencer,
-      resumenMes, salidasSinCerrar, estadoFlotaData,
-    };
-  }, [equipos, ordenes, asignaciones, prestamos, choferes, bitacoraFlota]);
-
-  // ── Coordinación Movilización ↔ Taller ──────────────────────────────────
-  // Quién tiene que moverse en cada pedido de Movilización al Taller. Las
-  // solicitudes que llegan acá ya son solo las pendientes (getMonitorData).
-  const coordinacion = useMemo(() => {
-    const porId = new Map(equipos.map(e => [e.id, e]));
-    return {
-      resumen: resumenCoordinacion(ordenes),
-      porRevisar: solicitudes.filter(s => esSolicitudDeFlota(s, porId.get(s.equipo_id))).length,
-    };
-  }, [ordenes, solicitudes, equipos]);
-
-  const {
-    vehiculos: vehiculosFlota, tallerFlota, conChoferHoy, sinChoferHoy,
-    prestamosAtrasados, choferesOrdenados, licenciasVencidas, licenciasPorVencer,
-    resumenMes: resumenFlotaMes, salidasSinCerrar, estadoFlotaData,
-  } = flota;
-
-  // ── Listados ──────────────────────────────────────────────────────────────
-  // El Monitor solo tenia contadores y graficos: veia "12 equipos" y "5 OT en
-  // gestion", pero no CUALES. Y como el rol esta confinado a esta pantalla
-  // (ver Layout.jsx), no habia ningun otro lugar donde mirarlos. Estos dos
-  // listados son la misma informacion que ya llegaba de getMonitorData, ahora
-  // visible; siguen siendo de solo lectura.
   const equiposFiltrados = useMemo(() => {
     const q = busquedaEquipo.trim().toLowerCase();
     return equipos.filter(e => {
@@ -309,13 +180,13 @@ export default function MonitorCorporativo() {
     });
   }, [ordenes, busquedaOT, filtroEstadoOT]);
 
-  // Layout rebota al Monitor Corporativo fuera de las pantallas que su rol no
-  // tiene permitidas, asi que enlazar a ellas desde aqui era un callejon sin
-  // salida: el clic volvia a esta misma pagina. Se enlaza solo lo alcanzable.
+  // Enlazar solo a lo que el rol que mira puede abrir: el Monitor está
+  // confinado a esta pantalla, y un enlace fuera de su menú lo rebota acá.
   const paginasAlcanzables = useMemo(
     () => new Set(getNavItemsForRole(getEffectiveNavRole(currentUser?.role)).map(i => i.page)),
     [currentUser?.role]
   );
+  const verDetalleOT = paginasAlcanzables.has("Taller") || paginasAlcanzables.has("OrdenesTrabajo");
 
   const tiposPresentes = useMemo(() => {
     const vistos = [...new Set(equipos.map(e => e.tipo).filter(Boolean))];
@@ -328,6 +199,13 @@ export default function MonitorCorporativo() {
     </div>
   );
 
+  const info = AREAS.find(a => a.clave === area);
+  const r = areas[area];
+  const compras = [...comprasTaller, ...comprasSalud]
+    .sort((a, b) => String(b.created_date || "").localeCompare(String(a.created_date || "")));
+  const vehiculos = equipos.filter(e => esVehiculo(e.tipo));
+  const hoyTexto = new Date().toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+
   return (
     <div ref={containerRef} className="min-h-screen" style={{ background: "#f8fafc", overscrollBehavior: "none" }}>
       {refreshing && (
@@ -337,563 +215,216 @@ export default function MonitorCorporativo() {
       )}
 
       {/* Header */}
-      <div className="relative overflow-hidden px-4 lg:px-10 pt-6 lg:pt-12 pb-6 lg:pb-10"
-        style={{ background: "linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)" }}>
-        <div className="absolute right-8 top-1/2 -translate-y-1/2 w-56 h-56 rounded-full opacity-20 border-4 border-white hidden lg:block"
-          style={{ background: "radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%)" }} />
-        <div className="relative max-w-6xl mx-auto flex items-center gap-3">
-          <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.2)" }}>
-            <ShieldCheck className="w-5 h-5 lg:w-6 lg:h-6 text-white" />
+      <div className="px-4 lg:px-10 pt-6 lg:pt-10 pb-6 lg:pb-8"
+        style={{ background: "linear-gradient(135deg, #4F46E5 0%, #312E81 100%)" }}>
+        <div className="max-w-6xl mx-auto flex items-center gap-3">
+          <div className="w-11 h-11 lg:w-12 lg:h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.18)" }}>
+            <ShieldCheck className="w-6 h-6 text-white" />
           </div>
-          <div>
-            <p className="text-indigo-100 text-[10px] lg:text-xs font-semibold uppercase tracking-widest hidden sm:block">Visualización Estratégica Global</p>
-            <h1 className="text-xl lg:text-4xl font-bold text-white leading-tight">Monitor Corporativo</h1>
-            <p className="text-indigo-50 text-xs lg:text-sm mt-0.5">KPIs consolidados · Área Salud y Taller · Solo lectura</p>
+          <div className="min-w-0">
+            <h1 className="text-2xl lg:text-3xl font-bold text-white leading-tight">Monitor Corporativo</h1>
+            <p className="text-indigo-100 text-xs lg:text-sm mt-0.5 first-letter:uppercase">{hoyTexto} · Solo lectura</p>
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 lg:px-10 mt-4 lg:mt-6 pb-10 space-y-6 relative z-10">
+      <div className="max-w-6xl mx-auto px-4 lg:px-10 mt-5 pb-10 space-y-6">
 
-        {/* Los ceros de abajo solo son reales si los datos llegaron. */}
         {errorCarga && (
-          <div className="rounded-2xl px-4 py-3 flex items-start gap-3"
-            style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}>
-            <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "#DC2626" }} />
+          <div className="rounded-2xl px-4 py-3 flex items-start gap-3 bg-red-50 border border-red-200">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-600" />
             <div>
-              <p className="text-sm font-bold" style={{ color: "#B91C1C" }}>
-                No se pudieron cargar los datos del monitor
-              </p>
-              <p className="text-xs mt-0.5" style={{ color: "#DC2626" }}>
-                Los números que ves abajo están en cero porque falló la consulta al servidor,
-                no porque no haya equipos, alertas ni órdenes. No tomes decisiones con esta
-                pantalla hasta que se recupere. — {errorCarga}
+              <p className="text-sm font-bold text-red-700">No se pudieron cargar los datos del monitor</p>
+              <p className="text-xs mt-0.5 text-red-600">
+                Lo que ves abajo puede aparecer "en orden" solo porque no llegaron los datos. No tomes
+                decisiones con esta pantalla hasta que se recupere. — {errorCarga}
               </p>
             </div>
           </div>
         )}
 
-        {/* KPIs Globales */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-          <KpiCard label="Equipos Totales" value={equipos.length} icon={Monitor} color="#6d28d9" bg="#f5f3ff" sub={`${ambulancias.length} ambulancias · ${deas.length} DEA`} />
-          <KpiCard label="Alertas Activas" value={alertas.length} icon={AlertTriangle} color="#dc2626" bg="#fee2e2" sub={`${alertasCriticas.length} críticas`} />
-          <KpiCard label="OT en Gestión" value={otAbiertas.length} icon={Wrench} color="#d97706" bg="#fffbeb" sub={`${otCompletadas.length} completadas`} />
-          <KpiCard label="Inventario Repuestos" value={repuestos.length} icon={Package} color="#4f46e5" bg="#e0e7ff" sub={`${stockBajo.length} con stock bajo`} />
-        </div>
-
-        {/* ===== ÁREA SALUD ===== */}
-        <SeccionArea
-          titulo="Área de Salud" subtitulo="Equipos médicos, alertas e inspecciones"
-          icon={Stethoscope} color="#16a34a" bg="#f0fdf4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <KpiCard label="Operativos" value={operativos.length} total={equipos.length} icon={CheckCircle2} color="#16a34a" bg="#dcfce7" />
-            <KpiCard label="En Mantención" value={enMantenimiento.length} icon={Wrench} color="#d97706" bg="#fef9c3" />
-            <KpiCard label="Fuera de Servicio" value={fueraServicio.length} icon={AlertTriangle} color="#dc2626" bg="#fee2e2" />
-            <KpiCard label="Parches Vencidos" value={parchesVencidos.length} icon={Heart} color="#dc2626" bg="#fef2f2" />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Pie estado equipos */}
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-              <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-green-600" /> Estado de Equipos
-              </h3>
-              <ResponsiveContainer width="100%" height={180}>
-                <PieChart>
-                  <Pie data={estadoEquiposData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65} innerRadius={35}
-                    label={({ value }) => value} labelLine={false}>
-                    {estadoEquiposData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex flex-wrap justify-center gap-3 mt-2">
-                {estadoEquiposData.map((d, i) => (
-                  <span key={i} className="flex items-center gap-1.5 text-xs text-slate-600">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />{d.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-            {/* Alertas por tipo */}
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-              <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-600" /> Alertas por Tipo
-              </h3>
-              {alertasPorTipo.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs">
-                  <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-green-200" />Sin alertas activas
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={alertasPorTipo} layout="vertical" margin={{ left: 10, right: 10 }}>
-                    <XAxis type="number" hide />
-                    <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 10 }} />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#dc2626" radius={[0, 4, 4, 0]} barSize={16} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-            {/* Pendientes salud */}
-            <div className="bg-white rounded-2xl p-5 space-y-3" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <ClipboardList className="w-4 h-4 text-amber-600" /> Pendientes Salud
-              </h3>
-              <FilaPendiente icon={ClipboardCheck} color="#d97706" label="Bitácoras por revisar" valor={inspecciones.length} to="RevisionInspecciones" alcanzables={paginasAlcanzables} />
-              <FilaPendiente icon={ClipboardList} color="#2563eb" label="Solicitudes pendientes" valor={solicitudes.length} to="SolicitudesV2" alcanzables={paginasAlcanzables} />
-              <FilaPendiente icon={AlertTriangle} color="#dc2626" label="Alertas activas" valor={alertas.length} to="AlertasV2" alcanzables={paginasAlcanzables} />
-              <FilaPendiente icon={Heart} color="#dc2626" label="Parches vencidos" valor={parchesVencidos.length} to="Equipos2" ancla="#equipos" alcanzables={paginasAlcanzables} />
-            </div>
-          </div>
-        </SeccionArea>
-
-        {/* ===== EQUIPOS REGISTRADOS (listado, solo lectura) ===== */}
-        <div id="equipos" style={{ scrollMarginTop: 16 }}>
-          <SeccionArea
-            titulo="Equipos Registrados"
-            subtitulo={`${equiposFiltrados.length} de ${equipos.length} equipos · Solo lectura`}
-            icon={Monitor} color="#0f766e" bg="#f0fdfa">
-            <div className="flex flex-col sm:flex-row gap-2 mb-4">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  value={busquedaEquipo}
-                  onChange={(e) => setBusquedaEquipo(e.target.value)}
-                  placeholder="Buscar por marca, modelo, patente, serie o centro..."
-                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-200"
-                />
-              </div>
-              <select value={filtroTipoEquipo} onChange={(e) => setFiltroTipoEquipo(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-200">
-                <option value="todos">Todos los tipos</option>
-                {tiposPresentes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-              <select value={filtroEstadoEquipo} onChange={(e) => setFiltroEstadoEquipo(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-200">
-                <option value="todos">Todos los estados</option>
-                {ESTADOS_EQUIPO.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
-              </select>
-            </div>
-            {equiposFiltrados.length === 0 ? (
-              <div className="bg-white rounded-2xl p-8 text-center" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-                <Monitor className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-                <p className="text-slate-400 text-sm">
-                  {equipos.length === 0
-                    ? "No hay equipos registrados (o no se pudieron cargar)."
-                    : "Ningún equipo coincide con el filtro."}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[30rem] overflow-y-auto pr-1">
-                {equiposFiltrados.map(eq => <EquipoFila key={eq.id} equipo={eq} />)}
-              </div>
-            )}
-          </SeccionArea>
-        </div>
-
-        {/* ===== ÁREA MOVILIZACIÓN ===== */}
-        <SeccionArea
-          titulo="Área de Movilización" subtitulo="Flota, choferes, licencias y programación · Solo lectura"
-          icon={Truck} color="#b45309" bg="#fffbeb">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <KpiCard label="Vehículos de Flota" value={vehiculosFlota.length} icon={Truck} color="#b45309" bg="#fffbeb"
-              sub={`${conChoferHoy.length} con chofer hoy`} />
-            <KpiCard label="Sin Chofer Hoy" value={sinChoferHoy.length} icon={UserX}
-              color={sinChoferHoy.length > 0 ? "#dc2626" : "#16a34a"}
-              bg={sinChoferHoy.length > 0 ? "#fef2f2" : "#dcfce7"} />
-            <KpiCard label="Licencias Vencidas" value={licenciasVencidas.length} icon={IdCard}
-              color={licenciasVencidas.length > 0 ? "#dc2626" : "#16a34a"}
-              bg={licenciasVencidas.length > 0 ? "#fef2f2" : "#dcfce7"}
-              sub={`${licenciasPorVencer.length} por vencer`} />
-            <KpiCard label="Préstamos Atrasados" value={prestamosAtrasados.length} icon={ArrowLeftRight}
-              color={prestamosAtrasados.length > 0 ? "#dc2626" : "#16a34a"}
-              bg={prestamosAtrasados.length > 0 ? "#fef2f2" : "#dcfce7"}
-              sub={`${prestamos.length} préstamos vigentes`} />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-            {/* Estado de la flota hoy */}
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-              <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-amber-600" /> Estado de la Flota Hoy
-              </h3>
-              {estadoFlotaData.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs">
-                  <Truck className="w-8 h-8 mx-auto mb-2 text-slate-200" />Sin vehículos de flota
-                </div>
-              ) : (
-                <>
-                  {/* Sin `label` en la torta a propósito: con solo dos o tres
-                      categorías, un reparto parejo (ej. 2 y 2) deja la
-                      etiqueta justo en el borde del área visible y se recorta.
-                      El número queda más seguro en la leyenda de abajo. */}
-                  <ResponsiveContainer width="100%" height={160}>
-                    <PieChart>
-                      <Pie data={estadoFlotaData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={62} innerRadius={34}>
-                        {estadoFlotaData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="flex flex-wrap justify-center gap-3 mt-2">
-                    {estadoFlotaData.map((d, i) => (
-                      <span key={i} className="flex items-center gap-1.5 text-xs text-slate-600">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
-                        {d.name} <strong className="text-slate-700">({d.value})</strong>
-                      </span>
-                    ))}
+        {/* 1. Cómo está cada área: un semáforo y una frase. Tocar abre el área. */}
+        <section>
+          <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">Estado general</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {AREAS.map(a => {
+              const est = areas[a.clave].estado;
+              const t = TONO[est.tono];
+              const Icono = a.icono;
+              const activa = a.clave === area;
+              return (
+                <button key={a.clave} type="button" onClick={() => elegir(a.clave)}
+                  aria-pressed={activa}
+                  className="text-left bg-white rounded-2xl p-4 border-2 transition-all hover:-translate-y-0.5"
+                  style={{ borderColor: activa ? a.color : "transparent", ...sombra }}>
+                  <div className="flex items-center gap-2">
+                    <Icono className="w-5 h-5 flex-shrink-0" style={{ color: a.color }} />
+                    <span className="font-bold text-slate-800">{a.titulo}</span>
+                    <span className="ml-auto flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: t.fondo, color: t.texto }}>
+                      <Circle className="w-2 h-2" fill={t.punto} stroke="none" /> {est.palabra}
+                    </span>
                   </div>
-                </>
-              )}
-            </div>
-
-            {/* Choferes y licencias */}
-            <div className="bg-white rounded-2xl p-5 space-y-2" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-              <h3 className="text-sm font-bold text-slate-700 mb-1 flex items-center gap-2">
-                <IdCard className="w-4 h-4 text-amber-600" /> Choferes y Licencias
-              </h3>
-              {choferesOrdenados.length === 0 ? (
-                <div className="text-center py-6 text-slate-400 text-xs">
-                  <IdCard className="w-8 h-8 mx-auto mb-2 text-slate-200" />Sin choferes registrados
-                </div>
-              ) : (
-                <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                  {choferesOrdenados.slice(0, 8).map(c => (
-                    <div key={c.id} className="flex items-center justify-between text-xs gap-2">
-                      <span className="text-slate-700 truncate">{c.full_name || c.email}</span>
-                      <span className="font-semibold flex-shrink-0" style={{
-                        color: c.lic.clave === "vencida" ? "#dc2626"
-                          : c.lic.clave === "por_vencer" ? "#b45309"
-                          : c.lic.clave === "sin_datos" ? "#94a3b8" : "#16a34a",
-                      }}>
-                        {c.lic.clave === "vencida" ? "Vencida" : c.lic.clave === "por_vencer" ? "Por vencer"
-                          : c.lic.clave === "sin_datos" ? "Sin cargar" : "Vigente"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Bitácora del mes */}
-            <div className="bg-white rounded-2xl p-5 space-y-3" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <Gauge className="w-4 h-4 text-amber-600" /> Bitácora del Mes
-              </h3>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-slate-500">Salidas registradas</span>
-                  <span className="text-sm font-bold text-slate-700">{resumenFlotaMes.salidas}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-slate-500">Kilómetros recorridos</span>
-                  <span className="text-sm font-bold text-slate-700">{resumenFlotaMes.km.toLocaleString("es-CL")} km</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-slate-500">Combustible cargado</span>
-                  <span className="text-sm font-bold text-slate-700">{resumenFlotaMes.litros.toLocaleString("es-CL")} L</span>
-                </div>
-                <div className="h-px bg-slate-100" />
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-700">Salidas sin cerrar</span>
-                  <span className="text-lg font-bold" style={{ color: salidasSinCerrar.length > 0 ? "#dc2626" : "#16a34a" }}>
-                    {salidasSinCerrar.length}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Programación de los próximos 7 días */}
-          <div className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-            <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-              <Truck className="w-4 h-4 text-amber-600" /> Programación de los Próximos 7 Días
-            </h3>
-            <FlotaSemanaMini
-              vehiculos={vehiculosFlota}
-              asignaciones={asignaciones}
-              prestamos={prestamos}
-              taller={tallerFlota}
-            />
-            <p className="text-[11px] text-slate-400 mt-3">
-              Vista de solo lectura. La programación la administra Movilización.
-            </p>
-          </div>
-        </SeccionArea>
-
-        {/* ===== COORDINACIÓN MOVILIZACIÓN ↔ TALLER ===== */}
-        <SeccionArea
-          titulo="Coordinación Movilización ↔ Taller"
-          subtitulo="Pedidos al taller, fechas de ingreso y quién debe responder · Solo lectura"
-          icon={CalendarClock} color="#1d4ed8" bg="#eff6ff">
-          <CoordinacionTaller
-            resumen={coordinacion.resumen}
-            porRevisar={coordinacion.porRevisar}
-            verDetalle={paginasAlcanzables.has("Taller") || paginasAlcanzables.has("OrdenesTrabajo")}
-          />
-        </SeccionArea>
-
-        {/* ===== ÁREA TALLER ===== */}
-        <SeccionArea
-          titulo="Área de Taller" subtitulo="Órdenes de trabajo, repuestos y proveedores"
-          icon={Wrench} color="#7c3aed" bg="#f5f3ff">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <KpiCard label="OT Pendientes" value={otPendientes.length} icon={ClipboardList} color="#d97706" bg="#fffbeb" />
-            <KpiCard label="OT En Proceso" value={otEnProceso.length} icon={Activity} color="#7c3aed" bg="#f5f3ff" />
-            <KpiCard label="OT Completadas" value={otCompletadas.length} icon={CheckCircle2} color="#16a34a" bg="#dcfce7" />
-            <KpiCard label="OT desde Inspección" value={otPorInspeccion.length} icon={ClipboardCheck} color="#2563eb" bg="#eff6ff" />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* OT por estado */}
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-              <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-violet-600" /> OT por Estado
-              </h3>
-              {otEstadosData.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs">
-                  <Wrench className="w-8 h-8 mx-auto mb-2 text-slate-200" />Sin órdenes de trabajo
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={otEstadosData} margin={{ left: -20, right: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" height={50} />
-                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                    <Tooltip />
-                    <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={28}>
-                      {otEstadosData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-            {/* Resumen costos */}
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-              <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-blue-600" /> Resumen de Costos
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-slate-500">Valor Inventario</span>
-                  <span className="text-sm font-bold text-slate-700">${valorInventario.toLocaleString("es-CL")}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-slate-500">Costo Total OT</span>
-                  <span className="text-sm font-bold text-slate-700">${totalCostoOT.toLocaleString("es-CL")}</span>
-                </div>
-                <div className="h-px bg-slate-100" />
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-700">Proveedores Activos</span>
-                  <span className="text-lg font-bold text-violet-700">{proveedoresActivos.length}</span>
-                </div>
-                {paginasAlcanzables.has("Proveedores") && (
-                  <Link to={createPageUrl("Proveedores")} className="block text-xs text-violet-600 font-semibold mt-2 hover:underline">
-                    Ver directorio →
-                  </Link>
-                )}
-              </div>
-            </div>
-            {/* Stock bajo */}
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-              <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                <Package className="w-4 h-4 text-red-600" /> Repuestos Stock Bajo
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">{stockBajo.length}</span>
-              </h3>
-              {stockBajo.length === 0 ? (
-                <div className="text-center py-6 text-slate-400 text-xs">
-                  <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-green-200" />Stock suficiente en todos los repuestos
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {stockBajo.slice(0, 8).map(r => (
-                    <div key={r.id} className="flex items-center justify-between text-xs">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-700 truncate">{r.nombre}</p>
-                        <p className="text-slate-400">{r.categoria}</p>
-                      </div>
-                      <span className="font-bold text-red-600 flex-shrink-0 ml-2">{r.stock_actual || 0}/{r.stock_minimo || 0}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </SeccionArea>
-
-        {/* ===== ÓRDENES DE TRABAJO (listado, solo lectura) ===== */}
-        <div id="ordenes" style={{ scrollMarginTop: 16 }}>
-          <SeccionArea
-            titulo="Órdenes de Trabajo"
-            subtitulo={`${ordenesFiltradas.length} de ${ordenes.length} órdenes · Solo lectura`}
-            icon={ClipboardList} color="#7c3aed" bg="#f5f3ff">
-            <div className="flex flex-col sm:flex-row gap-2 mb-3">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  value={busquedaOT}
-                  onChange={(e) => setBusquedaOT(e.target.value)}
-                  placeholder="Buscar por N° de OT, vehículo, patente, mecánico o falla..."
-                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
-                />
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 mb-4">
-              {FILTROS_OT.map(f => (
-                <button key={f.value} onClick={() => setFiltroEstadoOT(f.value)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all"
-                  style={filtroEstadoOT === f.value
-                    ? { background: "#7c3aed", color: "white" }
-                    : { background: "white", color: "#64748b", border: "1px solid #e2e8f0" }}>
-                  {f.label}
+                  <p className="text-sm text-slate-600 mt-2 leading-snug line-clamp-2">{est.frase}</p>
                 </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* 2. El área elegida */}
+        <section ref={panelRef} style={{ scrollMarginTop: 16 }} className="space-y-5">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${info.color}15` }}>
+              <info.icono className="w-5 h-5" style={{ color: info.color }} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold" style={{ color: info.color }}>{info.titulo}</h2>
+              <p className="text-xs text-slate-500">{info.sub}</p>
+            </div>
+          </div>
+
+          <Indicadores lista={r.indicadores} />
+
+          <div>
+            <h3 className="text-sm font-bold text-slate-700 mb-2">Requiere atención</h3>
+            <Atencion lista={r.atencion} />
+          </div>
+
+          {area === "calidad" && (
+            <>
+              <Desplegable titulo={`Todos los equipos (${equipos.length})`} icono={Monitor}>
+                <div className="flex flex-col sm:flex-row gap-2 mb-3">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input value={busquedaEquipo} onChange={(e) => setBusquedaEquipo(e.target.value)}
+                      placeholder="Buscar por marca, modelo, patente, serie o centro..."
+                      className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-sm" />
+                  </div>
+                  <select value={filtroTipoEquipo} onChange={(e) => setFiltroTipoEquipo(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm">
+                    <option value="todos">Todos los tipos</option>
+                    {tiposPresentes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                  <select value={filtroEstadoEquipo} onChange={(e) => setFiltroEstadoEquipo(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm">
+                    <option value="todos">Todos los estados</option>
+                    {ESTADOS_EQUIPO.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+                  </select>
+                </div>
+                {equiposFiltrados.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-6">Ningún equipo coincide con el filtro.</p>
+                ) : (
+                  <div className="space-y-2 max-h-[30rem] overflow-y-auto pr-1">
+                    {equiposFiltrados.map(eq => <EquipoFila key={eq.id} equipo={eq} />)}
+                  </div>
+                )}
+              </Desplegable>
+              <Desplegable titulo="Por centro y subsede" icono={MapPin}>
+                <CentroBreakdown centros={centros} equipos={equipos} alertas={alertas} parches={parches} ordenes={ordenes} />
+              </Desplegable>
+            </>
+          )}
+
+          {area === "gestion" && (
+            <>
+              <div className="bg-white rounded-2xl p-5" style={sombra}>
+                <h3 className="text-sm font-bold text-slate-700 mb-3">Pedidos de Movilización al Taller</h3>
+                <CoordinacionTaller resumen={r.coordinacion} verDetalle={verDetalleOT}
+                  porRevisar={solicitudes.filter(s => esSolicitudDeFlota(s, equipos.find(e => e.id === s.equipo_id))).length} />
+              </div>
+              <Desplegable titulo={`Compras de repuestos e insumos (${compras.length})`} icono={ShoppingCart}>
+                {compras.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-6">No hay compras registradas.</p>
+                ) : (
+                  <div className="space-y-2 max-h-[30rem] overflow-y-auto pr-1">
+                    {compras.slice(0, 40).map(sol => {
+                      const cfg = COMPRA_ESTADO[sol.estado] || COMPRA_ESTADO.pendiente;
+                      return (
+                        <div key={`${sol._area}-${sol.id}`} className="bg-white rounded-xl p-3 flex items-center gap-3 border border-slate-100">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 flex-shrink-0">{sol._area}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-slate-800 text-sm truncate">{sol.repuesto_nombre}</p>
+                            <p className="text-[11px] text-slate-400 truncate">{sol.cantidad} unid. · {sol.solicitante_nombre || sol.solicitante_email}</p>
+                          </div>
+                          <span className="text-[11px] font-bold px-2 py-1 rounded-full flex-shrink-0" style={{ background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
+                          <button onClick={() => setSelSeguimiento(sol)} className="text-xs font-bold text-indigo-700 flex-shrink-0">Seguimiento</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Desplegable>
+            </>
+          )}
+
+          {area === "movilizacion" && (
+            <div className="bg-white rounded-2xl p-5" style={sombra}>
+              <h3 className="text-sm font-bold text-slate-700 mb-3">Quién tiene cada vehículo los próximos 7 días</h3>
+              <FlotaSemanaMini vehiculos={vehiculos} asignaciones={asignaciones} prestamos={prestamos} taller={r.taller} />
+            </div>
+          )}
+
+          {area === "taller" && (
+            <Desplegable titulo={`Órdenes de trabajo (${ordenes.length})`} icono={ClipboardList}>
+              <div className="relative mb-3">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input value={busquedaOT} onChange={(e) => setBusquedaOT(e.target.value)}
+                  placeholder="Buscar por N° de OT, vehículo, patente, mecánico o falla..."
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-sm" />
+              </div>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {FILTROS_OT.map(f => (
+                  <button key={f.value} onClick={() => setFiltroEstadoOT(f.value)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold"
+                    style={filtroEstadoOT === f.value
+                      ? { background: "#7c3aed", color: "white" }
+                      : { background: "white", color: "#64748b", border: "1px solid #e2e8f0" }}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              {ordenesFiltradas.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-6">Ninguna orden coincide con el filtro.</p>
+              ) : (
+                <div className="space-y-2 max-h-[30rem] overflow-y-auto pr-1">
+                  {ordenesFiltradas.map(ot => <OrdenFila key={ot.id} ot={ot} verDetalle={verDetalleOT} />)}
+                </div>
+              )}
+            </Desplegable>
+          )}
+        </section>
+
+        {/* 3. Lo que el Monitor puede hacer además de mirar: dejar una nota. */}
+        <Desplegable titulo="Notas y consultas por equipo" icono={MessageCircle}
+          ayuda="El hilo lo ven el Jefe de Taller y el Encargado de Salud del centro.">
+          <select value={equipoSeleccionado} onChange={(e) => setEquipoSeleccionado(e.target.value)}
+            className="w-full sm:w-96 border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white mb-3">
+            <option value="">Elige un equipo o vehículo...</option>
+            {equipos.slice()
+              .sort((a, b) => {
+                const rango = (e) => e.tipo === "ambulancia" ? 0 : esVehiculo(e.tipo) ? 1 : 2;
+                return rango(a) - rango(b);
+              })
+              .map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.marca} {e.modelo}{e.patente ? ` · ${e.patente}` : ""} — {e.centro_principal}{e.subsede ? " / " + e.subsede : ""}
+                </option>
               ))}
-            </div>
-            {ordenesFiltradas.length === 0 ? (
-              <div className="bg-white rounded-2xl p-8 text-center" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-                <Wrench className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-                <p className="text-slate-400 text-sm">
-                  {ordenes.length === 0
-                    ? "No hay órdenes de trabajo registradas (o no se pudieron cargar)."
-                    : "Ninguna orden coincide con el filtro."}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[30rem] overflow-y-auto pr-1">
-                {ordenesFiltradas.map(ot => (
-                  <OrdenFila key={ot.id} ot={ot} verDetalle={paginasAlcanzables.has("Taller") || paginasAlcanzables.has("OrdenesTrabajo")} />
-                ))}
-              </div>
-            )}
-          </SeccionArea>
-        </div>
-
-        {/* ===== SOLICITUDES DE COMPRA DE TALLER ===== */}
-        <SeccionArea
-          titulo="Solicitudes de Compra de Taller" subtitulo="Repuestos solicitados por el Jefe de Taller y gestionados por Compras · Solo lectura"
-          icon={ShoppingCart} color="#2563eb" bg="#eff6ff">
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <KpiCard label="Pendientes de Compra" value={compraPendientes.length} icon={ShoppingCart} color="#d97706" bg="#fffbeb" />
-            <KpiCard label="Compradas" value={compraCompradas.length} icon={Package} color="#2563eb" bg="#eff6ff" />
-            <KpiCard label="Recibidas en Bodega" value={compraRecibidas.length} icon={CheckCircle2} color="#16a34a" bg="#dcfce7" />
-          </div>
-          {solicitudesCompra.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-              <ShoppingCart className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-              <p className="text-slate-400 text-sm">No hay solicitudes de compra registradas.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {solicitudesCompra.slice(0, 12).map(sol => {
-                const cfg = COMPRA_ESTADO[sol.estado] || COMPRA_ESTADO.pendiente;
-                const Icon = cfg.icon;
-                return (
-                  <div key={sol.id} className="bg-white rounded-2xl p-4 flex items-center gap-3" style={{ boxShadow: "0 4px 14px rgba(15,45,107,0.06)" }}>
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: cfg.bg }}>
-                      <Icon className="w-5 h-5" style={{ color: cfg.color }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-slate-800 text-sm truncate">{sol.repuesto_nombre}</p>
-                      <p className="text-[11px] text-slate-400">{sol.numero_solicitud} · {sol.cantidad} unid. · {sol.solicitante_nombre || sol.solicitante_email}</p>
-                    </div>
-                    <span className="text-[11px] font-bold px-2 py-1 rounded-full flex-shrink-0 hidden sm:inline" style={{ background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
-                    <button onClick={() => setSelSeguimiento(sol)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold flex-shrink-0" style={{ background: "#EFF6FF", color: "#1D4ED8", border: "1px solid #BFDBFE" }}>
-                      <ClipboardList className="w-3.5 h-3.5" /> Ver Seguimiento
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </SeccionArea>
-
-        {/* ===== SOLICITUDES DE COMPRA DE SALUD ===== */}
-        <SeccionArea
-          titulo="Solicitudes de Compra de Salud" subtitulo="Insumos médicos (parches, baterías, electrodos) solicitados por Encargado de Salud y gestionados por Compras Salud · Solo lectura"
-          icon={Heart} color="#0d9488" bg="#ccfbf1">
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <KpiCard label="Pendientes de Compra" value={compraSaludPendientes.length} icon={ShoppingCart} color="#d97706" bg="#fffbeb" />
-            <KpiCard label="Compradas" value={compraSaludCompradas.length} icon={Package} color="#0d9488" bg="#ccfbf1" />
-            <KpiCard label="Recibidas en Bodega" value={compraSaludRecibidas.length} icon={CheckCircle2} color="#16a34a" bg="#dcfce7" />
-          </div>
-          {solicitudesCompraSalud.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center" style={{ boxShadow: "0 4px 20px rgba(15,45,107,0.06)" }}>
-              <Heart className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-              <p className="text-slate-400 text-sm">No hay solicitudes de compra de insumos médicos.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {solicitudesCompraSalud.slice(0, 12).map(sol => {
-                const cfg = COMPRA_ESTADO[sol.estado] || COMPRA_ESTADO.pendiente;
-                const Icon = cfg.icon;
-                return (
-                  <div key={sol.id} className="bg-white rounded-2xl p-4 flex items-center gap-3" style={{ boxShadow: "0 4px 14px rgba(15,45,107,0.06)" }}>
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: cfg.bg }}>
-                      <Icon className="w-5 h-5" style={{ color: cfg.color }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-slate-800 text-sm truncate">{sol.repuesto_nombre}</p>
-                      <p className="text-[11px] text-slate-400">{sol.numero_solicitud} · {sol.cantidad} unid. · {sol.solicitante_nombre || sol.solicitante_email}</p>
-                    </div>
-                    <span className="text-[11px] font-bold px-2 py-1 rounded-full flex-shrink-0 hidden sm:inline" style={{ background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
-                    <button onClick={() => setSelSeguimientoSalud(sol)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold flex-shrink-0" style={{ background: "#CCFBF1", color: "#0F766E", border: "1px solid #99F6E4" }}>
-                      <ClipboardList className="w-3.5 h-3.5" /> Ver Seguimiento
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </SeccionArea>
-
-        {/* ===== NOTAS Y CONSULTAS (bidireccional: Monitor Corporativo, Jefe de Taller, Encargado Salud) ===== */}
-        <SeccionArea
-          titulo="Notas y Consultas" subtitulo="Hilo por equipo, visible para Monitor Corporativo, Jefe de Taller y Encargado Salud del centro"
-          icon={MessageCircle} color="#4f46e5" bg="#eef2ff">
-          <div className="mb-3">
-            <select
-              value={equipoSeleccionado}
-              onChange={(e) => setEquipoSeleccionado(e.target.value)}
-              className="w-full sm:w-96 border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            >
-              <option value="">Selecciona un equipo para ver/dejar notas...</option>
-              {equipos
-                .slice()
-                // Ambulancias primero (es lo que más se consulta), después el
-                // resto de la flota, después el equipamiento médico.
-                .sort((a, b) => {
-                  const rango = (e) => e.tipo === "ambulancia" ? 0 : esVehiculo(e.tipo) ? 1 : 2;
-                  return rango(a) - rango(b);
-                })
-                .map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.tipo === "ambulancia" ? "🚑" : esVehiculo(e.tipo) ? "🚚" : "🩺"}{" "}
-                    {e.marca} {e.modelo} — {e.centro_principal}{e.subsede ? " / " + e.subsede : ""}
-                  </option>
-                ))}
-            </select>
-          </div>
+          </select>
           {equipoSeleccionado && (() => {
             const eq = equipos.find((e) => e.id === equipoSeleccionado);
-            // La OT abierta del equipo, si tiene. Sin esto el comentario se
-            // guardaba con orden_trabajo_id vacio y no llegaba nunca al taller:
-            // ComentariosEquipo ya aceptaba la prop, pero nadie se la pasaba.
+            // La OT abierta del equipo, si tiene: así el comentario llega al taller.
             const otAbierta = ordenes
               .filter((o) => o.equipo_id === equipoSeleccionado && o.estado !== "completada" && o.estado !== "cancelada")
               .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
             return (
               <>
-                {otAbierta ? (
-                  <p className="text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-3">
-                    Este hilo queda ligado a la <strong>OT {otAbierta.numero_ot || otAbierta.id}</strong>
-                    {" "}({String(otAbierta.estado || "").replace(/_/g, " ")}) — el taller lo ve en la orden.
-                  </p>
-                ) : (
-                  <p className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 mb-3">
-                    Este equipo no tiene una orden de trabajo abierta: el comentario queda en su ficha.
-                  </p>
-                )}
+                <p className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 mb-3">
+                  {otAbierta
+                    ? <>Este hilo queda ligado a la <strong>OT {otAbierta.numero_ot || otAbierta.id}</strong>: el taller lo ve en la orden.</>
+                    : "Este equipo no tiene una orden abierta: el comentario queda en su ficha."}
+                </p>
                 <ComentariosEquipo
                   equipoId={equipoSeleccionado}
                   equipoLabel={eq ? `${eq.marca} ${eq.modelo}` : equipoSeleccionado}
@@ -903,17 +434,7 @@ export default function MonitorCorporativo() {
               </>
             );
           })()}
-        </SeccionArea>
-
-        {/* ===== DISTRIBUCIÓN POR CENTRO Y SUCURSAL ===== */}
-        <CentroBreakdown
-          centros={centros}
-          equipos={equipos}
-          alertas={alertas}
-          parches={parches}
-          ordenes={ordenes}
-        />
-
+        </Desplegable>
       </div>
 
       <SeguimientoCompraModal
@@ -922,59 +443,71 @@ export default function MonitorCorporativo() {
         onClose={() => setSelSeguimiento(null)}
         onActualizado={fetchData}
         readOnly
-      />
-      <SeguimientoCompraModal
-        solicitud={selSeguimientoSalud}
-        user={currentUser}
-        onClose={() => setSelSeguimientoSalud(null)}
-        onActualizado={fetchData}
-        readOnly
-        entityName="SolicitudRepuestoSalud"
+        {...(selSeguimiento?._entidad ? { entityName: selSeguimiento._entidad } : {})}
       />
     </div>
   );
 }
 
-function SeccionArea({ titulo, subtitulo, icon: Icon, color, bg, children }) {
+/* ══════════════════════════════════════════════
+   Piezas del panel
+══════════════════════════════════════════════ */
+function Indicadores({ lista }) {
   return (
-    <div className="bg-white/60 rounded-3xl p-5 lg:p-6" style={{ boxShadow: "0 4px 24px rgba(15,45,107,0.06)" }}>
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
-          <Icon className="w-5 h-5" style={{ color }} />
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {lista.map((k, i) => (
+        <div key={i} className="bg-white rounded-2xl p-4" style={sombra}>
+          <p className={`text-2xl lg:text-3xl font-bold ${k.malo ? "text-red-600" : "text-slate-800"}`}>{k.valor}</p>
+          <p className="text-xs text-slate-600 font-medium leading-tight mt-0.5">{k.etiqueta}</p>
+          {k.contexto && <p className="text-[11px] text-slate-400 mt-0.5">{k.contexto}</p>}
         </div>
-        <div>
-          <h2 className="text-lg font-bold" style={{ color }}>{titulo}</h2>
-          <p className="text-xs text-slate-500">{subtitulo}</p>
-        </div>
-      </div>
-      {children}
+      ))}
     </div>
   );
 }
 
-// `to` solo se enlaza si el rol que mira puede abrir esa pantalla; si no, la
-// fila queda como dato (o baja al listado de esta misma pagina con `ancla`).
-function FilaPendiente({ icon: Icon, color, label, valor, to, ancla, alcanzables }) {
-  const contenido = (
-    <>
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: color + "15" }}>
-        <Icon className="w-4 h-4" style={{ color }} />
+function Atencion({ lista }) {
+  if (!lista.length) {
+    return (
+      <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 flex items-center gap-3 text-sm text-green-800">
+        <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" /> Nada que requiera atención.
       </div>
-      <span className="text-xs text-slate-600 flex-1">{label}</span>
-      <span className="text-sm font-bold" style={{ color }}>{valor}</span>
-    </>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {lista.map((a, i) => {
+        const t = TONO[a.tono] || TONO.gris;
+        return (
+          <div key={i} className="rounded-2xl border px-4 py-3 flex items-start gap-3"
+            style={{ background: t.fondo, borderColor: t.borde }}>
+            <Circle className="w-2.5 h-2.5 mt-1.5 flex-shrink-0" fill={t.punto} stroke="none" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold" style={{ color: t.texto }}>{a.titulo}</p>
+              {a.detalle && <p className="text-xs mt-0.5" style={{ color: t.texto, opacity: 0.85 }}>{a.detalle}</p>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
-  const cls = "flex items-center gap-3 p-2 rounded-xl transition-colors";
-
-  if (to && alcanzables?.has(to)) {
-    return <Link to={createPageUrl(to)} className={`${cls} hover:bg-slate-50`}>{contenido}</Link>;
-  }
-  if (ancla) {
-    return <a href={ancla} className={`${cls} hover:bg-slate-50`}>{contenido}</a>;
-  }
-  return <div className={cls}>{contenido}</div>;
 }
 
+function Desplegable({ titulo, icono: Icono, ayuda, children }) {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <div className="bg-white rounded-2xl" style={sombra}>
+      <button type="button" onClick={() => setAbierto(a => !a)} aria-expanded={abierto}
+        className="w-full flex items-center gap-2 px-5 py-4 text-left">
+        {Icono && <Icono className="w-4 h-4 text-slate-400" />}
+        <span className="text-sm font-bold text-slate-700 flex-1">{titulo}</span>
+        {ayuda && <span className="hidden sm:inline text-xs text-slate-400">{ayuda}</span>}
+        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${abierto ? "rotate-180" : ""}`} />
+      </button>
+      {abierto && <div className="px-5 pb-5">{children}</div>}
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════════
    Filas de los listados (solo lectura)
