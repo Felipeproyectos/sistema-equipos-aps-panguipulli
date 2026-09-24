@@ -5,6 +5,7 @@ import { base44 } from "@/api/base44Client";
 import { Heart, Menu, X, LogOut } from "lucide-react";
 import { getNavItemsForRole, paginaFueraDelRol, rutaInicialDelRol } from "@/lib/navPermissions";
 import MobileNav from "@/components/MobileNav";
+import BuscadorEquipos from "@/components/BuscadorEquipos";
 import RoleSimulator from "@/components/RoleSimulator";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import { roleLabel } from "@/lib/roles";
@@ -114,6 +115,13 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </div>
 
+        {/* Buscar un equipo o vehículo y abrir su ficha (Ctrl+K). */}
+        {!userLoading && user && (
+          <div className="px-3 pt-4">
+            <BuscadorEquipos role={effectiveRole} atajo />
+          </div>
+        )}
+
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-6 space-y-1">
           {visibleItems.map((item) => {
@@ -175,6 +183,11 @@ export default function Layout({ children, currentPageName }) {
       {/* Mobile Menu */}
       {menuOpen &&
       <div className="lg:hidden fixed inset-0 z-40 pt-16" style={{ background: "linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)" }}>
+          {user && (
+            <div className="px-4 pt-4">
+              <BuscadorEquipos role={effectiveRole} onElegido={() => setMenuOpen(false)} />
+            </div>
+          )}
           <nav className="px-4 py-4 space-y-1">
             {visibleItems.map((item) => {
             const Icon = item.icon;

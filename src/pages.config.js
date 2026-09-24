@@ -47,7 +47,6 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
-import Alertas from './pages/Alertas';
 import AlertasV2 from './pages/AlertasV2';
 import Actividades from './pages/Actividades';
 import Configuracion from './pages/Configuracion';
@@ -62,7 +61,6 @@ import MiLicencia from './pages/MiLicencia';
 import MiBitacora from './pages/MiBitacora';
 import BitacoraFlota from './pages/BitacoraFlota';
 import SolicitudesV2 from './pages/SolicitudesV2';
-import Solicitudes from './pages/Solicitudes';
 import Usuarios from './pages/Usuarios';
 import Reportes from './pages/Reportes';
 import __Layout from './Layout.jsx';
@@ -70,7 +68,6 @@ import __Layout from './Layout.jsx';
 
 export const PAGES = {
     "AlertasV2": AlertasV2,
-    "Alertas": Alertas,
     "Actividades": Actividades,
     "Configuracion": Configuracion,
     "Dashboard": Dashboard,
@@ -83,7 +80,6 @@ export const PAGES = {
     "MiLicencia": MiLicencia,
     "MiBitacora": MiBitacora,
     "BitacoraFlota": BitacoraFlota,
-    "Solicitudes": Solicitudes,
     "SolicitudesV2": SolicitudesV2,
     "Usuarios": Usuarios,
     "Reportes": Reportes,

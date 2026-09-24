@@ -158,7 +158,10 @@ export default function SolicitudesV2() {
                     )}
                   </div>
                   <div className="flex flex-col gap-1.5 flex-shrink-0">
-                    {isAdmin && sol.estado !== "finalizada" && (
+                    {/* Lo que se informó de un vehículo lo resuelven Movilización y el
+                        Taller: cambiarle el estado desde acá lo sacaría de su bandeja
+                        o lo daría por cerrado sin que el vehículo pasara por el taller. */}
+                    {isAdmin && sol.estado !== "finalizada" && !esSolicitudDeFlota(sol, equipo) && (
                       <button onClick={() => setEditando(sol)} className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50">
                         Gestionar
                       </button>

@@ -6,6 +6,7 @@ import { getCentrosEstructura, TIPOS_EQUIPO, ESTADOS_EQUIPO, resolverUbicacion }
 import EquipoCard from "@/components/equipos2/EquipoCard";
 import EquipoFormModal from "@/components/equipos2/EquipoFormModal";
 import EquipoDetalleModal from "@/components/equipos2/EquipoDetalleModal";
+import useAbrirFichaDesdeEnlace from "@/hooks/useAbrirFichaDesdeEnlace";
 import { useAuth } from "@/lib/AuthContext";
 
 // Valor centinela: equipos que estan en el centro mismo, sin subsede.
@@ -24,6 +25,8 @@ export default function Equipos2() {
   const [showForm, setShowForm] = useState(false);
   const [equipoEditar, setEquipoEditar] = useState(null);
   const [equipoDetalle, setEquipoDetalle] = useState(null);
+  // El buscador del menú llega con ?abrir=<id>.
+  useAbrirFichaDesdeEnlace(equipos, setEquipoDetalle);
   const containerRef = useRef(null);
 
   const reload = useCallback(async () => {
