@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { CalendarClock, Loader2, Send } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { CITA, estadoCita, estaAbierta, eventoDeAgenda, textoCita } from "@/lib/agendaTaller";
+import { CITA, EVENTO, estadoCita, estaAbierta, eventoDeAgenda, textoCita } from "@/lib/agendaTaller";
 import { etiquetaEquipo } from "@/utils/etiquetaEquipo";
 
 // La mitad del Taller en la agenda con Movilización: el Jefe de Taller
@@ -73,7 +73,7 @@ export default function AgendaMovilizacion({ ot, puedeProponer, user, onGuardado
         cita_entrega: entrega || null,
         cita_nota: nota.trim(),
         linea_tiempo: [...(ot.linea_tiempo || []),
-          eventoDeAgenda(user, "Taller propone fecha a Movilización", [resumen, nota.trim()].filter(Boolean).join(" — "))],
+          eventoDeAgenda(user, EVENTO.propone, [resumen, nota.trim()].filter(Boolean).join(" — "))],
       };
       await base44.entities.OrdenTrabajo.update(ot.id, update);
       setNota("");
