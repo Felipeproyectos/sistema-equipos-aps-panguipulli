@@ -33,6 +33,9 @@ import AyudaPantalla from "@/components/flota/AyudaPantalla";
 const DIAS_AVISO = 60;
 
 /** Estado de la licencia de una persona, a hoy. */
+// Desde esta pantalla solo se crean choferes, sea quien sea el que la abre.
+const CHOFER_SOLO = ["chofer"];
+
 export function estadoLicencia(vencimiento, hoy = new Date()) {
   if (!vencimiento) return { clave: "sin_datos", label: "Sin cargar", dias: null };
   const fecha = new Date(`${vencimiento}T00:00:00`);
@@ -222,6 +225,8 @@ export default function Choferes() {
         onClose={() => setInvitando(false)}
         onInvited={cargar}
         currentUser={user}
+        rolesPermitidos={CHOFER_SOLO}
+        titulo="Nuevo chofer"
       />
     </div>
   );

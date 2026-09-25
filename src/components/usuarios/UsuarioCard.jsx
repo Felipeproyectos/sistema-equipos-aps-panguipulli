@@ -45,6 +45,12 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
   // Puede editar si es super_admin, o si el rol actual del usuario está dentro
   // de lo que este editor puede crear/gestionar (coherente con la jerarquía).
   const canEdit = !isSelf && (esSuperAdmin(currentUser?.role) || rolesAsignables.includes(usuario.role));
+  // Rol y centro se escriben directo en `usuario`, y eso solo lo permiten
+  // Base del Sistema y Administrador (policy usuario_escribe + el disparador
+  // de migracion/23_quien_asigna_roles.sql). A un Jefe de Taller o a
+  // Movilización se les ofrecía el selector y el guardado fallaba: ahora solo
+  // ven lo que sí pueden cambiar (nombre y correo, que pasan por el servidor).
+  const puedeCambiarRol = esSuperAdmin(currentUser?.role) || currentUser?.role === ROLES.ADMIN;
 
   const color = ROLE_COLORS[usuario.role] || "#64748b";
   const AreaIcon = esRolFlota(usuario.role) ? Wrench : esRolSalud(usuario.role) ? Stethoscope : Shield;
@@ -96,13 +102,13 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
       // pasaba a chofer se quedaba en la pestaña Salud. Sin área guardada no
       // se toca — ahí ya manda el rol.
       const corregirArea = usuario.area && (rol !== usuario.role || areaDesalineada(usuario));
-      const update = {
+      const update = puedeCambiarRol ? {
         role: rol,
         centro_principal: esRolSalud(rol) ? centroPrincipal : "",
         subsedes_asignadas: esRolSalud(rol) ? subsedes : [],
         ...(corregirArea ? { area: areaDeRol(rol) } : {}),
-      };
-      await base44.entities.User.update(usuario.id, update);
+      } : {};
+      if (puedeCambiarRol) await base44.entities.User.update(usuario.id, update);
       onUpdated?.(usuario.id, {
         ...update,
         ...(cambiaNombre && { full_name: nom }),
@@ -164,7 +170,7 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
                   onClick={() => setEditando(true)}
                   className="w-full py-2 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
                 >
-                  Editar datos, rol y asignación
+                  {puedeCambiarRol ? "Editar datos, rol y asignación" : "Editar nombre y correo"}
                 </button>
               )}
             </>
@@ -185,6 +191,7 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
                   Cambiarlo también cambia el correo con el que entra al sistema.
                 </p>
               </div>
+              {puedeCambiarRol ? (
               <div>
                 <label className="text-xs font-semibold text-slate-500">Rol</label>
                 <select
@@ -202,7 +209,13 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
                   ))}
                 </select>
               </div>
-              {esRolSalud(rol) && (
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Rol: <strong className="text-slate-700">{roleLabel(usuario.role)}</strong>. El rol y el centro los cambia
+                  Base del Sistema o un Administrador.
+                </p>
+              )}
+              {puedeCambiarRol && esRolSalud(rol) && (
                 <>
                   <div>
                     <label className="text-xs font-semibold text-slate-500">Centro principal (CESFAM)</label>

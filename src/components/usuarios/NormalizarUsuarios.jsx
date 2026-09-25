@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { AlertCircle, Wand2, Loader2, CheckCircle2, X, ArrowRight, MapPin } from "lucide-react";
-import { areaDeRol, areaDesalineada, roleLabel } from "@/lib/roles";
+import { areaDeRol, areaDesalineada, roleLabel, esSuperAdmin, rolesQuePuedeCrear } from "@/lib/roles";
 
 // Cuentas con datos que las ponen en el lugar equivocado, y su arreglo.
 //
@@ -64,10 +64,16 @@ export function detectarSinCentro(usuarios) {
   return usuarios.filter(u => areaDeRol(u.role) === "salud" && getCentros(u).length === 0);
 }
 
-export default function NormalizarUsuarios({ usuarios, onCompleto }) {
+export default function NormalizarUsuarios({ usuarios: todos, onCompleto, currentUser }) {
   const [open, setOpen] = useState(false);
   const [procesando, setProcesando] = useState(false);
   const [resultado, setResultado] = useState(null);
+
+  // Solo las cuentas que quien mira puede ordenar: un Administrador no toca la
+  // ficha de un Jefe de Taller o de un chofer (migracion/23_quien_asigna_roles.sql),
+  // y ofrecérselas era garantizar un "no se pudo" al apretar Corregir.
+  const administrables = esSuperAdmin(currentUser?.role) ? null : new Set(rolesQuePuedeCrear(currentUser?.role));
+  const usuarios = administrables ? todos.filter(u => !u.role || administrables.has(u.role)) : todos;
 
   const pendientes = detectarPendientes(usuarios);
   const sinCentro = detectarSinCentro(usuarios);

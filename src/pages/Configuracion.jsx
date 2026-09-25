@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
-import { Upload, Loader2, Save, Settings, Users, Shield, Mail, UserPlus, Trash2, Edit2, X, Check, AlertTriangle, Car, ExternalLink, Copy, CheckCircle, Download, Building2 } from "lucide-react";
+import { Upload, Loader2, Save, Settings, Users, Shield, Trash2, AlertTriangle, Car, ExternalLink, Copy, CheckCircle, Download, Building2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import GestionSedes from "@/components/configuracion/GestionSedes";
 import BackupSection from "@/components/configuracion/BackupSection";
 import DatosDePruebaSection from "@/components/configuracion/DatosDePruebaSection";
 import ResumenDiarioSection from "@/components/configuracion/ResumenDiarioSection";
 import { QRCodeSVG } from "qrcode.react";
 import { useAuth } from "@/lib/AuthContext";
-import { esAdministrador, roleLabel } from "@/lib/roles";
+import { esAdministrador } from "@/lib/roles";
 
 export default function Configuracion() {
   const { user } = useAuth();
@@ -17,17 +19,8 @@ export default function Configuracion() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved]   = useState(false);
 
-  const [usuarios, setUsuarios] = useState([]);
-  const [invEmail, setInvEmail] = useState("");
-  const [invRole, setInvRole]   = useState("user");
-  const [invCentros, setInvCentros] = useState([]);
-  const [invitando, setInvitando] = useState(false);
-  const [invMsg, setInvMsg]     = useState("");
-  const [editingUser, setEditingUser] = useState(null);
-  const [centros, setCentros]   = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [confirmDeleteUserId, setConfirmDeleteUserId] = useState(null);
 
   useEffect(() => {
     const init = async () => {
@@ -36,18 +29,11 @@ export default function Configuracion() {
       // Sistema. Resultado: entraba, y encontraba la lista de usuarios vacía y
       // la personalización sin cargar, porque los datos nunca se pedían.
       if (!esAdministrador(user?.role)) return;
-      const [configs, usrs] = await Promise.all([
-        base44.entities.AppConfig.list(),
-        base44.entities.User.list().catch(() => [])
-      ]);
+      const configs = await base44.entities.AppConfig.list();
       if (configs.length > 0) {
         setConfig(configs[0]);
         setForm({ nombre_app: configs[0].nombre_app || "", subtitulo: configs[0].subtitulo || "", logo_url: configs[0].logo_url || "" });
       }
-      setUsuarios(usrs);
-      const { getCentrosEstructura } = await import("@/lib/centros");
-      const centrosData = await getCentrosEstructura();
-      setCentros(centrosData.map(c => c.nombre));
     };
     init();
   }, []);
@@ -80,57 +66,6 @@ export default function Configuracion() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const toggleInvCentro = (nombre) => {
-    setInvCentros(prev => prev.includes(nombre) ? prev.filter(c => c !== nombre) : [...prev, nombre]);
-  };
-
-  const handleInvitar = async () => {
-    if (!invEmail.includes("@")) return;
-    setInvitando(true);
-    setInvMsg("");
-    try {
-      // base44.users.inviteUser era de la plataforma Base44 y desapareció con la
-      // migración. La cuenta se crea completa en el servidor y vuelve con una
-      // clave temporal, que hay que entregarle a la persona si el correo falla.
-      const r = await base44.users.crear({
-        email: invEmail.trim().toLowerCase(),
-        role: invRole,
-        centro_principal: invCentros[0] || "",
-      });
-      if (invCentros.length > 1 && r?.usuario?.id) {
-        await base44.entities.User.update(r.usuario.id, { centros_asignados: invCentros });
-      }
-      setInvMsg(r.correo_enviado
-        ? `✅ Cuenta creada. Le enviamos la clave temporal por correo (${r.clave_temporal}).`
-        : `✅ Cuenta creada. El correo no salió — clave temporal: ${r.clave_temporal}`);
-      setInvEmail("");
-      setInvCentros([]);
-      setUsuarios(await base44.entities.User.list().catch(() => []));
-    } catch (e) {
-      setInvMsg(`❌ ${e?.data?.error || e?.message || "No se pudo crear la cuenta"}`);
-    }
-    setInvitando(false);
-  };
-
-  const toggleEditCentro = (nombre) => {
-    setEditingUser(prev => {
-      const current = prev.centros_asignados || [];
-      return { ...prev, centros_asignados: current.includes(nombre) ? current.filter(c => c !== nombre) : [...current, nombre] };
-    });
-  };
-
-  const handleUpdateUser = async (userId, data) => {
-    await base44.entities.User.update(userId, data);
-    setUsuarios(prev => prev.map(u => u.id === userId ? { ...u, ...data } : u));
-    setEditingUser(null);
-  };
-
-  const handleDeleteUser = async (userId) => {
-    await base44.entities.User.delete(userId);
-    setUsuarios(prev => prev.filter(u => u.id !== userId));
-    setConfirmDeleteUserId(null);
   };
 
   if (!user) return <div className="flex items-center justify-center min-h-screen"><div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>;
@@ -202,105 +137,22 @@ export default function Configuracion() {
           </button>
         </div>
 
-        {/* Gestión de usuarios */}
-        <div className="bg-white rounded-3xl shadow-lg p-5 lg:p-8 space-y-5">
+        {/* Las cuentas se administran en Usuarios. Acá había una copia vieja
+            (de Base44) que cambiaba roles y borraba fichas escribiendo directo
+            en la base: se saltaba la matriz de quién crea a quién y, al borrar,
+            dejaba la cuenta de acceso viva sin ficha. */}
+        <div className="bg-white rounded-3xl shadow-lg p-5 lg:p-8 space-y-3">
           <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-            <Users className="w-5 h-5 text-blue-500" /> Administración de Usuarios
+            <Users className="w-5 h-5 text-blue-500" /> Cuentas de acceso
           </h2>
-          <div className="bg-blue-50 rounded-2xl p-5 border border-blue-100 space-y-3">
-            <p className="text-xs font-semibold text-blue-700 flex items-center gap-1.5"><UserPlus className="w-3.5 h-3.5" /> Invitar nuevo usuario</p>
-            <div className="flex gap-2 flex-wrap">
-              <input type="email" className="flex-1 min-w-48 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white" placeholder="correo@ejemplo.cl" value={invEmail} onChange={e => setInvEmail(e.target.value)} />
-              <select className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300" value={invRole} onChange={e => setInvRole(e.target.value)}>
-                <option value="user">Usuario</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </div>
-            {invRole === "user" && (
-              <div>
-                <p className="text-xs font-medium text-blue-700 mb-2">Centros que puede visualizar (selecciona uno o más):</p>
-                <div className="flex flex-wrap gap-2">
-                  {centros.map(c => (
-                    <button key={c} type="button" onClick={() => toggleInvCentro(c)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${invCentros.includes(c) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-400"}`}>
-                      {c}
-                    </button>
-                  ))}
-                </div>
-                {invCentros.length === 0 && <p className="text-xs text-amber-600 mt-1">⚠ Sin centros asignados verá todos los equipos</p>}
-              </div>
-            )}
-            <button onClick={handleInvitar} disabled={invitando || !invEmail} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#2563eb" }}>
-              {invitando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />} Enviar Invitación
-            </button>
-            {invMsg && <p className={`text-xs ${invMsg.startsWith("✅") ? "text-green-600" : "text-red-600"}`}>{invMsg}</p>}
-          </div>
-          <div className="space-y-2">
-            {usuarios.map(u => (
-              <div key={u.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:bg-slate-50">
-                {editingUser?.id === u.id ? (
-                  <div className="flex-1 space-y-3">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <select className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs" value={editingUser.role} onChange={e => setEditingUser(prev => ({...prev, role: e.target.value}))}>
-                        <option value="user">Usuario</option>
-                        <option value="admin">Administrador</option>
-                      </select>
-                      <button onClick={() => handleUpdateUser(u.id, { role: editingUser.role, centros_asignados: editingUser.centros_asignados || [] })} className="p-1.5 rounded-lg bg-green-100 text-green-700 hover:bg-green-200"><Check className="w-4 h-4" /></button>
-                      <button onClick={() => setEditingUser(null)} className="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200"><X className="w-4 h-4" /></button>
-                    </div>
-                    {editingUser.role === "user" && (
-                      <div>
-                        <p className="text-xs font-medium text-slate-600 mb-1.5">Centros asignados:</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {centros.map(c => (
-                            <button key={c} type="button" onClick={() => toggleEditCentro(c)}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${(editingUser.centros_asignados || []).includes(c) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-blue-400"}`}>
-                              {c}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{u.full_name || u.email}</p>
-                      {/* Antes solo distinguía "Administrador" o "Usuario": un
-                          Mecánico, un Jefe de Taller o un Encargado Salud salían
-                          todos como "Usuario". roleLabel es la misma etiqueta que
-                          usa el resto del sistema. */}
-                      <p className="text-xs text-slate-400">{u.email} · <span className={esAdministrador(u.role) ? "text-blue-600 font-medium" : "text-slate-500"}>{roleLabel(u.role)}</span></p>
-                      {!esAdministrador(u.role) && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {(u.centros_asignados?.length > 0) ? u.centros_asignados.map(c => (
-                            <span key={c} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "#EFF6FF", color: "#2563EB" }}>{c}</span>
-                          )) : <span className="text-xs text-amber-500">Sin centros asignados (ve todos)</span>}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setEditingUser({ ...u })} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      {confirmDeleteUserId === u.id ? (
-                        <div className="flex items-center gap-1.5 ml-1 bg-red-50 border border-red-200 rounded-xl px-3 py-1.5">
-                          <span className="text-xs text-red-700 font-medium">¿Eliminar?</span>
-                          <button onClick={() => handleDeleteUser(u.id)} className="text-xs font-bold text-red-600 hover:text-red-800 underline">Sí</button>
-                          <button onClick={() => setConfirmDeleteUserId(null)} className="text-xs text-slate-400 hover:text-slate-600 underline">No</button>
-                        </div>
-                      ) : (
-                        <button onClick={() => setConfirmDeleteUserId(u.id)} className="p-2 rounded-lg hover:bg-red-50 text-slate-300 hover:text-red-500">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-            {usuarios.length === 0 && <p className="text-center text-sm text-slate-400 py-6">No hay usuarios registrados</p>}
-          </div>
+          <p className="text-sm text-slate-500">
+            Crear cuentas, cambiar roles o centros, suspender y eliminar se hace desde <strong>Usuarios</strong>,
+            respetando quién puede asignar cada rol.
+          </p>
+          <Link to={createPageUrl("Usuarios")}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700">
+            <Users className="w-4 h-4" /> Ir a Usuarios
+          </Link>
         </div>
 
         {/* Gestión de Sedes */}
