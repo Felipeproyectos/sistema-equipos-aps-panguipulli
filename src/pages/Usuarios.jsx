@@ -193,7 +193,7 @@ export default function Usuarios() {
             administra el acceso, y no mientras se simula otro rol: ahí las
             escrituras están bloqueadas y el botón fallaría. */}
         {puedeAdministrarAcceso && !isSimulandoActivo() && (
-          <NormalizarUsuarios usuarios={usuariosVisibles} onCompleto={fetchData} />
+          <NormalizarUsuarios usuarios={usuariosVisibles} onCompleto={fetchData} currentUser={currentUser} />
         )}
 
         {/* Tabs de área */}

@@ -537,10 +537,22 @@ const CAMPOS_DE_MI_PERFIL = [
   'licencia_numero', 'licencia_clase', 'licencia_vencimiento',
 ];
 
+// El centro y el área definen QUÉ ve una persona (los equipos de su CESFAM).
+// Al entrar por primera vez cada uno completa los suyos; después ya no: si no,
+// un Encargado de Salud podía asignarse todos los centros desde "mi perfil" y
+// ver la red completa. Cambiarlos después es trabajo de quien administra
+// cuentas, desde Usuarios. Las fechas y datos de la licencia sí se editan
+// siempre: los mantiene el propio chofer.
+const CAMPOS_SOLO_LA_PRIMERA_VEZ = ['area', 'centros_asignados', 'centro_principal', 'subsedes_asignadas'];
+const vacio = (v) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+
 async function miPerfil(base44, quien, datos) {
   const cambios = {};
+  const administra = ROLES_QUE_ADMINISTRAN.includes(quien.role);
   for (const campo of CAMPOS_DE_MI_PERFIL) {
-    if (datos[campo] !== undefined) cambios[campo] = datos[campo];
+    if (datos[campo] === undefined) continue;
+    if (CAMPOS_SOLO_LA_PRIMERA_VEZ.includes(campo) && !administra && !vacio(quien[campo])) continue;
+    cambios[campo] = datos[campo];
   }
   if (Object.keys(cambios).length === 0) {
     return { error: 'No hay nada que guardar', status: 400 };

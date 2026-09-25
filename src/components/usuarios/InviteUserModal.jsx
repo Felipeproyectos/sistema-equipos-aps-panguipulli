@@ -4,7 +4,11 @@ import { getCentrosEstructura } from "@/lib/centros";
 import { X, Loader2, Copy, Check, UserPlus } from "lucide-react";
 import { ROLES, rolesQuePuedeCrear, roleLabel, esRolSalud } from "@/lib/roles";
 
-export default function InviteUserModal({ open, onClose, onInvited, currentUser }) {
+// `rolesPermitidos` acota lo que ofrece el formulario según desde dónde se
+// abre: "Nuevo chofer" en Choferes crea solo choferes, aunque quien lo abra
+// sea Base del Sistema y pueda crear cualquier rol desde Usuarios. Sin esto el
+// mismo botón dejaba crear un Administrador desde la pantalla de choferes.
+export default function InviteUserModal({ open, onClose, onInvited, currentUser, rolesPermitidos, titulo = "Nueva Cuenta de Acceso" }) {
   const [email, setEmail] = useState("");
   const [nombre, setNombre] = useState("");
   const [role, setRole] = useState("");
@@ -17,8 +21,10 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser 
   const [error, setError] = useState("");
 
   const rolesDisponibles = useMemo(
-    () => rolesQuePuedeCrear(currentUser?.role).map((r) => ({ value: r, label: roleLabel(r) })),
-    [currentUser?.role]
+    () => rolesQuePuedeCrear(currentUser?.role)
+      .filter((r) => !rolesPermitidos || rolesPermitidos.includes(r))
+      .map((r) => ({ value: r, label: roleLabel(r) })),
+    [currentUser?.role, rolesPermitidos]
   );
 
   useEffect(() => {
@@ -90,7 +96,7 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser 
       <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="sticky top-0 bg-white px-6 py-4 border-b border-slate-100 flex items-center justify-between z-10">
           <h2 className="font-bold text-slate-800 flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-blue-600" /> Nueva Cuenta de Acceso
+            <UserPlus className="w-5 h-5 text-blue-600" /> {titulo}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X className="w-5 h-5" />
@@ -131,6 +137,11 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser 
               {/* Rol — solo se ofrecen los roles que este usuario puede crear */}
               <div>
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Rol</label>
+                {rolesDisponibles.length === 1 ? (
+                  <p className="mt-1 w-full border border-slate-100 bg-slate-50 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700">
+                    {rolesDisponibles[0].label}
+                  </p>
+                ) : (
                 <select
                   value={role}
                   onChange={e => setRole(e.target.value)}
@@ -140,6 +151,7 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser 
                     <option key={r.value} value={r.value}>{r.label}</option>
                   ))}
                 </select>
+                )}
               </div>
 
               {/* Centro fijo (Encargado Salud invitando Usuario/Chofer) */}
