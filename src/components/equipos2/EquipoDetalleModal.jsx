@@ -4,7 +4,7 @@ import {
   X, Edit, Trash2, Plus, Info, Wrench, ClipboardCheck, Package, BookOpen, Hammer,
   MapPin, Calendar, User, Upload, AlertTriangle, Activity, Car, Zap, Monitor,
   Hash, Gauge, FileText, Shield, CheckCircle, Clock, ArrowLeft,
-  Loader2, ExternalLink, Printer, ChevronDown
+  Loader2, ExternalLink, Printer, ChevronDown, Stethoscope
 } from "lucide-react";
 import { TIPOS_EQUIPO, ESTADOS_EQUIPO, esVehiculo, resolverUbicacion } from "@/lib/centros";
 import { esRolTaller, ROLES, puedeEliminar } from "@/lib/roles";
@@ -17,6 +17,9 @@ import PautaPlaceholder from "@/components/bitacora/PautaPlaceholder";
 import PautaSemanalDesfibrilador from "@/components/bitacora/PautaSemanalDesfibrilador";
 import PautaSemanalMultiparametros from "@/components/bitacora/PautaSemanalMultiparametros";
 import PautaDiariaAmbulancia from "@/components/bitacora/PautaDiariaAmbulancia";
+import PautaCabina from "@/components/bitacora/PautaCabina";
+import DetallePautaCabina from "@/components/bitacora/DetallePautaCabina";
+import { TIPO_ACTIVIDAD as TIPO_CABINA, TIPO_FORMULARIO as FORMULARIO_CABINA, leerPautaCabina } from "@/lib/pautaCabina";
 import TallerTab from "./TallerTab";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { generarPDFEquipo } from "@/utils/generarPDFEquipo";
@@ -575,13 +578,16 @@ function InspeccionesTab({ equipo, actividades, user, onUpdated }) {
   const [showImprimir, setShowImprimir] = useState(false);
   // Para pauta diaria: "inicio" | "termino"
   const [momentoDiario, setMomentoDiario] = useState(null);
+  // La Pauta de Cabina no entra al historial al enviarla: espera la aprobación
+  // del encargado. Sin este aviso, quien la sube no ve nada y la vuelve a subir.
+  const [cabinaEnviada, setCabinaEnviada] = useState(false);
 
   const inspecciones = actividades
-    .filter(a => ["inspeccion", "error_calibracion", "inspeccion_semanal", "inspeccion_anual", "inspeccion_rutinaria", "incidente"].includes(a.tipo))
+    .filter(a => ["inspeccion", "error_calibracion", "inspeccion_semanal", "inspeccion_anual", "inspeccion_rutinaria", "incidente", TIPO_CABINA].includes(a.tipo))
     .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
   const totalInsp = inspecciones.length;
-  const cumplimiento = totalInsp === 0 ? 100 : Math.round((inspecciones.filter(i => ["inspeccion","inspeccion_semanal","inspeccion_anual"].includes(i.tipo)).length / totalInsp) * 100);
+  const cumplimiento = totalInsp === 0 ? 100 : Math.round((inspecciones.filter(i => ["inspeccion","inspeccion_semanal","inspeccion_anual",TIPO_CABINA].includes(i.tipo)).length / totalInsp) * 100);
 
   const hoy = new Date();
   const fechaVence = equipo.fecha_vencimiento_revision_tecnica;
@@ -607,6 +613,7 @@ function InspeccionesTab({ equipo, actividades, user, onUpdated }) {
   const TIPOS_PAUTA = [
     { id: "diaria", label: "Pauta Diaria", desc: "Inspección completa al inicio o término de turno — 6 secciones", color: "#7C3AED", bg: "#F5F3FF", tipoActividad: "inspeccion_rutinaria" },
     { id: "semanal", label: "Pauta Semanal", desc: "Inspección completa: luces, motor, accesorios y documentos", color: "#2563EB", bg: "#EFF6FF", tipoActividad: "inspeccion_semanal" },
+    ...(esAmbulancia ? [{ id: "cabina", label: "Pauta de Cabina", desc: "Insumos de la cabina sanitaria: se descarga el formato, se llena y se sube", color: "#0E7490", bg: "#ECFEFF", tipoActividad: TIPO_CABINA, icon: Stethoscope }] : []),
     { id: "anual", label: "Pauta Anual", desc: "Revisión técnica anual completa", color: "#059669", bg: "#F0FDF4", tipoActividad: "inspeccion_anual" },
   ];
 
@@ -628,7 +635,7 @@ function InspeccionesTab({ equipo, actividades, user, onUpdated }) {
               style={{ background: "#F0FDF4", color: "#16A34A", border: "1px solid #BBF7D0" }}>
               <Printer className="w-4 h-4" /> Imprimir Historial
             </button>
-            <button onClick={() => setPautaActiva("selector")}
+            <button onClick={() => { setCabinaEnviada(false); setPautaActiva("selector"); }}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
               style={{ background: "#2563EB" }}>
               <Plus className="w-4 h-4" /> Nuevo Reporte
@@ -636,6 +643,13 @@ function InspeccionesTab({ equipo, actividades, user, onUpdated }) {
           </div>
         )}
       </div>
+
+      {cabinaEnviada && !pautaActiva && (
+        <div className="flex items-start gap-2 p-3 rounded-xl text-sm" style={{ background: "#ECFEFF", color: "#0E7490", border: "1px solid #A5F3FC" }}>
+          <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>Pauta de Cabina enviada. Queda pendiente en <strong>Revisión Bitácora</strong> y aparece en este historial cuando el encargado la aprueba.</span>
+        </div>
+      )}
 
       {/* Selector de tipo de pauta */}
       {pautaActiva === "selector" && (
@@ -650,12 +664,12 @@ function InspeccionesTab({ equipo, actividades, user, onUpdated }) {
             </button>
           </div>
           <div className="p-4 space-y-2">
-            {TIPOS_PAUTA.map(tp => (
+            {TIPOS_PAUTA.map(tp => { const Icono = tp.icon || ClipboardCheck; return (
               <button key={tp.id} onClick={() => setPautaActiva(tp.id)}
                 className="w-full flex items-center gap-4 p-4 rounded-xl text-left transition-all hover:shadow-md"
                 style={{ border: `1px solid ${tp.color}33`, background: tp.bg }}>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${tp.color}20` }}>
-                  <ClipboardCheck className="w-5 h-5" style={{ color: tp.color }} />
+                  <Icono className="w-5 h-5" style={{ color: tp.color }} />
                 </div>
                 <div className="flex-1">
                   <p className="font-bold text-slate-800">{tp.label}</p>
@@ -663,8 +677,22 @@ function InspeccionesTab({ equipo, actividades, user, onUpdated }) {
                 </div>
                 <ChevronDown className="w-4 h-4 text-slate-400 -rotate-90 flex-shrink-0" />
               </button>
-            ))}
+            ); })}
           </div>
+        </div>
+      )}
+
+      {/* Pauta de Cabina (solo ambulancias): se descarga, se llena y se sube */}
+      {pautaActiva === "cabina" && esAmbulancia && (
+        <div className="space-y-2">
+          <button onClick={() => setPautaActiva("selector")}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-1">
+            <ArrowLeft className="w-4 h-4" /> Volver
+          </button>
+          <PautaCabina
+            equipoFijo={equipo}
+            onSuccess={() => { setCabinaEnviada(true); handlePautaSuccess(); }}
+          />
         </div>
       )}
 
@@ -771,6 +799,7 @@ function InspeccionesTab({ equipo, actividades, user, onUpdated }) {
 
       {/* Pauta genérica (diaria/anual para no-ambulancia, o anual para ambulancia) */}
       {pautaActiva && pautaActiva !== "selector" &&
+        !(pautaActiva === "cabina" && esAmbulancia) &&
         !(pautaActiva === "diaria" && esAmbulancia) &&
         !(pautaActiva === "semanal" && esAmbulancia) &&
         !(pautaActiva === "semanal" && equipo.tipo === "monitor_desfibrilador") &&
@@ -793,10 +822,11 @@ function InspeccionesTab({ equipo, actividades, user, onUpdated }) {
 
       {/* Resumen rápido */}
       {esAmbulancia && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Pautas Diarias", count: inspecciones.filter(i => i.tipo === "inspeccion_rutinaria" || i.tipo === "inspeccion").length, color: "#7C3AED", bg: "#F5F3FF" },
             { label: "Pautas Semanales", count: inspecciones.filter(i => i.tipo === "inspeccion_semanal").length, color: "#2563EB", bg: "#EFF6FF" },
+            { label: "Pautas de Cabina", count: inspecciones.filter(i => i.tipo === TIPO_CABINA).length, color: "#0E7490", bg: "#ECFEFF" },
             { label: "Pautas Anuales", count: inspecciones.filter(i => i.tipo === "inspeccion_anual").length, color: "#059669", bg: "#F0FDF4" },
           ].map(s => (
             <div key={s.label} className="rounded-2xl p-4 text-center" style={{ background: s.bg, border: `1px solid ${s.color}22` }}>
@@ -898,6 +928,7 @@ function InspeccionCard({ act }) {
     inspeccion_semanal:    { label: "Pauta Semanal",        icon: CheckCircle,   color: "#10B981", bg: "#F0FDF4" },
     inspeccion_anual:      { label: "Pauta Anual",          icon: CheckCircle,   color: "#2563EB", bg: "#EFF6FF" },
     inspeccion_rutinaria:  { label: "Pauta Diaria",         icon: CheckCircle,   color: "#7C3AED", bg: "#F5F3FF" },
+    [TIPO_CABINA]:         { label: "Pauta de Cabina",      icon: Stethoscope,   color: "#0E7490", bg: "#ECFEFF" },
     incidente:             { label: "Incidente",             icon: AlertTriangle, color: "#EF4444", bg: "#FEF2F2" },
     inspeccion:            { label: "Inspección",            icon: CheckCircle,   color: "#10B981", bg: "#F0FDF4" },
     error_calibracion:     { label: "Error de Calibración", icon: AlertTriangle, color: "#EF4444", bg: "#FEF2F2" },
@@ -909,12 +940,22 @@ function InspeccionCard({ act }) {
     ? new Date(act.created_date).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })
     : "";
 
-  const hasFallas = act.observaciones?.includes("Fallas:");
+  const hasFallas = act.tipo !== TIPO_CABINA && act.observaciones?.includes("Fallas:");
   const resultadoMatch = act.observaciones?.match(/Resultado:\s*(aprobado|observaciones|rechazado)/i);
   const resultadoLabel = resultadoMatch?.[1];
   const tieneDanos = act.observaciones?.includes("Daños reportados:");
 
-  const resultBadge = hasFallas || resultadoLabel === "rechazado"
+  // La Pauta de Cabina guarda en observaciones "Material caducado: Sí/No.
+  // Reponer material: Sí/No. ..." (servidor/funciones/aprobarInspeccion.js).
+  const esCabina = act.tipo === TIPO_CABINA;
+  const cabCaducado = esCabina && /Material caducado: Sí/.test(act.observaciones || "");
+  const cabReponer = esCabina && /Reponer material: Sí/.test(act.observaciones || "");
+
+  const resultBadge = esCabina
+    ? (cabCaducado ? { label: "Material caducado", color: "#DC2626", bg: "#FEF2F2" }
+      : cabReponer ? { label: "Reponer material", color: "#B45309", bg: "#FFFBEB" }
+      : { label: "Cabina completa", color: "#16A34A", bg: "#DCFCE7" })
+    : hasFallas || resultadoLabel === "rechazado"
     ? { label: "Con fallas", color: "#DC2626", bg: "#FEF2F2" }
     : resultadoLabel === "observaciones"
     ? { label: "Con observaciones", color: "#D97706", bg: "#FFFBEB" }
@@ -928,11 +969,11 @@ function InspeccionCard({ act }) {
   const handleToggle = async () => {
     const next = !expanded;
     setExpanded(next);
-    // Si es pauta semanal o diaria, buscar los datos completos del formulario
-    if (next && (esSemanal || esDiaria) && !inspeccionData) {
+    // Si es pauta semanal, diaria o de cabina, buscar los datos completos del formulario
+    if (next && (esSemanal || esDiaria || esCabina) && !inspeccionData) {
       setLoadingData(true);
       try {
-        const tipoFiltro = esSemanal ? "inspeccion_semanal" : "inspeccion_diaria";
+        const tipoFiltro = esCabina ? FORMULARIO_CABINA : esSemanal ? "inspeccion_semanal" : "inspeccion_diaria";
         const pendientes = await base44.entities.InspeccionPendiente.filter({
           equipo_id: act.equipo_id,
           tipo_formulario: tipoFiltro,
@@ -1076,6 +1117,17 @@ function InspeccionCard({ act }) {
             </div>
           )}
 
+          {/* Pauta de Cabina: respuestas y archivos subidos */}
+          {esCabina && inspeccionData && (
+            <DetallePautaCabina
+              cabina={leerPautaCabina({ datos_json: JSON.stringify(inspeccionData) })}
+              observaciones={(act.observaciones || "").split("Observaciones: ")[1] || ""}
+            />
+          )}
+          {esCabina && !inspeccionData && !loadingData && act.observaciones && (
+            <p className="text-xs text-slate-600">{act.observaciones}</p>
+          )}
+
           {/* Vista completa del formulario semanal */}
           {esSemanal && inspeccionData && (
             <div className="space-y-2">
@@ -1182,7 +1234,7 @@ function InspeccionCard({ act }) {
           )}
 
           {/* Para otros tipos: observaciones simples */}
-          {!esSemanal && act.observaciones && (
+          {!esSemanal && !esCabina && act.observaciones && (
             <div className="space-y-1.5">
               {act.observaciones.split(" | ").filter(Boolean).map((linea, i) => {
                 const isFalla = linea.includes("Fallas:");

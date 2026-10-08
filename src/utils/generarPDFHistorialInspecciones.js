@@ -11,6 +11,7 @@ const TIPO_INSP = {
   inspeccion_semanal: "Pauta Semanal",
   inspeccion_anual: "Pauta Anual",
   inspeccion_rutinaria: "Pauta Diaria",
+  inspeccion_cabina: "Pauta de Cabina",
   inspeccion: "Inspección General",
   error_calibracion: "Error de Calibración",
   incidente: "Incidente"

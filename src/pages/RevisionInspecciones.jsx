@@ -36,15 +36,18 @@ function subsedeDeInspeccion(insp, equiposPorId = {}) {
 }
 import {
   CheckCircle, XCircle, ChevronDown, ChevronUp, ClipboardCheck, Car, MapPin, User, Calendar,
-  Fuel, Gauge, Zap, Wrench, Package, FileText, AlertCircle, Printer
+  Fuel, Gauge, Zap, Wrench, Package, FileText, AlertCircle, Printer, Stethoscope
 } from "lucide-react";
 import { generarPDFPautas } from "@/utils/generarPDFPautas";
+import { TIPO_FORMULARIO as TIPO_CABINA, leerPautaCabina, tieneAvisos } from "@/lib/pautaCabina";
+import DetallePautaCabina from "@/components/bitacora/DetallePautaCabina";
 
 const TIPO_LABEL = {
   inspeccion_semanal: "Pauta Semanal",
   turno_chofer: "Turno Chofer",
   inspeccion_diaria: "Pauta Diaria",
   inspeccion_anual: "Pauta Anual",
+  pauta_cabina: "Pauta de Cabina",
 };
 
 const TIPO_EQUIPO_LABEL = {
@@ -209,7 +212,9 @@ function InspeccionCard({ insp, onActualizar }) {
   const [processing, setProcessing] = useState(false);
 
   const estado = ESTADO_CFG[insp.estado] || ESTADO_CFG.pendiente;
-  const hasFallas = insp.observaciones?.includes("Fallas:") || insp.observaciones?.includes("Daños");
+  const esCabina = insp.tipo_formulario === TIPO_CABINA;
+  const cabina = esCabina ? leerPautaCabina(insp) : null;
+  const hasFallas = !esCabina && (insp.observaciones?.includes("Fallas:") || insp.observaciones?.includes("Daños"));
 
   // Parsear datos_json
   const datos = (() => {
@@ -234,7 +239,9 @@ function InspeccionCard({ insp, onActualizar }) {
         nota,
       });
       const data = res.data || res;
-      if (accion === "aprobar" && data?.ot_creada) {
+      if (accion === "aprobar" && esCabina) {
+        toast({ title: "Pauta de Cabina aprobada", description: "Quedó en el historial de la ambulancia." });
+      } else if (accion === "aprobar" && data?.ot_creada) {
         toast({
           title: "Orden de Trabajo creada automáticamente",
           description: `${data.ot_creada.numero_ot} — ${data.ot_creada.fallas} falla(s) detectada(s). Prioridad: ${data.ot_creada.prioridad}.`,
@@ -260,7 +267,9 @@ function InspeccionCard({ insp, onActualizar }) {
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ background: estado.bg }}>
-            <ClipboardCheck className="w-5 h-5" style={{ color: estado.color }} />
+            {esCabina
+              ? <Stethoscope className="w-5 h-5" style={{ color: estado.color }} />
+              : <ClipboardCheck className="w-5 h-5" style={{ color: estado.color }} />}
           </div>
           <div className="flex-1 min-w-0">
             {/* Título y estado */}
@@ -273,6 +282,21 @@ function InspeccionCard({ insp, onActualizar }) {
               {hasFallas && (
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: "#FEF2F2", color: "#DC2626" }}>
                   ⚠ Con fallas
+                </span>
+              )}
+              {cabina?.materialCaducado && (
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: "#FEF2F2", color: "#DC2626" }}>
+                  ⚠ Material caducado
+                </span>
+              )}
+              {cabina?.reponerMaterial && (
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: "#FFFBEB", color: "#B45309" }}>
+                  Reponer material
+                </span>
+              )}
+              {cabina && cabina.respondio && !tieneAvisos(cabina) && (
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: "#F0FDF4", color: "#16A34A" }}>
+                  Cabina completa
                 </span>
               )}
             </div>
@@ -304,7 +328,7 @@ function InspeccionCard({ insp, onActualizar }) {
               {insp.conductor && (
                 <div className="flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="text-xs text-slate-600">{insp.conductor}</span>
+                  <span className="text-xs text-slate-600">{esCabina ? `Subida por ${insp.conductor}` : insp.conductor}</span>
                 </div>
               )}
               <div className="flex items-center gap-1.5">
@@ -422,6 +446,9 @@ function InspeccionCard({ insp, onActualizar }) {
             </div>
           )}
 
+          {/* Pauta de Cabina: respuestas y archivos */}
+          {esCabina && <DetallePautaCabina cabina={cabina} observaciones={insp.observaciones} />}
+
           {/* Para turno chofer: observaciones */}
           {insp.tipo_formulario === "turno_chofer" && insp.observaciones && (
             <div className="space-y-1.5">
@@ -447,8 +474,10 @@ function InspeccionCard({ insp, onActualizar }) {
           {insp.estado === "pendiente" && (
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Nota al conductor (opcional)</label>
-                <textarea rows={2} placeholder="Ej: KM no coincide con el anterior registro..."
+                <label className="text-xs font-semibold text-slate-600 block mb-1">
+                  {esCabina ? "Nota para quien la subió (opcional)" : "Nota al conductor (opcional)"}
+                </label>
+                <textarea rows={2} placeholder={esCabina ? "Ej: la foto no se lee, súbela de nuevo..." : "Ej: KM no coincide con el anterior registro..."}
                   value={nota} onChange={e => setNota(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
               </div>
@@ -526,6 +555,8 @@ export default function RevisionInspecciones() {
     .filter(i => filtro === "todos" || i.estado === filtro)
     .filter(i => tipoSeleccionado === "todos" || i.tipo_formulario === tipoSeleccionado);
   const pendientes = enAlcance.filter(i => i.estado === "pendiente").length;
+  const cabinasEnVista = enAlcance
+    .filter(i => (filtro === "todos" || i.estado === filtro) && i.tipo_formulario === TIPO_CABINA).length;
 
   // Agrupar por centro principal
   const porCentro = filtradas.reduce((acc, insp) => {
@@ -564,6 +595,7 @@ export default function RevisionInspecciones() {
             { value: "inspeccion_diaria", label: "Diarias" },
             { value: "inspeccion_semanal", label: "Semanales" },
             { value: "turno_chofer", label: "Turnos" },
+            { value: TIPO_CABINA, label: cabinasEnVista ? `Cabina · ${cabinasEnVista}` : "Cabina" },
           ].map(t => (
             <button key={t.value} onClick={() => setTipoSeleccionado(t.value)}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"

@@ -120,6 +120,19 @@ async function SendEmail({ to, subject, body, from }) {
   return r.json();
 }
 
+// Guarda un archivo en el Storage del proyecto (el mismo bucket que usa la
+// pantalla al subir fotos y documentos) y devuelve su direccion publica.
+// Solo con la llave de servicio: lo usan funciones publicas, como la Pauta de
+// Cabina, donde quien sube no tiene sesion. Cada funcion valida antes que
+// archivo acepta.
+const BUCKET = 'archivos';
+async function GuardarArchivo({ ruta, base64, tipo }) {
+  const contenido = Buffer.from(base64 || '', 'base64');
+  const { error } = await servicio.storage.from(BUCKET).upload(ruta, contenido, { contentType: tipo, upsert: false });
+  if (error) throw new Error(`Storage: ${error.message}`);
+  return { file_url: servicio.storage.from(BUCKET).getPublicUrl(ruta).data.publicUrl };
+}
+
 // ponytail: un refresh token de la cuenta que ya es duena de la carpeta
 // BITACORA, no una service account. Asi los documentos siguen apareciendo en
 // el mismo Drive de siempre; una service account los dejaria en un Drive
@@ -205,7 +218,7 @@ export function createClientFromRequest(req) {
     functions: { invoke },
     asServiceRole: {
       entities: entidades(servicio),
-      integrations: integraciones,
+      integrations: { Core: { SendEmail, GuardarArchivo } },
       connectors: { getConnection },
       functions: { invoke },
     },

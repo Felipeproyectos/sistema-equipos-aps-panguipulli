@@ -28,6 +28,15 @@ El portador solo cambia los imports y el envoltorio (`Deno.serve(...)` →
 `integrations.Core.SendEmail`, `connectors.getConnection`, `functions.invoke`,
 y el par `base44` / `base44.asServiceRole`.
 
+Excepciones, que el portador no toca (listas en `migracion/portar_funciones.py`):
+las **nativas**, escritas directo acá (`gestionarAcceso`, `borrarDatosDePrueba`,
+`resumenDiarioPendientes`, `subirPautaCabina`), y las **corregidas en el
+servidor** (`EDITADAS_EN_SERVIDOR`), cuyo `entry.ts` quedó atrás.
+
+`subirPautaCabina` es pública (la Pauta de Cabina se sube sin sesión) y guarda
+los archivos con `asServiceRole.integrations.Core.GuardarArchivo`, en el bucket
+`archivos` del Storage.
+
 Si Base44 cambia una función, se re-exporta el `.ts` y se corre el portador.
 
 ## Equivalencias

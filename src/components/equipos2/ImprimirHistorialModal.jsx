@@ -4,7 +4,7 @@ import { Loader2, X, Printer, Calendar } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { generarPDFHistorialInspecciones } from "@/utils/generarPDFHistorialInspecciones";
 
-const TIPOS_INSP = ["inspeccion", "error_calibracion", "inspeccion_semanal", "inspeccion_anual", "inspeccion_rutinaria", "incidente"];
+const TIPOS_INSP = ["inspeccion", "error_calibracion", "inspeccion_semanal", "inspeccion_anual", "inspeccion_rutinaria", "incidente", "inspeccion_cabina"];
 
 export default function ImprimirHistorialModal({ equipo, actividades, onClose }) {
   const { toast } = useToast();
@@ -35,9 +35,10 @@ export default function ImprimirHistorialModal({ equipo, actividades, onClose })
       const items = enRango.map(act => {
         const esSemanal = act.tipo === "inspeccion_semanal";
         const esDiaria = act.tipo === "inspeccion_rutinaria" || act.tipo === "inspeccion";
+        const esCabina = act.tipo === "inspeccion_cabina";
         let pendiente = null;
-        if (esSemanal || esDiaria) {
-          const tipoFiltro = esSemanal ? "inspeccion_semanal" : "inspeccion_diaria";
+        if (esSemanal || esDiaria || esCabina) {
+          const tipoFiltro = esCabina ? "pauta_cabina" : esSemanal ? "inspeccion_semanal" : "inspeccion_diaria";
           const cands = pendientes.filter(p => p.tipo_formulario === tipoFiltro);
           pendiente = cands.find(p => p.fecha === act.fecha && p.conductor === act.usuario_nombre)
             || cands.find(p => p.fecha === act.fecha)
@@ -46,7 +47,9 @@ export default function ImprimirHistorialModal({ equipo, actividades, onClose })
         let datos = null;
         try { datos = pendiente?.datos_json ? JSON.parse(pendiente.datos_json) : null; } catch { /* dato opcional: si no se puede leer, se ignora */ }
 
-        const hasFallas = act.observaciones?.includes("Fallas:");
+        const hasFallas = esCabina
+          ? /Material caducado: Sí|Reponer material: Sí/.test(act.observaciones || "")
+          : act.observaciones?.includes("Fallas:");
         const resultadoMatch = act.observaciones?.match(/Resultado:\s*(aprobado|observaciones|rechazado)/i);
         const resultadoLabel = resultadoMatch?.[1]?.toLowerCase();
         const resultado = hasFallas || resultadoLabel === "rechazado"

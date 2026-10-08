@@ -50,7 +50,7 @@ def portar(codigo):
 # lista el barrido de mas abajo las borraba por "ya no existen en origen":
 # gestionarAcceso reemplaza a base44.users.inviteUser, que la migracion dejo sin
 # equivalente, asi que nunca va a existir un entry.ts del que salga.
-NATIVAS = ["gestionarAcceso", "borrarDatosDePrueba", "resumenDiarioPendientes"]
+NATIVAS = ["gestionarAcceso", "borrarDatosDePrueba", "resumenDiarioPendientes", "subirPautaCabina"]
 
 # Funciones que vienen de Base44 pero que despues se corrigieron directo en
 # servidor/funciones/ (Movilizacion, choferes, licencias, la flota en el
@@ -58,10 +58,12 @@ NATIVAS = ["gestionarAcceso", "borrarDatosDePrueba", "resumenDiarioPendientes"]
 # correcciones sin aviso. Se dejan como estan y se avisa; si hay que cambiarlas,
 # se cambia el .js del servidor, que es hoy la version de verdad.
 EDITADAS_EN_SERVIDOR = [
+    "aprobarInspeccion",
     "generarAlertasAutomaticas",
     "getEquiposPorCentro",
     "getMonitorData",
     "getUsuariosPorCentro",
+    "subirInspeccionDrive",
 ]
 
 

@@ -44,8 +44,23 @@ export default async function (req) {
         inspeccion_diaria: 'inspeccion_rutinaria',
         turno_chofer: 'inspeccion_rutinaria',
         inspeccion_anual: 'inspeccion_anual',
+        pauta_cabina: 'inspeccion_cabina',
       };
       const tipoActividad = tipoActividadMap[inspeccion.tipo_formulario] || 'inspeccion';
+
+      // La Pauta de Cabina no trae checklist: trae archivos y dos respuestas.
+      // En la ficha queda un resumen de una linea y el primer archivo a mano;
+      // el resto se ve al desplegarla. No genera orden de trabajo: lo que
+      // falta en la cabina se repone, no se repara en el taller.
+      const esCabina = inspeccion.tipo_formulario === 'pauta_cabina';
+      const archivosCabina = esCabina && Array.isArray(datos.archivos) ? datos.archivos.filter(a => a && a.url) : [];
+      const avisosCabina = esCabina && (datos.material_caducado === true || datos.reponer_material === true);
+      const resumenCabina = esCabina
+        ? [`Material caducado: ${datos.material_caducado ? 'Sí' : 'No'}`,
+           `Reponer material: ${datos.reponer_material ? 'Sí' : 'No'}`,
+           `Archivos: ${archivosCabina.length}`].join('. ') + '.'
+          + (inspeccion.observaciones?.trim() ? ` Observaciones: ${inspeccion.observaciones.trim()}` : '')
+        : '';
 
       // Crear actividad
       await base44.asServiceRole.entities.Actividad.create({
@@ -54,7 +69,8 @@ export default async function (req) {
         fecha: inspeccion.fecha,
         usuario_nombre: inspeccion.conductor || '',
         usuario_email: inspeccion.revisor_email || user.email,
-        observaciones: inspeccion.observaciones || '',
+        observaciones: esCabina ? resumenCabina : (inspeccion.observaciones || ''),
+        ...(archivosCabina[0] && { archivo_url: archivosCabina[0].url }),
       });
 
       // Crear registro en HistorialMantenimiento
@@ -66,16 +82,16 @@ export default async function (req) {
       };
 
       // Calcular si hay fallas en el checklist
-      const hasFallas = inspeccion.observaciones?.includes('Incorrectos:') ||
+      const hasFallas = !esCabina && (inspeccion.observaciones?.includes('Incorrectos:') ||
                         inspeccion.observaciones?.includes('Fallas:') ||
-                        inspeccion.observaciones?.includes('Daños');
+                        inspeccion.observaciones?.includes('Daños'));
 
       await base44.asServiceRole.entities.HistorialMantenimiento.create({
         equipo_id: inspeccion.equipo_id,
         fecha_inspeccion: inspeccion.fecha,
         tipo_mantenimiento: tipoMantenimientoMap[inspeccion.tipo_formulario] || 'inspeccion_rutinaria',
-        resultado: hasFallas ? 'aprobado_con_observaciones' : 'aprobado',
-        observaciones: inspeccion.observaciones || '',
+        resultado: hasFallas || avisosCabina ? 'aprobado_con_observaciones' : 'aprobado',
+        observaciones: esCabina ? resumenCabina : (inspeccion.observaciones || ''),
         tecnico_responsable: inspeccion.conductor || inspeccion.conductor || '',
         cargado_por_email: user.email,
         empresa_responsable: 'Registro automático — Bitácora',
