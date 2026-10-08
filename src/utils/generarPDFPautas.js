@@ -13,6 +13,7 @@ const TIPO_LABEL = {
   inspeccion_rutinaria: "Pauta Diaria",
   inspeccion_anual: "Pauta Anual",
   turno_chofer: "Registro de Turno de Chofer",
+  pauta_cabina: "Pauta de Cabina",
 };
 
 const TIPO_EQUIPO_LABEL = {
@@ -129,6 +130,19 @@ function hoja(insp, indice, total) {
   const bloques = (BLOQUES[tipoKey] || [])
     .map(([campo, rotulo]) => bloqueHtml(rotulo, datos[campo])).join("");
 
+  // La Pauta de Cabina se llena en papel: aquí van sus dos respuestas y qué
+  // archivos se subieron. El detalle de insumos está en esos archivos.
+  const siNo = (v) => (v === true ? "Sí" : v === false ? "No" : "—");
+  const archivosCabina = Array.isArray(datos.archivos) ? datos.archivos.filter(a => a && a.url) : [];
+  const cabina = insp.tipo_formulario === "pauta_cabina" ? `
+  <div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:9.5px">
+    <div style="font-weight:800;color:#0e7490;margin-bottom:4px">Revisión de la cabina</div>
+    Existencia de material caducado: <strong>${siNo(datos.material_caducado)}</strong> ·
+    Necesidad de reponer material: <strong>${siNo(datos.reponer_material)}</strong>
+    <div style="margin-top:6px;color:#64748b">Pauta subida (${archivosCabina.length} archivo${archivosCabina.length === 1 ? "" : "s"}):
+      ${archivosCabina.map(a => esc(a.nombre || "archivo")).join(" · ") || "—"}</div>
+  </div>` : "";
+
   const observaciones = [
     datos.problemasDetectados && `<strong>Problemas detectados:</strong> ${esc(datos.problemasDetectados)}`,
     datos.accionesTomadas && `<strong>Acciones tomadas:</strong> ${esc(datos.accionesTomadas)}`,
@@ -183,6 +197,7 @@ function hoja(insp, indice, total) {
   </table>
 
   ${bloques}
+  ${cabina}
   ${danosHtml(datos.danos)}
 
   ${observaciones ? `<div style="font-size:9px;color:#475569;background:#f8fafc;padding:6px 9px;border-radius:6px;border-left:3px solid #cbd5e1;margin-bottom:8px">${observaciones}</div>` : ""}

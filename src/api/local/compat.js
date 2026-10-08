@@ -223,6 +223,12 @@ const integraciones = {
       anotar('Email', `${subject} -> ${to}`);
       return { ok: true, simulado: true };
     },
+    // Lo mismo que servidor/base44compat.js, sin Storage: queda como data URL
+    // dentro del registro, asi se puede abrir aunque se recargue la pagina.
+    GuardarArchivo: async ({ ruta, base64, tipo }) => {
+      anotar('Storage', `GuardarArchivo: ${ruta}`);
+      return { file_url: `data:${tipo};base64,${base64}` };
+    },
   },
 };
 

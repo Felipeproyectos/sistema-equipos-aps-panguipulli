@@ -50,6 +50,7 @@ const TIPO_FORMULARIO_LABEL = {
   turno_chofer: 'Turno Chofer',
   inspeccion_diaria: 'Pauta Diaria',
   inspeccion_anual: 'Pauta Anual',
+  pauta_cabina: 'Pauta de Cabina',
 };
 
 const TIPO_EQUIPO_CATEGORIA = {
@@ -302,6 +303,19 @@ function htmlInspeccion(insp, revisor) {
     }
     if (datos.accionesTomadas) {
       html += `<div class="section-title">Acciones Tomadas</div><div class="obs-box">${datos.accionesTomadas}</div>`;
+    }
+  }
+
+  // Pauta de Cabina: las dos respuestas y los archivos que se subieron.
+  if (insp.tipo_formulario === 'pauta_cabina') {
+    const siNo = (v) => (v === true ? 'Sí' : v === false ? 'No' : '—');
+    const archivos = Array.isArray(datos.archivos) ? datos.archivos.filter(a => a && a.url) : [];
+    html += `<div class="section-title">Revisión de la Cabina</div>
+      <div class="obs-box">Existencia de material caducado: <strong>${siNo(datos.material_caducado)}</strong><br>
+      Necesidad de reponer material: <strong>${siNo(datos.reponer_material)}</strong></div>`;
+    if (archivos.length) {
+      html += `<div class="section-title">Pauta subida</div><div class="obs-box">${archivos
+        .map(a => `<a href="${a.url}">${String(a.nombre || 'archivo').replace(/</g, '&lt;')}</a>`).join('<br>')}</div>`;
     }
   }
 

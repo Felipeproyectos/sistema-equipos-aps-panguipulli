@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { invokePublic } from "@/lib/publicFetch";
 import {
   Car, CheckCircle, Loader2, AlertTriangle, ClipboardCheck,
-  ChevronRight, ArrowLeft, Activity, Heart, Zap, ClipboardList
+  ChevronRight, ArrowLeft, Activity, Heart, Zap, ClipboardList, Ambulance, Stethoscope
 } from "lucide-react";
 import PautaInspeccionSemanal from "@/components/bitacora/PautaInspeccionSemanal";
 import PautaPlaceholder from "@/components/bitacora/PautaPlaceholder";
@@ -11,6 +11,39 @@ import PautaSemanalDesfibrilador from "@/components/bitacora/PautaSemanalDesfibr
 import PautaSemanalDEA from "@/components/bitacora/PautaSemanalDEA";
 import PautaSemanalMultiparametros from "@/components/bitacora/PautaSemanalMultiparametros";
 import PautaDiariaAmbulancia from "@/components/bitacora/PautaDiariaAmbulancia";
+import PautaCabina from "@/components/bitacora/PautaCabina";
+
+// Al entrar a Ambulancias se elige primero qué se revisa: el vehículo (las
+// pautas Diaria y Semanal, que se llenan en pantalla) o la cabina sanitaria
+// (la Pauta de Cabina, que se descarga, se llena y se sube). Son dos cosas
+// distintas que revisa gente distinta, por eso van por caminos separados.
+const RAMAS_AMBULANCIA = [
+  {
+    id: "vehiculo",
+    label: "Pauta Ambulancia",
+    descripcion: "El vehículo: luces, motor, neumáticos, accesorios y documentos.",
+    icon: Ambulance,
+    color: "#DC2626",
+    bg: "#FEF2F2",
+    etiquetas: [
+      { texto: "Diaria", color: "#B91C1C", bg: "#FEF2F2" },
+      { texto: "Semanal", color: "#B91C1C", bg: "#FEF2F2" },
+      { texto: "Se llena en pantalla", color: "#475569", bg: "#F1F5F9" },
+    ],
+  },
+  {
+    id: "cabina",
+    label: "Pauta de Cabina",
+    descripcion: "La cabina sanitaria: insumos, equipos médicos, sueros, vía aérea y fechas de vencimiento.",
+    icon: Stethoscope,
+    color: "#0E7490",
+    bg: "#ECFEFF",
+    etiquetas: [
+      { texto: "Formato Word / PDF", color: "#0E7490", bg: "#ECFEFF" },
+      { texto: "Se descarga, se llena y se sube", color: "#475569", bg: "#F1F5F9" },
+    ],
+  },
+];
 
 // Categorías principales
 const CATEGORIAS = [
@@ -26,7 +59,7 @@ const CATEGORIAS = [
   {
     id: "ambulancia",
     label: "Ambulancias",
-    descripcion: "Pautas de inspección y mantenimiento para ambulancias",
+    descripcion: "Pauta de la ambulancia (diaria y semanal) y pauta de cabina",
     icon: Car,
     color: "#DC2626",
     bg: "#FEF2F2",
@@ -80,6 +113,8 @@ export default function PublicBitacora() {
   // Navegación: null → categoria → pauta
   const [categoria, setCategoria] = useState(null);
   const [pauta, setPauta] = useState(null);
+  // Solo en Ambulancias: "vehiculo" | "cabina"
+  const [ramaAmb, setRamaAmb] = useState(null);
 
   const [momentoDiario, setMomentoDiario] = useState(null); // "inicio" | "termino"
 
@@ -107,11 +142,18 @@ export default function PublicBitacora() {
     setSuccess(false);
     setCategoria(null);
     setPauta(null);
+    setRamaAmb(null);
     setMomentoDiario(null);
     setError("");
   };
 
   const categoriaObj = CATEGORIAS.find(c => c.id === categoria);
+  const ramaObj = categoria === "ambulancia" ? RAMAS_AMBULANCIA.find(r => r.id === ramaAmb) : null;
+  const miga = ramaObj && (
+    <p className="text-xs text-blue-200 mb-3 ml-1">
+      Ambulancias › <span className="font-bold text-white">{ramaObj.label}</span>
+    </p>
+  );
   const pautaObj = categoriaObj?.pautas?.find(p => p.id === pauta);
 
   // Filtrar equipos por tipo de categoría
@@ -195,22 +237,55 @@ export default function PublicBitacora() {
             )}
           </div>
 
-        ) : categoriaObj?.pautas && !pauta ? (
+        ) : categoria === "ambulancia" && !ramaAmb ? (
+          /* NIVEL 2a: Ambulancias — qué se revisa */
+          <div className="space-y-4">
+            <button onClick={() => setCategoria(null)}
+              className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white transition-colors">
+              <ArrowLeft className="w-4 h-4" /> Volver
+            </button>
+            <p className="text-white font-bold text-lg ml-1">¿Qué vas a revisar?</p>
+            {RAMAS_AMBULANCIA.map(r => {
+              const Icon = r.icon;
+              return (
+                <button key={r.id} onClick={() => setRamaAmb(r.id)}
+                  className="w-full bg-white rounded-3xl shadow-xl p-6 text-left hover:shadow-2xl transition-all relative active:scale-[0.99]">
+                  <ChevronRight className="w-6 h-6 text-slate-300 absolute right-5 top-6" />
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: r.bg }}>
+                    <Icon className="w-7 h-7" style={{ color: r.color }} />
+                  </div>
+                  <p className="text-xl font-bold text-slate-800" style={{ fontFamily: "Manrope, sans-serif" }}>{r.label}</p>
+                  <p className="text-sm text-slate-500 mt-1 leading-snug">{r.descripcion}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-4">
+                    {r.etiquetas.map(e => (
+                      <span key={e.texto} className="text-xs font-bold rounded-full px-2.5 py-1" style={{ background: e.bg, color: e.color }}>
+                        {e.texto}
+                      </span>
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+        ) : categoriaObj?.pautas && !pauta && ramaAmb !== "cabina" ? (
           /* NIVEL 2: Sub-pautas de la categoría seleccionada */
           <div className="space-y-3">
-            <button onClick={() => setCategoria(null)}
+            <button onClick={() => (categoria === "ambulancia" ? setRamaAmb(null) : setCategoria(null))}
               className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white mb-2 transition-colors">
               <ArrowLeft className="w-4 h-4" /> Volver
             </button>
 
-            {/* Header categoría */}
-            <div className="bg-white/10 rounded-2xl p-4 mb-2 flex items-center gap-3">
-              {(() => { const Icon = categoriaObj.icon; return <Icon className="w-5 h-5 text-white" />; })()}
-              <div>
-                <p className="text-xs font-bold text-blue-200 uppercase tracking-widest">Categoría seleccionada</p>
-                <p className="text-white font-bold">{categoriaObj.label}</p>
+            {miga || (
+              /* Header categoría */
+              <div className="bg-white/10 rounded-2xl p-4 mb-2 flex items-center gap-3">
+                {(() => { const Icon = categoriaObj.icon; return <Icon className="w-5 h-5 text-white" />; })()}
+                <div>
+                  <p className="text-xs font-bold text-blue-200 uppercase tracking-widest">Categoría seleccionada</p>
+                  <p className="text-white font-bold">{categoriaObj.label}</p>
+                </div>
               </div>
-            </div>
+            )}
 
             {categoriaObj.pautas.map(p => (
               <button key={p.id} onClick={() => setPauta(p.id)}
@@ -233,12 +308,25 @@ export default function PublicBitacora() {
           <div>
             <button onClick={() => {
               if (momentoDiario) { setMomentoDiario(null); }
+              else if (ramaAmb === "cabina") { setRamaAmb(null); }
               else if (categoriaObj?.pautas) { setPauta(null); }
               else { setCategoria(null); }
             }}
-              className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white mb-4 transition-colors">
+              className={`flex items-center gap-1.5 text-sm text-white/70 hover:text-white transition-colors ${miga ? "mb-2" : "mb-4"}`}>
               <ArrowLeft className="w-4 h-4" /> Volver
             </button>
+            {miga}
+
+            {/* Ambulancia — Pauta de Cabina */}
+            {categoria === "ambulancia" && ramaAmb === "cabina" && (
+              <PautaCabina
+                equipos={equiposFiltrados}
+                loading={loadingEquipos}
+                onSuccess={({ nombre, equipo }) =>
+                  handleSuccess(`La Pauta de Cabina de ${[equipo?.marca, equipo?.modelo].filter(Boolean).join(" ")}${equipo?.patente ? ` · ${equipo.patente}` : ""} quedó registrada a nombre de ${nombre}. El encargado del centro la revisará y la aprobará en el sistema.`)
+                }
+              />
+            )}
 
             {/* Turno Chofer */}
             {categoria === "turno_chofer" && (
@@ -342,6 +430,7 @@ export default function PublicBitacora() {
                 meses no se registró ninguna (las 106 diarias son de ambulancia),
                 así que o se les construye un formulario propio o se sacan. */}
             {!(categoria === "turno_chofer") &&
+             !(categoria === "ambulancia" && ramaAmb === "cabina") &&
              !(categoria === "ambulancia" && pauta === "diaria") &&
              !(categoria === "ambulancia" && pauta === "semanal") &&
              !(categoria === "monitor_desfibrilador" && pauta === "semanal") &&
