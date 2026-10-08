@@ -23,7 +23,9 @@ DESTINO = os.path.join(RAIZ, "servidor", "compartido")
 
 # Las que usa contadoresMenu.js, con sus propias dependencias. Todas importan
 # con rutas relativas ("./x.js"), así que funcionan igual en la otra carpeta.
-ARCHIVOS = ["agendaTaller.js", "calendarioFlota.js", "panelFlota.js", "contadoresMenu.js"]
+# turnoFlota.js lo usa turnoVehiculo.js: el servidor decide si un vehículo
+# está disponible con la misma regla que muestra la pantalla del chofer.
+ARCHIVOS = ["agendaTaller.js", "calendarioFlota.js", "panelFlota.js", "contadoresMenu.js", "turnoFlota.js"]
 
 CABECERA = ("// Copia de src/lib/{nombre}, generada por migracion/sincronizar_compartido.py.\n"
             "// No editar a mano: se edita el original y se vuelve a correr el script.\n\n")

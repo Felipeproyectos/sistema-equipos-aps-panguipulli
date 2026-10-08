@@ -21,7 +21,7 @@ export default async function (req) {
 
     const [
       equipos, parches, alertas, solicitudes, inspecciones, ordenes, repuestos, proveedores,
-      asignaciones, prestamos, bitacoraFlota, choferes,
+      asignaciones, prestamos, bitacoraFlota, choferes, usos,
     ] = await Promise.all([
       base44.asServiceRole.entities.Equipo.list('-created_date', 500),
       base44.asServiceRole.entities.Parche.list('-created_date', 2000),
@@ -35,6 +35,9 @@ export default async function (req) {
       base44.asServiceRole.entities.PrestamoVehiculo.filter({ estado: 'vigente' }, '-desde', 300),
       base44.asServiceRole.entities.BitacoraFlota.list('-fecha', 500),
       base44.asServiceRole.entities.User.filter({ role: 'chofer' }, 'full_name', 200),
+      // Quién tomó cada vehículo (Mi turno, 25_turno_chofer.sql). Sin la
+      // migración la tabla no existe: el Monitor sigue funcionando sin esto.
+      base44.asServiceRole.entities.UsoVehiculo.list('-inicio', 1000).catch(() => []),
     ]);
 
     const activos = equipos.filter(e => e.activo !== false);
@@ -53,6 +56,7 @@ export default async function (req) {
       prestamos,
       bitacoraFlota,
       choferes,
+      usos,
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

@@ -5,7 +5,12 @@ import { ROLES } from "@/lib/roles";
 import { estadoLicencia } from "@/pages/Choferes";
 import { TURNOS } from "@/lib/calendarioFlota";
 
-// Asignar un chofer a un vehículo.
+// Reservar un vehículo para un chofer.
+//
+// Desde migracion/25_turno_chofer.sql Movilización ya no asigna: el chofer
+// toma el vehículo en «Mi turno». Lo que queda acá es la RESERVA: apartar un
+// vehículo para una salida puntual (Valdivia el jueves). El chofer la ve al
+// ir a tomarlo, y si otro lo quiere usar ese día, el sistema le avisa.
 //
 // La regla de la licencia
 // ───────────────────────
@@ -138,7 +143,7 @@ export default function AsignarChoferModal({ equipo, asignacionActual, prestamoV
           <div>
             <h2 className="font-bold text-slate-900 flex items-center gap-2">
               <UserCheck className="w-5 h-5 text-amber-700" />
-              Asignar chofer
+              Reservar vehículo
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">{etiqueta}</p>
           </div>
@@ -260,8 +265,8 @@ export default function AsignarChoferModal({ equipo, asignacionActual, prestamoV
 
               {!hasta && (
                 <p className="text-xs text-slate-400 -mt-2">
-                  Sin fecha de término queda abierta, y no vas a poder programar
-                  a nadie más en este vehículo después.
+                  Sin fecha de término la reserva queda abierta y el vehículo
+                  aparece reservado todos los días. Mejor ponle término.
                 </p>
               )}
 
@@ -349,7 +354,7 @@ export default function AsignarChoferModal({ equipo, asignacionActual, prestamoV
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl
                          text-sm font-semibold text-white bg-amber-700 hover:bg-amber-800 disabled:opacity-60">
               {guardando && <Loader2 className="w-4 h-4 animate-spin" />}
-              {guardando ? "Guardando..." : "Asignar"}
+              {guardando ? "Guardando..." : "Reservar"}
             </button>
           </div>
         </div>

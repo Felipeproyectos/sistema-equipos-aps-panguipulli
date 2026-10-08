@@ -14,6 +14,7 @@ import PrestamoModal from "@/components/flota/PrestamoModal";
 import { estadoLicencia } from "@/pages/Choferes";
 import { asignacionDeHoy } from "@/lib/calendarioFlota";
 import AyudaPantalla from "@/components/flota/AyudaPantalla";
+import { horaChile } from "@/lib/turnoFlota";
 
 // Las fichas de la flota, para el Encargado de Movilización.
 //
@@ -43,6 +44,7 @@ export default function Flota() {
   const [equipos, setEquipos] = useState([]);
   const [parches, setParches] = useState([]);
   const [asignaciones, setAsignaciones] = useState([]);
+  const [usosAbiertos, setUsosAbiertos] = useState([]);
   const [choferes, setChoferes] = useState([]);
   const [asignando, setAsignando] = useState(null);
   const [prestamos, setPrestamos] = useState([]);
@@ -69,6 +71,9 @@ export default function Flota() {
     // tarjeta quien tiene el vehiculo a cargo y si su licencia sigue al dia.
     base44.entities.AsignacionChofer.filter({ estado: "activa" }, "-desde", 1000)
       .then(setAsignaciones).catch(() => setAsignaciones([]));
+    // Quién lo tiene AHORA: lo registra el chofer al tomarlo en «Mi turno».
+    base44.entities.UsoVehiculo.filter({ estado: "en_uso" }, "-inicio", 500)
+      .then(setUsosAbiertos).catch(() => setUsosAbiertos([]));
     base44.entities.PrestamoVehiculo.filter({ estado: "vigente" }, "-desde", 500)
       .then(setPrestamos).catch(() => setPrestamos([]));
     base44.functions.invoke("getUsuariosPorCentro")
@@ -98,23 +103,35 @@ export default function Flota() {
   /** ¿Esta ficha la mantiene Movilización? La ambulancia es de Calidad. */
   const puedeEditar = (eq) => !soloLectura && TIPOS_VEHICULO_CORPORATIVO.includes(eq.tipo);
 
-  // La que cubre HOY, no la primera activa: desde que existe el calendario
-  // un vehiculo puede tener varias activas a la vez (la de esta semana y la
-  // de la proxima), y "quien lo tiene" es solo una de ellas.
+  // La reserva que cubre HOY (las asignaciones quedaron como reservas desde
+  // migracion/25_turno_chofer.sql), y quién lo tiene ahora de verdad.
   const asignacionDe = (eq) => asignacionDeHoy(asignaciones, eq.id);
+  const usoDe = (eq) => usosAbiertos.find(u => u.equipo_id === eq.id) || null;
   const prestamoDe = (eq) => prestamos.find(p => p.equipo_id === eq.id) || null;
 
   const hoyISO = new Date().toISOString().split("T")[0];
   const prestamoAtrasado = (p) => !!(p?.hasta_previsto && p.hasta_previsto < hoyISO);
 
-  /** Estado de la licencia de quien tiene el vehículo a cargo, si hay alguien.
-   *  Se mira ACÁ y no solo al asignar: una licencia puede vencer despues, con
-   *  la asignacion ya hecha, y eso es justo lo que hay que ver a tiempo. */
+  /** Estado de la licencia de quien tiene el vehículo ahora. Al tomarlo se
+   *  exige vigente, pero puede vencer con el vehículo en la mano (un uso que
+   *  nadie cerró), y eso es justo lo que hay que ver a tiempo. */
   const licenciaDelAsignado = (eq) => {
-    const a = asignacionDe(eq);
-    if (!a) return null;
-    const c = choferes.find(x => x.id === a.chofer_id);
+    const u = usoDe(eq);
+    if (!u) return null;
+    const c = choferes.find(x => x.id === u.chofer_id);
     return c ? estadoLicencia(c.licencia_vencimiento) : null;
+  };
+
+  const liberar = async (eq) => {
+    const u = usoDe(eq);
+    if (!u) return;
+    if (!window.confirm(`¿Liberar ${u.equipo_label || "el vehículo"}? Se cierra el uso de ${u.chofer_nombre} (desde las ${horaChile(u.inicio)}).`)) return;
+    try {
+      await base44.functions.invoke("turnoVehiculo", { accion: "liberar", uso_id: u.id, nota: "Liberado desde Vehículos" });
+    } catch (e) {
+      window.alert(e?.data?.error || e?.message || "No se pudo liberar.");
+    }
+    reload();
   };
 
   const visibles = equipos.filter(e => {
@@ -185,10 +202,10 @@ export default function Flota() {
 
       <div className="max-w-6xl mx-auto px-4 lg:px-10 pt-5 pb-10">
         <AyudaPantalla clave="vehiculos">
-          La ficha de cada vehículo. Con <strong>Nuevo vehículo</strong> cargas la flota; en cada
-          tarjeta, <strong>Asignar</strong> deja a un chofer a cargo desde hoy y <strong>Prestar</strong>
-          lo cede a otro centro. Las ambulancias las mantiene Salud: acá se ven y se asignan,
-          pero su ficha no se edita.
+          La ficha de cada vehículo. Con <strong>Nuevo vehículo</strong> cargas la flota. Bajo cada
+          tarjeta ves quién lo tiene ahora: los choferes lo toman en «Mi turno». Tú puedes
+          <strong> Reservarlo</strong> para una salida, <strong>Liberarlo</strong> si alguien lo dejó sin entregar y
+          <strong> Prestarlo</strong> a otro centro. Las ambulancias las mantiene Salud: su ficha no se edita acá.
         </AyudaPantalla>
         {/* Un chofer puede quedar con la licencia vencida DESPUES de que se le
             asigno el vehiculo. El sistema no deshace la asignacion solo — eso
@@ -200,12 +217,12 @@ export default function Flota() {
             <div>
               <p className="text-sm text-red-900">
                 <strong>{conLicenciaCaida.length}</strong>{" "}
-                {conLicenciaCaida.length === 1 ? "vehículo está asignado" : "vehículos están asignados"}
-                {" "}a alguien que hoy no puede conducir.
+                {conLicenciaCaida.length === 1 ? "vehículo lo tiene" : "vehículos los tienen"}
+                {" "}alguien que hoy no puede conducir.
               </p>
               <p className="text-xs text-red-700 mt-1">
                 {conLicenciaCaida.map(e => e.patente || `${e.marca} ${e.modelo}`).join(" · ")}
-                {" "}— la asignación sigue en pie hasta que la cambies.
+                {" "}— libéralo y avísale al chofer.
               </p>
             </div>
           </div>
@@ -299,26 +316,37 @@ export default function Flota() {
                 {/* Quien lo tiene a cargo. Va debajo de la tarjeta y no dentro
                     para no tocar EquipoCard, que Equipos comparte. */}
                 {(() => {
+                  const u = usoDe(eq);
                   const a = asignacionDe(eq);
                   const lic = licenciaDelAsignado(eq);
                   const problema = lic && (lic.clave === "vencida" || lic.clave === "sin_datos");
+                  const hoyStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
                   return (
                     <div className="mt-1.5 flex items-center justify-between gap-2 px-1">
                       <p className={`flex items-center gap-1.5 text-[11px] min-w-0 ${
-                        problema ? "text-red-600 font-semibold" : "text-slate-400"}`}>
-                        {a
+                        problema ? "text-red-600 font-semibold" : u ? "text-green-700 font-semibold" : a ? "text-blue-700" : "text-slate-400"}`}>
+                        {u
                           ? <>{problema ? <AlertTriangle className="w-3 h-3 shrink-0" />
                                         : <UserCheck className="w-3 h-3 shrink-0" />}
-                              <span className="truncate">{a.chofer_nombre}</span>
+                              <span className="truncate">{u.chofer_nombre} desde {u.fecha && u.fecha !== hoyStr ? `el ${u.fecha.slice(8, 10)}/${u.fecha.slice(5, 7)} ` : ""}{horaChile(u.inicio)}</span>
                               {problema && <span className="shrink-0">· {lic.clave === "vencida" ? "licencia vencida" : "sin licencia"}</span>}</>
-                          : <><UserX className="w-3 h-3 shrink-0" /> Sin chofer asignado</>}
+                          : a
+                            ? <><CalendarClock className="w-3 h-3 shrink-0" /><span className="truncate">Reservado hoy · {a.chofer_nombre}</span></>
+                            : <><UserX className="w-3 h-3 shrink-0" /> Libre</>}
                       </p>
                       {!soloLectura && (
                         <span className="flex items-center gap-2 shrink-0">
-                          <button onClick={() => setAsignando({ equipo: eq, actual: a, prestamo: prestamoDe(eq) })}
-                            className="text-[11px] font-semibold text-amber-700 hover:text-amber-900">
-                            {a ? "Cambiar" : "Asignar"}
-                          </button>
+                          {u ? (
+                            <button onClick={() => liberar(eq)}
+                              className="text-[11px] font-semibold text-red-600 hover:text-red-800">
+                              Liberar
+                            </button>
+                          ) : (
+                            <button onClick={() => setAsignando({ equipo: eq, prestamo: prestamoDe(eq) })}
+                              className="text-[11px] font-semibold text-amber-700 hover:text-amber-900">
+                              Reservar
+                            </button>
+                          )}
                           <span className="text-slate-300">·</span>
                           <button onClick={() => setPrestando({ equipo: eq, vigente: prestamoDe(eq) })}
                             className="text-[11px] font-semibold text-slate-500 hover:text-slate-700">
@@ -375,8 +403,10 @@ export default function Flota() {
       {asignando && (
         <AsignarChoferModal
           equipo={asignando.equipo}
-          asignacionActual={asignando.actual}
+          asignacionActual={null}
           prestamoVigente={asignando.prestamo}
+          desdeSugerido={new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" })}
+          hastaSugerido={new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" })}
           onClose={() => setAsignando(null)}
           onGuardado={reload}
         />

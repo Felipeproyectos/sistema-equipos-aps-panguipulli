@@ -10,6 +10,7 @@
 import { asignacionDeHoy, periodosEnTaller, rangosSeTocan } from "./calendarioFlota.js";
 import { estaAbierta, necesitaAgenda, resumenCoordinacion } from "./agendaTaller.js";
 import { resumen as resumenBitacora } from "./bitacoraFlota.js";
+import { diaChile } from "./turnoFlota.js";
 
 const DIA_MS = 86400000;
 const aISO = (d) => d.toISOString().split("T")[0];
@@ -122,19 +123,27 @@ export function areaGestion({ solicitudes = [], comprasTaller = [], comprasSalud
 }
 
 // ── Movilización: la flota ───────────────────────────────────────────────
-export function areaMovilizacion({ equipos = [], ordenes = [], asignaciones = [], prestamos = [], bitacora = [], choferes = [], estadoLicencia, hoy }) {
+// Desde migracion/25_turno_chofer.sql el chofer toma el vehículo en «Mi turno»
+// (UsoVehiculo): "quién lo tiene" sale de los usos abiertos, no de lo que se
+// programó. Las asignaciones quedaron como reservas.
+export function areaMovilizacion({ equipos = [], ordenes = [], asignaciones = [], usos = [], prestamos = [], bitacora = [], choferes = [], estadoLicencia, hoy }) {
   const dia = hoy || aISO(new Date());
   const vehiculos = equipos.filter(e => esVehiculo(e) && e.activo !== false);
   const taller = periodosEnTaller(ordenes);
   const enTallerHoy = (id) => taller.some(t => t.equipo_id === id && rangosSeTocan(t.desde, t.hasta, dia, dia));
   const enTaller = vehiculos.filter(v => enTallerHoy(v.id));
-  const conChofer = vehiculos.filter(v => !enTallerHoy(v.id) && asignacionDeHoy(asignaciones, v.id, dia));
-  const sinChofer = vehiculos.filter(v => !enTallerHoy(v.id) && !asignacionDeHoy(asignaciones, v.id, dia));
+  const abiertos = usos.filter(u => u.estado === "en_uso");
+  const enUso = vehiculos.filter(v => abiertos.some(u => u.equipo_id === v.id));
+  const usadosHoy = vehiculos.filter(v => usos.some(u => u.equipo_id === v.id && u.estado !== "rechazado"
+    && (u.estado === "en_uso" || (u.fecha || diaChile(u.inicio)) === dia || diaChile(u.fin) === dia)));
+  const sinEntregar = abiertos.filter(u => (u.fecha || diaChile(u.inicio)) < dia);
+  const rechazosHoy = usos.filter(u => u.estado === "rechazado" && (u.fecha || diaChile(u.inicio)) === dia);
+  const reservadosHoy = vehiculos.filter(v => asignacionDeHoy(asignaciones, v.id, dia));
 
   const lic = (c) => (estadoLicencia ? estadoLicencia(c.licencia_vencimiento).clave : "sin_datos");
   const vencidas = choferes.filter(c => lic(c) === "vencida");
   const porVencer = choferes.filter(c => lic(c) === "por_vencer");
-  const conVehiculoHoy = new Set(asignaciones.filter(a => a.estado === "activa" && a.desde <= dia && (!a.hasta || a.hasta >= dia)).map(a => a.chofer_id));
+  const conVehiculoHoy = new Set(abiertos.map(u => u.chofer_id));
   const manejandoVencida = vencidas.filter(c => conVehiculoHoy.has(c.id));
   const atrasados = prestamos.filter(p => p.hasta_previsto && p.hasta_previsto < dia);
   const abiertas = bitacora.filter(r => r.estado === "en_ruta" && r.fecha && r.fecha < dia);
@@ -142,23 +151,24 @@ export function areaMovilizacion({ equipos = [], ordenes = [], asignaciones = []
   const nombreChofer = (c) => c.full_name || c.email;
 
   const atencion = [];
-  if (manejandoVencida.length) atencion.push({ tono: "rojo", titulo: `${plural(manejandoVencida.length, "chofer maneja", "choferes manejan")} hoy con la licencia vencida`, detalle: nombres(manejandoVencida, nombreChofer) });
+  if (manejandoVencida.length) atencion.push({ tono: "rojo", titulo: `${plural(manejandoVencida.length, "chofer tiene", "choferes tienen")} un vehículo con la licencia vencida`, detalle: nombres(manejandoVencida, nombreChofer) });
+  if (rechazosHoy.length) atencion.push({ tono: "rojo", titulo: `${plural(rechazosHoy.length, "intento", "intentos")} de tomar un vehículo sin licencia vigente hoy`, detalle: nombres(rechazosHoy, u => `${u.chofer_nombre} (${u.equipo_label})`) });
   if (atrasados.length) atencion.push({ tono: "rojo", titulo: `${plural(atrasados.length, "vehículo prestado no ha vuelto", "vehículos prestados no han vuelto")} a su centro`, detalle: nombres(atrasados, p => `${p.equipo_label || "vehículo"} en ${p.centro_destino}`) });
   if (vencidas.length > manejandoVencida.length) atencion.push({ tono: "ambar", titulo: `${plural(vencidas.length, "licencia vencida", "licencias vencidas")}`, detalle: nombres(vencidas, nombreChofer) });
-  if (sinChofer.length) atencion.push({ tono: "ambar", titulo: `${plural(sinChofer.length, "vehículo sin chofer", "vehículos sin chofer")} hoy`, detalle: nombres(sinChofer, rotuloEquipo) });
+  if (sinEntregar.length) atencion.push({ tono: "ambar", titulo: `${plural(sinEntregar.length, "vehículo sin entregar", "vehículos sin entregar")} desde otro día`, detalle: nombres(sinEntregar, u => `${u.equipo_label} (${u.chofer_nombre})`) });
   if (abiertas.length) atencion.push({ tono: "ambar", titulo: `${plural(abiertas.length, "salida de días anteriores", "salidas de días anteriores")} sin registrar el regreso`, detalle: nombres(abiertas, r => r.equipo_label) });
   if (porVencer.length) atencion.push({ tono: "gris", titulo: `${plural(porVencer.length, "licencia vence", "licencias vencen")} en los próximos 60 días`, detalle: nombres(porVencer, nombreChofer) });
   if (enTaller.length) atencion.push({ tono: "gris", titulo: `${plural(enTaller.length, "vehículo en el taller", "vehículos en el taller")} hoy`, detalle: nombres(enTaller, rotuloEquipo) });
 
   return {
     clave: "movilizacion",
-    estado: estadoDe(atencion, "Todos los vehículos con chofer y los choferes con licencia al día."),
+    estado: estadoDe(atencion, "Los vehículos se toman y se entregan a tiempo, y los choferes tienen la licencia al día."),
     atencion,
     taller,
     indicadores: [
-      { valor: conChofer.length, etiqueta: "vehículos en servicio hoy", contexto: `de ${vehiculos.length}` },
+      { valor: enUso.length, etiqueta: "vehículos en uso ahora", contexto: `${usadosHoy.length} usados hoy de ${vehiculos.length}` },
       { valor: enTaller.length, etiqueta: "en el taller" },
-      { valor: sinChofer.length, etiqueta: "sin chofer hoy", malo: sinChofer.length > 0 },
+      { valor: sinEntregar.length, etiqueta: "sin entregar desde otro día", malo: sinEntregar.length > 0, contexto: reservadosHoy.length ? `${reservadosHoy.length} reservados hoy` : "" },
       { valor: mes.km.toLocaleString("es-CL"), etiqueta: "km recorridos este mes", contexto: `${mes.salidas} salidas` },
     ],
   };
@@ -238,13 +248,13 @@ export function _selfCheck() {
   const m = areaMovilizacion({
     hoy, estadoLicencia: lic,
     equipos: [{ id: "v1", tipo: "camioneta", marca: "Toyota", modelo: "Hilux" }, { id: "v2", tipo: "ambulancia" }],
-    asignaciones: [{ equipo_id: "v1", chofer_id: "c1", estado: "activa", desde: "2026-09-20", hasta: null }],
+    usos: [{ equipo_id: "v1", chofer_id: "c1", chofer_nombre: "Hugo", equipo_label: "Hilux", estado: "en_uso", fecha: hoy, inicio: `${hoy}T12:00:00Z` }],
     choferes: [{ id: "c1", full_name: "Hugo", licencia_vencimiento: "2026-09-01" }],
     ordenes: [{ equipo_id: "v2", estado: "en_proceso", fecha_inicio: "2026-09-23" }],
   });
   debe(m.estado.tono === "rojo" && /licencia vencida/.test(m.estado.frase), "manejar con licencia vencida es lo primero");
   debe(m.indicadores[0].valor === 1 && m.indicadores[1].valor === 1 && m.indicadores[2].valor === 0,
-    "uno en servicio, uno en el taller, ninguno sin chofer");
+    "uno en uso, uno en el taller, ninguno sin entregar");
 
   // Taller
   const t = areaTaller({

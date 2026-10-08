@@ -1,4 +1,5 @@
 import { X, UserCheck, Wrench, ArrowLeftRight, Plus, Pencil, CalendarRange } from "lucide-react";
+import { horaChile, kmRecorridos } from "@/lib/turnoFlota";
 
 // Qué le pasa a un vehículo en un día — o en los días que se marcaron de un
 // arrastre — y qué se puede hacer al respecto.
@@ -26,7 +27,7 @@ export const corta = (iso) => {
 const ETIQUETA_TURNO = { completo: "todo el día", manana: "solo mañana", tarde: "solo tarde" };
 
 export default function DiaFlotaModal({
-  equipo, desde, hasta, asignaciones = [], prestamo, taller,
+  equipo, desde, hasta, asignaciones = [], usos = [], prestamo, taller,
   soloLectura, onAsignar, onEditar, onClose,
 }) {
   const unSoloDia = desde === hasta;
@@ -85,14 +86,36 @@ export default function DiaFlotaModal({
             </div>
           )}
 
+          {/* Lo que pasó de verdad: los choferes que lo tomaron en «Mi turno». */}
+          {usos.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Quién lo usó</p>
+              {usos.map(u => (
+                <div key={u.id} className="rounded-xl border border-green-200 bg-green-50 px-4 py-2.5">
+                  <p className="text-sm font-semibold text-green-900 flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 shrink-0" /> {u.chofer_nombre || "Chofer"}
+                  </p>
+                  <p className="text-xs text-green-800 mt-0.5">
+                    {unSoloDia ? "" : `${corta(u.fecha)} · `}{horaChile(u.inicio)} – {u.estado === "en_uso" ? "en uso" : horaChile(u.fin)}
+                    {kmRecorridos(u) != null ? ` · ${kmRecorridos(u).toLocaleString("es-CL")} km` : ""}
+                    {u.cerrado_por === "relevo" ? ` · lo tomó ${u.relevado_por || "otro chofer"}` : ""}
+                    {u.motivo_cambio ? ` · ${u.motivo_cambio}` : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
           {asignaciones.length === 0 ? (
-            <p className="text-sm text-slate-500 rounded-xl border border-slate-200 px-4 py-4 text-center">
-              {unSoloDia ? "Este día el vehículo está libre." : "En estos días el vehículo está libre."}
-            </p>
+            usos.length === 0 && (
+              <p className="text-sm text-slate-500 rounded-xl border border-slate-200 px-4 py-4 text-center">
+                {unSoloDia ? "Este día el vehículo no se usó ni tiene reserva." : "En estos días el vehículo no se usó ni tiene reservas."}
+              </p>
+            )
           ) : (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                {asignaciones.length === 1 ? "Quién lo tiene" : "Quiénes lo tienen"}
+                {asignaciones.length === 1 ? "Reserva" : "Reservas"}
               </p>
               {asignaciones.map(a => (
                 <div key={a.id}
@@ -129,14 +152,14 @@ export default function DiaFlotaModal({
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl
                          text-sm font-semibold text-white bg-amber-700 hover:bg-amber-800">
               <Plus className="w-4 h-4" />
-              {asignaciones.length === 0 ? "Programar un chofer" : "Programar a alguien más"}
+              {asignaciones.length === 0 ? "Reservar el vehículo" : "Agregar otra reserva"}
             </button>
           )}
 
           {!soloLectura && asignaciones.length > 0 && (
             <p className="text-xs text-slate-400">
-              Se puede programar a otra persona en el mismo vehículo solo si toma
-              el otro medio día. Si ya está tomado todo el día, la base lo va a
+              Se puede reservar para otra persona el mismo vehículo solo en el
+              otro medio día. Si ya está reservado todo el día, la base lo va a
               rechazar y te va a decir con quién choca.
             </p>
           )}

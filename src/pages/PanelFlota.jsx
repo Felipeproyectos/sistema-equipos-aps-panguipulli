@@ -2,15 +2,16 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import {
-  LayoutDashboard, RefreshCw, Truck, IdCard, CalendarDays, NotebookPen, Wrench,
-  AlertTriangle, CheckCircle2, ArrowRight, ArrowLeftRight, UserX, Clock, Stethoscope,
-  Route, ChevronRight, Printer, HeartPulse, CalendarClock,
+  LayoutDashboard, RefreshCw, Truck, IdCard, NotebookPen, Wrench,
+  AlertTriangle, CheckCircle2, ArrowRight, ArrowLeftRight, Clock, Stethoscope,
+  Route, ChevronRight, Printer, HeartPulse, CalendarClock, KeyRound, Ban,
 } from "lucide-react";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { createPageUrl } from "@/utils";
 import { esVehiculo } from "@/lib/centros";
 import { estadoLicencia } from "@/pages/Choferes";
 import { resumenDelDia, pasosDeLaPuestaEnMarcha } from "@/lib/panelFlota";
+import { resumenAhora, horaChile, rotuloVehiculo as rotuloDeFlota } from "@/lib/turnoFlota";
 
 // La primera pantalla del Encargado de Movilización.
 //
@@ -26,7 +27,9 @@ import { resumenDelDia, pasosDeLaPuestaEnMarcha } from "@/lib/panelFlota";
 //   1. ¿Qué necesita mi atención hoy? — cada aviso con su botón directo.
 //   2. ¿Cómo funciona esto? — el proceso en pasos, con cuáles ya están hechos.
 //
-// No escribe nada: solo mira y lleva a la pantalla donde se resuelve cada cosa.
+// Desde migracion/25_turno_chofer.sql arriba de todo va «Ahora»: quién tiene
+// cada vehículo en este momento. Los choferes lo toman en «Mi turno»; acá
+// Movilización solo mira, y puede liberar uno que quedó sin entregar.
 
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const MESES = ["enero","febrero","marzo","abril","mayo","junio",
@@ -40,7 +43,6 @@ function nombres(lista, rotulo) {
   const resto = lista.length - r.length;
   return r.join(" · ") + (resto > 0 ? ` y ${resto} más` : "");
 }
-const rotuloVehiculo = (v) => [v.marca, v.modelo].filter(Boolean).join(" ") + (v.patente ? ` (${v.patente})` : "");
 const rotuloChofer = (c) => c.full_name || c.email;
 
 const TONO = {
@@ -52,11 +54,12 @@ const TONO = {
 
 export default function PanelFlota() {
   const [datos, setDatos] = useState(null);
+  const [ahora, setAhora] = useState(null);
   const [loading, setLoading] = useState(true);
   const containerRef = useRef(null);
 
   const cargar = useCallback(async () => {
-    const [equipos, gente, asignaciones, prestamos, bitacora, solicitudes, ordenes] = await Promise.all([
+    const [equipos, gente, asignaciones, prestamos, bitacora, solicitudes, ordenes, usos] = await Promise.all([
       base44.functions.invoke("getEquiposPorCentro")
         .then(r => r.data?.equipos || [])
         .catch(() => base44.entities.Equipo.list("-updated_date", 500).catch(() => [])),
@@ -68,7 +71,14 @@ export default function PanelFlota() {
       base44.entities.BitacoraFlota.list("-fecha", 1000).catch(() => []),
       base44.entities.Solicitud.list("-created_date", 500).catch(() => []),
       base44.entities.OrdenTrabajo.list("-created_date", 500).catch(() => []),
+      base44.entities.UsoVehiculo.list("-inicio", 1500).catch(() => []),
     ]);
+    const vehiculos = equipos.filter(e => esVehiculo(e.tipo));
+    setAhora({
+      ...resumenAhora({ vehiculos, usos, ordenes, reservas: asignaciones, prestamos }),
+      choferes: gente.filter(u => u.role === "chofer"),
+      hayUsos: usos.some(u => u.estado !== "rechazado"),
+    });
     setDatos(resumenDelDia({
       vehiculos: equipos.filter(e => esVehiculo(e.tipo)),
       choferes: gente.filter(u => u.role === "chofer"),
@@ -80,7 +90,17 @@ export default function PanelFlota() {
   useEffect(() => { cargar().finally(() => setLoading(false)); }, [cargar]);
   const { refreshing } = usePullToRefresh(cargar, containerRef);
 
-  if (loading || !datos) return (
+  const liberar = async (u) => {
+    if (!window.confirm(`¿Liberar ${u.equipo_label || "el vehículo"}? Se cierra el uso de ${u.chofer_nombre} (desde las ${horaChile(u.inicio)}).`)) return;
+    try {
+      await base44.functions.invoke("turnoVehiculo", { accion: "liberar", uso_id: u.id, nota: "Liberado desde el Panel de Flota" });
+    } catch (e) {
+      window.alert(e?.data?.error || e?.message || "No se pudo liberar.");
+    }
+    cargar();
+  };
+
+  if (loading || !datos || !ahora) return (
     <div className="flex items-center justify-center min-h-screen">
       <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
     </div>
@@ -91,12 +111,39 @@ export default function PanelFlota() {
   const fechaLarga = `${DIAS[hoy.getDay()]} ${hoy.getDate()} de ${MESES[hoy.getMonth()]}`;
 
   // ── Lo de hoy, de lo más grave a lo menos ─────────────────────────────
+  const a = ahora;
+  const idsVencidos = new Set(r.licenciaVencida.map(c => c.id));
+  const conVehiculoYVencida = a.enUso.filter(e => idsVencidos.has(e.uso.chofer_id));
   const avisos = [
-    r.manejandoSinLicencia.length > 0 && {
+    conVehiculoYVencida.length > 0 && {
       tono: "rojo", icono: IdCard,
-      titulo: `${plural(r.manejandoSinLicencia.length, "chofer tiene", "choferes tienen")} un vehículo hoy con la licencia vencida`,
-      detalle: nombres(r.manejandoSinLicencia, rotuloChofer),
-      accion: "Cambiar el chofer", pagina: "Calendario",
+      titulo: `${plural(conVehiculoYVencida.length, "chofer tiene", "choferes tienen")} un vehículo con la licencia vencida`,
+      detalle: nombres(conVehiculoYVencida, e => `${e.uso.chofer_nombre} (${rotuloDeFlota(e.vehiculo)})`),
+      accion: "Liberar", pagina: "Flota",
+    },
+    a.rechazosHoy.length > 0 && {
+      tono: "rojo", icono: Ban,
+      titulo: `${plural(a.rechazosHoy.length, "intento", "intentos")} de tomar un vehículo con la licencia vencida o sin cargar`,
+      detalle: nombres(a.rechazosHoy, u => `${u.chofer_nombre} · ${u.equipo_label} · ${horaChile(u.inicio)}`) + ". No se le permitió.",
+      accion: "Ver choferes", pagina: "Choferes",
+    },
+    a.sinEntregar.length > 0 && {
+      tono: "ambar", icono: Clock,
+      titulo: `${plural(a.sinEntregar.length, "vehículo sigue", "vehículos siguen")} sin entregar desde otro día`,
+      detalle: nombres(a.sinEntregar, u => `${u.equipo_label} · ${u.chofer_nombre} desde ${String(u.fecha || "").slice(8, 10)}/${String(u.fecha || "").slice(5, 7)}`),
+      accion: "Ver vehículos", pagina: "Flota",
+    },
+    a.fallasHoy.length > 0 && {
+      tono: "ambar", icono: AlertTriangle,
+      titulo: `${plural(a.fallasHoy.length, "pauta de inicio marcó", "pautas de inicio marcaron")} fallas hoy`,
+      detalle: nombres(a.fallasHoy, u => `${u.equipo_label} (${u.chofer_nombre})`),
+      accion: "Revisar", pagina: "Movilizacion",
+    },
+    a.relevosHoy.length > 0 && {
+      tono: "azul", icono: ArrowLeftRight,
+      titulo: `${plural(a.relevosHoy.length, "vehículo cambió", "vehículos cambiaron")} de manos sin entregarse en el sistema`,
+      detalle: nombres(a.relevosHoy, u => `${u.equipo_label}: ${u.chofer_nombre} → ${u.relevado_por}`),
+      accion: "Calendario", pagina: "Calendario",
     },
     r.citasPorResponder.length > 0 && {
       tono: "azul", icono: CalendarClock,
@@ -106,15 +153,9 @@ export default function PanelFlota() {
     },
     r.porRevisar.length > 0 && {
       tono: "ambar", icono: Stethoscope,
-      titulo: `${plural(r.porRevisar.length, "falla informada por Salud espera", "fallas informadas por Salud esperan")} que la revises`,
+      titulo: `${plural(r.porRevisar.length, "falla informada espera", "fallas informadas esperan")} que la revises`,
       detalle: "Decide si va al taller o se cierra sin reparación.",
       accion: "Revisar", pagina: "Movilizacion",
-    },
-    r.sinChofer.length > 0 && {
-      tono: "ambar", icono: UserX,
-      titulo: `${plural(r.sinChofer.length, "vehículo está", "vehículos están")} sin chofer hoy`,
-      detalle: nombres(r.sinChofer, rotuloVehiculo),
-      accion: "Programar", pagina: "Calendario",
     },
     r.prestamosAtrasados.length > 0 && {
       tono: "ambar", icono: ArrowLeftRight,
@@ -137,19 +178,13 @@ export default function PanelFlota() {
     r.sinLicencia.length > 0 && {
       tono: "gris", icono: IdCard,
       titulo: `${plural(r.sinLicencia.length, "chofer no ha", "choferes no han")} cargado su licencia`,
-      detalle: "Hasta que la carguen no se les puede asignar un vehículo.",
+      detalle: "Hasta que la carguen no pueden tomar vehículos.",
       accion: "Ver choferes", pagina: "Choferes",
-    },
-    r.enTaller.length > 0 && {
-      tono: "gris", icono: Wrench,
-      titulo: `${plural(r.enTaller.length, "vehículo está", "vehículos están")} en el taller`,
-      detalle: nombres(r.enTaller, rotuloVehiculo),
-      accion: "Seguir", pagina: "Movilizacion",
     },
   ].filter(Boolean);
 
   const pasos = pasosDeLaPuestaEnMarcha(r);
-  const hecho = (clave) => pasos.find(p => p.clave === clave)?.hecho;
+  const hecho = (clave) => (clave === "calendario" ? a.hayUsos : pasos.find(p => p.clave === clave)?.hecho);
 
   const PASOS = [
     {
@@ -167,12 +202,12 @@ export default function PanelFlota() {
         : "Aún no hay choferes",
     },
     {
-      clave: "calendario", icono: CalendarDays, pagina: "Calendario", boton: "Calendario",
-      titulo: "Programa quién maneja qué",
-      texto: "En el calendario arrastras sobre los días de un vehículo y eliges al chofer. Se puede imprimir la semana.",
-      estado: r.vehiculos.length
-        ? `${r.conChofer.length} de ${r.vehiculos.length} con chofer hoy`
-        : "Primero carga vehículos",
+      clave: "calendario", icono: KeyRound, pagina: "Calendario", boton: "Calendario",
+      titulo: "Los choferes toman los vehículos",
+      texto: "Cada chofer entra a «Mi turno» en su teléfono, elige el vehículo y hace la pauta de inicio; al terminar lo entrega. Tú lo ves en el Calendario y puedes reservar un vehículo para una salida.",
+      estado: a.hayUsos
+        ? `${plural(a.usosHoy.length, "uso", "usos")} hoy · ${plural(a.enUso.length, "vehículo", "vehículos")} en uso ahora`
+        : "Todavía ningún chofer ha tomado un vehículo",
     },
     {
       clave: "bitacora", icono: NotebookPen, pagina: "BitacoraFlota", boton: "Bitácora",
@@ -209,6 +244,57 @@ export default function PanelFlota() {
 
       <div className="max-w-5xl mx-auto px-4 lg:px-10 pt-6 pb-12 space-y-8">
 
+        {/* ── 0. Ahora ──────────────────────────────────────────────────── */}
+        <section>
+          <h2 className="text-lg font-bold text-slate-800 mb-1">Ahora</h2>
+          <p className="text-sm text-slate-500 mb-4">Quién tiene cada vehículo en este momento. Lo registran los choferes al tomarlo en «Mi turno».</p>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mb-4">
+            {[
+              { n: a.enUso.length, t: "En uso", c: "#B45309" },
+              { n: a.libres.length, t: "Libres", c: "#16A34A" },
+              { n: a.reservados.length, t: "Reservados hoy", c: "#1D4ED8" },
+              { n: a.enTaller.length + a.fueraServicio.length, t: "En taller / fuera", c: "#DC2626" },
+              { n: a.prestados.length, t: "Prestados", c: "#7C3AED" },
+            ].map(k => (
+              <div key={k.t} className="bg-white rounded-2xl border border-slate-200 px-4 py-3">
+                <p className="text-2xl font-bold" style={{ color: k.c }}>{k.n}</p>
+                <p className="text-xs font-semibold text-slate-500">{k.t}</p>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100">
+            {[...a.enUso, ...a.reservados, ...a.libres, ...a.enTaller, ...a.fueraServicio].map(e => {
+              const est = e.estado === "en_uso" ? { t: "En uso", c: "bg-orange-50 text-amber-800" }
+                : e.estado === "taller" ? { t: "En taller", c: "bg-red-50 text-red-700" }
+                : e.estado === "fuera_servicio" ? { t: "Fuera de servicio", c: "bg-slate-100 text-slate-600" }
+                : e.reserva ? { t: "Reservado", c: "bg-blue-50 text-blue-700" }
+                : { t: "Libre", c: "bg-green-50 text-green-700" };
+              const detalle = e.uso
+                ? `${e.uso.chofer_nombre} · desde ${e.uso.fecha && e.uso.fecha !== a.dia ? `el ${e.uso.fecha.slice(8, 10)}/${e.uso.fecha.slice(5, 7)} ` : ""}${horaChile(e.uso.inicio)}${e.uso.km_inicio != null ? ` · km ${Number(e.uso.km_inicio).toLocaleString("es-CL")}` : ""}`
+                : e.reserva ? `Reservado para ${e.reserva.chofer_nombre}${e.reserva.hora_salida ? ` · ${e.reserva.hora_salida}` : ""}${e.reserva.destino ? ` · ${e.reserva.destino}` : ""}`
+                : e.taller ? (e.taller.numero_ot || "En el taller")
+                : e.estado === "fuera_servicio" ? "Fuera de servicio" : "Nadie lo tiene";
+              return (
+                <div key={e.vehiculo.id} className="px-4 py-2.5 flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{rotuloDeFlota(e.vehiculo)}</p>
+                    <p className="text-xs text-slate-500 truncate">
+                      {detalle}{e.prestamo ? ` · prestado a ${e.prestamo.centro_destino}` : ""}
+                    </p>
+                  </div>
+                  <span className={`text-[11px] font-bold rounded-full px-2.5 py-1 shrink-0 ${est.c}`}>{est.t}</span>
+                  {e.uso && (
+                    <button onClick={() => liberar(e.uso)}
+                      className="text-[11px] font-semibold text-red-600 hover:text-red-800 shrink-0">
+                      Liberar
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         {/* ── 1. Lo de hoy ─────────────────────────────────────────────── */}
         <section>
           <h2 className="text-lg font-bold text-slate-800 mb-1">Para hoy</h2>
@@ -222,7 +308,7 @@ export default function PanelFlota() {
               <div>
                 <p className="font-semibold text-green-900">Todo en orden hoy</p>
                 <p className="text-sm text-green-800">
-                  Todos los vehículos disponibles tienen chofer y no hay nada pendiente.
+                  No hay nada pendiente.
                 </p>
               </div>
             </div>
@@ -260,8 +346,8 @@ export default function PanelFlota() {
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-5">
             {[
               { icono: HeartPulse, quien: "Salud", hace: "Usa las ambulancias e informa cuando algo falla" },
-              { icono: LayoutDashboard, quien: "Movilización (tú)", hace: "Programa los vehículos, asigna choferes y decide qué va al taller", destacado: true },
-              { icono: Truck, quien: "Chofer", hace: "Maneja y anota cada salida en su teléfono" },
+              { icono: LayoutDashboard, quien: "Movilización (tú)", hace: "Supervisa la flota, reserva vehículos y decide qué va al taller", destacado: true },
+              { icono: Truck, quien: "Chofer", hace: "Toma el vehículo con la pauta de inicio, anota sus salidas y lo entrega" },
               { icono: Wrench, quien: "Taller", hace: "Repara lo que Movilización le deriva" },
             ].map((x, i, arr) => {
               const Icono = x.icono;
@@ -317,7 +403,8 @@ export default function PanelFlota() {
                   <Wrench className="w-4 h-4 text-slate-400" /> Cuando un vehículo falla
                 </p>
                 <p className="text-sm text-slate-500 mt-0.5">
-                  Salud lo informa desde la ficha del equipo y te llega a <strong>Solicitudes al Taller</strong>.
+                  Salud lo informa desde la ficha del equipo, o el chofer lo marca en la pauta de inicio o al
+                  entregarlo, y te llega a <strong>Solicitudes al Taller</strong>.
                   Tú decides: lo derivas al taller (se crea la orden de trabajo) o lo cierras sin reparación.
                   También puedes pedir una revisión tú mismo. El Jefe de Taller te propone día y hora de
                   ingreso; tú la confirmas o pides otra, y esos días quedan marcados en el Calendario.

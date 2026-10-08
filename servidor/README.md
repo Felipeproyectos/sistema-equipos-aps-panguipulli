@@ -30,12 +30,17 @@ y el par `base44` / `base44.asServiceRole`.
 
 Excepciones, que el portador no toca (listas en `migracion/portar_funciones.py`):
 las **nativas**, escritas directo acá (`gestionarAcceso`, `borrarDatosDePrueba`,
-`resumenDiarioPendientes`, `subirPautaCabina`), y las **corregidas en el
+`resumenDiarioPendientes`, `subirPautaCabina`, `turnoVehiculo`), y las **corregidas en el
 servidor** (`EDITADAS_EN_SERVIDOR`), cuyo `entry.ts` quedó atrás.
 
 `subirPautaCabina` es pública (la Pauta de Cabina se sube sin sesión) y guarda
 los archivos con `asServiceRole.integrations.Core.GuardarArchivo`, en el bucket
 `archivos` del Storage.
+
+`turnoVehiculo` es la que usa «Mi turno» (migracion/25_turno_chofer.sql): el
+chofer toma, cambia y entrega vehículos, y Movilización libera los que quedan
+sin entregar. Decide la disponibilidad con `compartido/turnoFlota.js`, la misma
+regla que muestra la pantalla.
 
 Si Base44 cambia una función, se re-exporta el `.ts` y se corre el portador.
 

@@ -81,6 +81,10 @@ begin
   delete from solicitud         where id like 'pba-%';
   delete from equipo            where id like 'pba-%';
   delete from usuario           where id like 'pba-%';
+  -- Los usos de «Mi turno» existen desde 25_turno_chofer.sql.
+  if to_regclass('public.uso_vehiculo') is not null then
+    delete from uso_vehiculo where id like 'pba-%';
+  end if;
 
   -- ── 1) Vehículos ──────────────────────────────────────────────────
   insert into equipo (id, is_sample, tipo, marca, modelo, patente, numero_inventario, estado,
@@ -412,6 +416,71 @@ begin
     end loop;
   end loop;
 
+  -- ── 8) «Mi turno»: quién tomó cada vehículo (si ya corrió la 25) ────
+  -- Los días anteriores salen de la bitácora: un tramo por vehículo, chofer
+  -- y día, de la primera salida a la última vuelta. Hoy van a mano, uno por
+  -- cada situación que ve Movilización en el Panel.
+  if to_regclass('public.uso_vehiculo') is not null then
+    insert into uso_vehiculo (id, is_sample, equipo_id, equipo_label, equipo_tipo, chofer_id, chofer_email,
+                              chofer_nombre, estado, fecha, inicio, fin, km_inicio, km_fin, cerrado_por)
+    select 'pba-demo-uso-' || row_number() over (order by b.fecha, b.equipo_id),
+           true, b.equipo_id, min(b.equipo_label), e.tipo, b.chofer_id, min(u.email), min(b.chofer_nombre),
+           'entregado', b.fecha,
+           (b.fecha + min(b.hora_salida)::time) at time zone 'America/Santiago',
+           (b.fecha + max(coalesce(b.hora_regreso, b.hora_salida))::time + interval '10 minutes') at time zone 'America/Santiago',
+           min(b.km_salida), max(coalesce(b.km_regreso, b.km_salida)), 'chofer'
+      from bitacora_flota b
+      join equipo e on e.id = b.equipo_id
+      left join usuario u on u.id = b.chofer_id
+     where b.id like 'pba-demo-bit-%' and b.fecha < hoy
+     group by b.equipo_id, e.tipo, b.chofer_id, b.fecha;
+
+    insert into uso_vehiculo (id, is_sample, equipo_id, equipo_label, equipo_tipo, chofer_id, chofer_email,
+                              chofer_nombre, estado, fecha, inicio, fin, km_inicio, km_fin, combustible_inicio,
+                              pauta_inicio, pauta_con_falla, cerrado_por, relevado_por, motivo_rechazo, observaciones_fin)
+    values
+      -- Carlos tomó la Hilux con una falla marcada en la pauta.
+      ('pba-demo-uso-hoy-1', true, 'pba-demo-veh-1', 'Toyota Hilux 2.4 DX 4x4 · LKXR-42', 'camioneta',
+       'pba-demo-cho-1', 'carlos.soto@demo.test', 'Carlos Soto Vera', 'en_uso', hoy,
+       (hoy + time '08:05') at time zone 'America/Santiago', null, 50172, null, '3/4',
+       '{"luces":{"estado":"bien"},"neumaticos":{"estado":"mal","obs":"Delanteros con desgaste disparejo"},"frenos":{"estado":"bien"},"niveles":{"estado":"bien"},"documentos":{"estado":"bien"},"limpieza":{"estado":"bien"}}'::jsonb,
+       true, null, null, null, null),
+      -- Daniela tenía la Partner y Jorge la tomó marcando «me la entregó».
+      ('pba-demo-uso-hoy-2', true, 'pba-demo-veh-3', 'Peugeot Partner Maxi · PFTW-63', 'furgon',
+       'pba-demo-cho-2', 'daniela.reyes@demo.test', 'Daniela Reyes Muñoz', 'entregado', hoy,
+       (hoy + time '08:10') at time zone 'America/Santiago', (hoy + time '11:20') at time zone 'America/Santiago',
+       33033, 33081, '1/2', null, false, 'relevo', 'Jorge Catalán Silva', null,
+       'Lo tomó Jorge Catalán Silva (marcó «me lo entregó»).'),
+      ('pba-demo-uso-hoy-3', true, 'pba-demo-veh-3', 'Peugeot Partner Maxi · PFTW-63', 'furgon',
+       'pba-demo-cho-5', 'jorge.catalan@demo.test', 'Jorge Catalán Silva', 'en_uso', hoy,
+       (hoy + time '11:20') at time zone 'America/Santiago', null, 33081, null, '1/2', null, false,
+       null, null, null, null),
+      -- La ambulancia con su conductora titular.
+      ('pba-demo-uso-hoy-4', true, 'pba-demo-veh-8', 'Mercedes-Benz Sprinter 515 Ambulancia · KWZP-90', 'ambulancia',
+       'pba-demo-cho-4', 'marcela.fuentes@demo.test', 'Marcela Fuentes Riquelme', 'en_uso', hoy,
+       (hoy + time '08:00') at time zone 'America/Santiago', null, 61240, null, 'Lleno', null, false,
+       null, null, null, null),
+      -- Hugo intentó tomar la L200 con la licencia vencida: no se le permitió.
+      ('pba-demo-uso-hoy-5', true, 'pba-demo-veh-2', 'Mitsubishi L200 Katana CRT · JHPS-17', 'camioneta',
+       'pba-demo-cho-3', 'hugo.paredes@demo.test', 'Hugo Paredes Lagos', 'rechazado', hoy,
+       (hoy + time '08:15') at time zone 'America/Santiago', null, null, null, null, null, false,
+       null, null, 'Licencia vencida', null),
+      -- Valeria tomó la Navara ayer y no la ha entregado.
+      ('pba-demo-uso-ayer-1', true, 'pba-demo-veh-6', 'Nissan Navara NP300 4x4 · RVLT-39', 'camioneta',
+       'pba-demo-cho-7', 'valeria.antilef@demo.test', 'Valeria Antilef Huenchumán', 'en_uso', hoy - 1,
+       ((hoy - 1) + time '08:00') at time zone 'America/Santiago', null, 14200, null, 'Lleno', null, false,
+       null, null, null, null);
+
+    -- La falla de la pauta de Carlos le llega a Movilización.
+    insert into solicitud (id, is_sample, equipo_id, tipo, fecha, usuario_email, usuario_nombre, centro,
+                           estado, origen, observaciones, created_date)
+    values ('pba-demo-sol-6', true, 'pba-demo-veh-1', 'mantenimiento_correctivo', hoy,
+            'carlos.soto@demo.test', 'Carlos Soto Vera', centro_a, 'pendiente', 'pauta_chofer',
+            'Pauta de inicio (Carlos Soto Vera, km 50172): Neumáticos: Delanteros con desgaste disparejo.',
+            (hoy + time '08:06') at time zone 'America/Santiago');
+    update uso_vehiculo set solicitud_id = 'pba-demo-sol-6' where id = 'pba-demo-uso-hoy-1';
+  end if;
+
   raise notice 'Demo cargada: 8 vehículos, 7 choferes, % salidas. Centros: %, %, %.', n, centro_a, centro_b, centro_c;
 end $$;
 
@@ -434,6 +503,7 @@ union all select 'salidas',       count(*)::text from bitacora_flota where id li
 --   delete from solicitud         where id like 'pba-%';
 --   delete from equipo            where id like 'pba-%';
 --   delete from usuario           where id like 'pba-%';
+--   delete from uso_vehiculo      where id like 'pba-%';   -- si ya corrió la 25
 --
 -- ── Qué se ve con el perfil de Movilización ─────────────────────────
 -- Panel de Flota  vehículos con y sin chofer, uno en el taller, un chofer
