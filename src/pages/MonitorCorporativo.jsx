@@ -128,6 +128,7 @@ export default function MonitorCorporativo() {
       prestamos: d.prestamos || [],
       bitacoraFlota: d.bitacoraFlota || [],
       choferes: d.choferes || [],
+      usos: d.usos || [],
       centros,
       comprasTaller: comprasTaller.map(s => ({ ...s, _area: "Taller" })),
       comprasSalud: comprasSalud.map(s => ({ ...s, _area: "Salud", _entidad: "SolicitudRepuestoSalud" })),
@@ -140,15 +141,15 @@ export default function MonitorCorporativo() {
   const {
     equipos = [], parches = [], alertas = [], solicitudes = [], inspecciones = [], ordenes = [],
     repuestos = [], centros = [], comprasTaller = [], comprasSalud = [],
-    asignaciones = [], prestamos = [], bitacoraFlota = [], choferes = [],
+    asignaciones = [], prestamos = [], bitacoraFlota = [], choferes = [], usos = [],
   } = data || {};
 
   const areas = useMemo(() => ({
     calidad: areaCalidad({ equipos, parches, alertas, inspecciones }),
     gestion: areaGestion({ solicitudes, comprasTaller, comprasSalud, ordenes }),
-    movilizacion: areaMovilizacion({ equipos, ordenes, asignaciones, prestamos, bitacora: bitacoraFlota, choferes, estadoLicencia }),
+    movilizacion: areaMovilizacion({ equipos, ordenes, asignaciones, usos, prestamos, bitacora: bitacoraFlota, choferes, estadoLicencia }),
     taller: areaTaller({ ordenes, repuestos }),
-  }), [equipos, parches, alertas, inspecciones, solicitudes, comprasTaller, comprasSalud, ordenes, asignaciones, prestamos, bitacoraFlota, choferes, repuestos]);
+  }), [equipos, parches, alertas, inspecciones, solicitudes, comprasTaller, comprasSalud, ordenes, asignaciones, prestamos, bitacoraFlota, choferes, usos, repuestos]);
 
   // Se abre en el área que peor está; después manda la persona.
   const peor = AREAS.map(a => a.clave).sort((x, y) => PESO[areas[x].estado.tono] - PESO[areas[y].estado.tono])[0];
@@ -361,7 +362,7 @@ export default function MonitorCorporativo() {
           {area === "movilizacion" && (
             <div className="bg-white rounded-2xl p-5" style={sombra}>
               <h3 className="text-sm font-bold text-slate-700 mb-3">Quién tiene cada vehículo los próximos 7 días</h3>
-              <FlotaSemanaMini vehiculos={vehiculos} asignaciones={asignaciones} prestamos={prestamos} taller={r.taller} />
+              <FlotaSemanaMini vehiculos={vehiculos} asignaciones={asignaciones} usos={usos} prestamos={prestamos} taller={r.taller} />
             </div>
           )}
 

@@ -26,6 +26,10 @@
     "usuario_nombre": {
       "type": "string"
     },
+    "origen": {
+      "type": "string",
+      "description": "De donde vino. Vacio = Salud desde la ficha del equipo; 'pauta_chofer' = falla marcada por el chofer en la pauta de inicio o al entregar el vehiculo"
+    },
     "centro": {
       "type": "string"
     },

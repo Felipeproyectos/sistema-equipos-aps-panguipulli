@@ -22,6 +22,10 @@
       "type": "string",
       "description": "La asignacion vigente al momento de la salida, si habia una. Enlaza la salida con la programacion del calendario."
     },
+    "uso_id": {
+      "type": "string",
+      "description": "El uso del vehiculo (UsoVehiculo) durante el cual se hizo la salida"
+    },
     "fecha": {
       "type": "string",
       "format": "date",

@@ -2,11 +2,10 @@ import { useState, useEffect } from "react";
 import { invokePublic } from "@/lib/publicFetch";
 import {
   Car, CheckCircle, Loader2, AlertTriangle, ClipboardCheck,
-  ChevronRight, ArrowLeft, Activity, Heart, Zap, ClipboardList, Ambulance, Stethoscope
+  ChevronRight, ArrowLeft, Activity, Heart, Zap, ClipboardList, Ambulance, Stethoscope, KeyRound
 } from "lucide-react";
 import PautaInspeccionSemanal from "@/components/bitacora/PautaInspeccionSemanal";
 import PautaPlaceholder from "@/components/bitacora/PautaPlaceholder";
-import TurnoChoferForm from "@/components/bitacora/TurnoChoferForm";
 import PautaSemanalDesfibrilador from "@/components/bitacora/PautaSemanalDesfibrilador";
 import PautaSemanalDEA from "@/components/bitacora/PautaSemanalDEA";
 import PautaSemanalMultiparametros from "@/components/bitacora/PautaSemanalMultiparametros";
@@ -50,7 +49,7 @@ const CATEGORIAS = [
   {
     id: "turno_chofer",
     label: "Turno Chofer",
-    descripcion: "Registro de inicio de turno con conductor y kilometraje",
+    descripcion: "Los choferes ahora toman el vehículo desde «Mi turno», con su cuenta",
     icon: Car,
     color: "#2563EB",
     bg: "#EFF6FF",
@@ -328,13 +327,26 @@ export default function PublicBitacora() {
               />
             )}
 
-            {/* Turno Chofer */}
+            {/* Turno Chofer: desde 25_turno_chofer.sql el chofer toma el vehículo
+                con su cuenta, en «Mi turno». Acá ya no se registra: sin sesión no
+                se puede saber quién es, ni revisar su licencia. */}
             {categoria === "turno_chofer" && (
-              <TurnoChoferForm
-                equipos={equiposFiltrados}
-                loading={loadingEquipos}
-                onSuccess={(msg) => handleSuccess(msg)}
-              />
+              <div className="bg-white rounded-3xl shadow-2xl p-6 text-center space-y-3">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto" style={{ background: "#FFF7ED" }}>
+                  <KeyRound className="w-7 h-7 text-amber-700" />
+                </div>
+                <h2 className="text-lg font-bold text-slate-800">El turno ahora se registra en «Mi turno»</h2>
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  Entra al sistema con tu cuenta de chofer, toca <strong>Tomar vehículo</strong> y haz la
+                  pauta de inicio: el vehículo queda a tu nombre. Al terminar, lo entregas desde ahí mismo.
+                </p>
+                <a href="/MiTurno"
+                  className="block w-full py-3 rounded-xl text-sm font-bold text-white"
+                  style={{ background: "#B45309" }}>
+                  Ir a Mi turno
+                </a>
+                <p className="text-xs text-slate-400">¿No tienes cuenta? Pídesela al Encargado de Movilización.</p>
+              </div>
             )}
 
             {/* Ambulancia — Pauta Diaria: selector de momento */}

@@ -1,7 +1,8 @@
-import { Wrench, ArrowLeftRight, UserCheck } from "lucide-react";
+import { Wrench, ArrowLeftRight, UserCheck, CalendarClock } from "lucide-react";
 import {
   asignacionesDelDia, rangosSeTocan, esFinDeSemana, aISO, sumarDias,
 } from "@/lib/calendarioFlota";
+import { usosDelDia, horaChile } from "@/lib/turnoFlota";
 
 // La programación de la flota, en miniatura y de solo lectura.
 //
@@ -23,7 +24,9 @@ function rotulo(eq) {
   return [eq.marca, eq.modelo].filter(Boolean).join(" ") + (eq.patente ? ` · ${eq.patente}` : "");
 }
 
-export default function FlotaSemanaMini({ vehiculos = [], asignaciones = [], prestamos = [], taller = [] }) {
+// Hoy se ve quién lo usó de verdad (lo registra el chofer en «Mi turno»); los
+// días que vienen, lo reservado.
+export default function FlotaSemanaMini({ vehiculos = [], asignaciones = [], usos = [], prestamos = [], taller = [] }) {
   const hoy = aISO(new Date());
   const dias = Array.from({ length: 7 }, (_, i) => sumarDias(hoy, i));
 
@@ -60,19 +63,28 @@ export default function FlotaSemanaMini({ vehiculos = [], asignaciones = [], pre
                 </td>
                 {dias.map((d) => {
                   const asigs = asignacionesDelDia(asignaciones, eq.id, d);
+                  const usados = d <= hoy ? usosDelDia(usos, eq.id, d, hoy) : [];
                   const enTaller = taller.find((t) => t.equipo_id === eq.id && rangosSeTocan(t.desde, t.hasta, d, d));
                   const prestamo = prestamos.find((p) => p.equipo_id === eq.id && rangosSeTocan(p.desde, p.hasta_previsto, d, d));
 
                   let contenido = null;
                   let fondo = esFinDeSemana(d) ? "#fafafa" : "transparent";
-                  if (enTaller) {
-                    fondo = "#fef2f2";
-                    contenido = <Wrench className="w-3 h-3 text-red-600 mx-auto" />;
-                  } else if (asigs.length) {
+                  if (usados.length) {
                     fondo = "#f0fdf4";
                     contenido = (
                       <span className="flex items-center justify-center gap-0.5">
                         <UserCheck className="w-3 h-3 text-green-600 shrink-0" />
+                        {usados.length > 1 && <span className="text-[9px] font-bold text-green-700">{usados.length}</span>}
+                      </span>
+                    );
+                  } else if (enTaller) {
+                    fondo = "#fef2f2";
+                    contenido = <Wrench className="w-3 h-3 text-red-600 mx-auto" />;
+                  } else if (asigs.length) {
+                    fondo = "#eff6ff";
+                    contenido = (
+                      <span className="flex items-center justify-center gap-0.5">
+                        <CalendarClock className="w-3 h-3 text-blue-600 shrink-0" />
                         {prestamo && <ArrowLeftRight className="w-2.5 h-2.5 text-orange-600 shrink-0" />}
                       </span>
                     );
@@ -82,7 +94,8 @@ export default function FlotaSemanaMini({ vehiculos = [], asignaciones = [], pre
                   }
 
                   const titulo = [
-                    ...asigs.map((a) => a.chofer_nombre),
+                    ...usados.map((u) => `${u.chofer_nombre} ${horaChile(u.inicio)}–${u.estado === "en_uso" ? "en uso" : horaChile(u.fin)}`),
+                    ...asigs.map((a) => `Reserva: ${a.chofer_nombre}`),
                     prestamo ? `Prestado a ${prestamo.centro_destino}` : "",
                     enTaller ? `En taller — ${enTaller.numero_ot}` : "",
                   ].filter(Boolean).join(" · ") || "Libre";
@@ -99,7 +112,8 @@ export default function FlotaSemanaMini({ vehiculos = [], asignaciones = [], pre
         </table>
       </div>
       <div className="flex flex-wrap items-center gap-4 mt-3 text-[11px] text-slate-500">
-        <span className="flex items-center gap-1.5"><UserCheck className="w-3 h-3 text-green-600" /> Con chofer</span>
+        <span className="flex items-center gap-1.5"><UserCheck className="w-3 h-3 text-green-600" /> Lo usó un chofer</span>
+        <span className="flex items-center gap-1.5"><CalendarClock className="w-3 h-3 text-blue-600" /> Reservado</span>
         <span className="flex items-center gap-1.5"><ArrowLeftRight className="w-3 h-3 text-orange-600" /> Prestado</span>
         <span className="flex items-center gap-1.5"><Wrench className="w-3 h-3 text-red-600" /> En taller</span>
         <span className="text-slate-400">— celda vacía: sin nada programado</span>

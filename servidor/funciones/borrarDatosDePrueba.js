@@ -21,6 +21,7 @@ import { createClientFromRequest } from '#compat';
 
 // En orden: primero lo que apunta a otras filas, al final lo apuntado.
 const ENTIDADES = [
+  ['UsoVehiculo', 'usos de vehículos'],
   ['BitacoraFlota', 'salidas de bitácora'],
   ['AsignacionChofer', 'asignaciones'],
   ['PrestamoVehiculo', 'préstamos'],

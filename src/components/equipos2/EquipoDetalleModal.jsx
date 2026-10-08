@@ -20,6 +20,7 @@ import PautaDiariaAmbulancia from "@/components/bitacora/PautaDiariaAmbulancia";
 import PautaCabina from "@/components/bitacora/PautaCabina";
 import DetallePautaCabina from "@/components/bitacora/DetallePautaCabina";
 import { TIPO_ACTIVIDAD as TIPO_CABINA, TIPO_FORMULARIO as FORMULARIO_CABINA, leerPautaCabina } from "@/lib/pautaCabina";
+import { diaChile } from "@/lib/turnoFlota";
 import TallerTab from "./TallerTab";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { generarPDFEquipo } from "@/utils/generarPDFEquipo";
@@ -41,13 +42,21 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
     // Los prestamos y quien manejaba durante cada uno. Son opcionales: si la
     // persona que saca el informe no puede leerlos, el informe sale igual, sin
     // esa seccion, en vez de no salir.
-    const [prestamos, asignaciones] = await Promise.all([
+    const [prestamos, asignaciones, usos] = await Promise.all([
       base44.entities.PrestamoVehiculo.filter({ equipo_id: equipo.id }, "-desde", 100).catch(() => []),
       base44.entities.AsignacionChofer.filter({ equipo_id: equipo.id }, "-desde", 100).catch(() => []),
+      base44.entities.UsoVehiculo.filter({ equipo_id: equipo.id }, "-inicio", 300).catch(() => []),
     ]);
+    // Quién lo manejó de verdad sale de los usos (Mi turno). Las asignaciones
+    // quedaron como reservas: solo se usan para lo anterior a los usos.
+    const reales = usos.filter(u => u.estado !== "rechazado").map(u => ({
+      equipo_id: u.equipo_id, chofer_nombre: u.chofer_nombre, prestamo_id: u.prestamo_id,
+      desde: u.fecha, hasta: u.estado === "en_uso" ? null : diaChile(u.fin) || u.fecha,
+      estado: u.estado === "en_uso" ? "activa" : "terminada",
+    }));
     generarPDFEquipo({
       equipo: { ...equipo, conductor_responsable: conductorActivo },
-      actividades, parches, prestamos, asignaciones,
+      actividades, parches, prestamos, asignaciones: reales.length ? reales : asignaciones,
     });
   };
   const estado = ESTADOS_EQUIPO.find(e => e.value === equipo.estado) || ESTADOS_EQUIPO[0];

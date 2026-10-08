@@ -16,12 +16,18 @@ import {
   rangosSeTocan, periodosEnTaller, choquesConTaller, asignacionesDelDia, agruparEnFranjas,
 } from "@/lib/calendarioFlota";
 import AyudaPantalla from "@/components/flota/AyudaPantalla";
+import { usosDelDia, horaChile, diaChile } from "@/lib/turnoFlota";
 
-// El calendario de programación de la flota.
+// El calendario de la flota.
 //
-// Una fila por vehículo, una columna por día. Tres cosas se dibujan encima:
-// quién lo tiene asignado, si está prestado a otro centro, y si está en el
-// taller. Es la vista que permite ver de un golpe qué vehículo está libre.
+// Una fila por vehículo, una columna por día. Cuatro cosas se dibujan encima:
+// quién lo usó de verdad (los choferes lo toman en «Mi turno», ver
+// migracion/25_turno_chofer.sql), las reservas de Movilización, si está
+// prestado a otro centro y si está en el taller. En un mismo día puede haber
+// varios choferes: cada uno es un tramo con su horario.
+//
+// Movilización ya no asigna: arrastrar sobre los días crea una RESERVA (un
+// vehículo apartado para una salida puntual), que el chofer ve al tomarlo.
 //
 // Cómo se programa: marcando los días
 // ───────────────────────────────────
@@ -46,11 +52,10 @@ const MESES = ["enero","febrero","marzo","abril","mayo","junio",
                "julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DIAS_CORTOS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-const COLOR_TURNO = {
-  completo: { fondo: "#bbf7d0", borde: "#16a34a", texto: "#14532d" },
-  manana:   { fondo: "#bfdbfe", borde: "#2563eb", texto: "#1e3a8a" },
-  tarde:    { fondo: "#ddd6fe", borde: "#7c3aed", texto: "#4c1d95" },
-};
+// Verde: lo que pasó (un chofer lo tomó). Azul: lo reservado. Así se lee de
+// un golpe qué fue real y qué estaba solo programado.
+const COLOR_USO = { fondo: "#bbf7d0", borde: "#16a34a" };
+const COLOR_RESERVA = { fondo: "#dbeafe", borde: "#2563eb" };
 
 const ABREV_TURNO = { manana: "AM", tarde: "PM" };
 
@@ -73,6 +78,7 @@ export default function Calendario() {
   const [ancla, setAncla] = useState(hoy);
   const [equipos, setEquipos] = useState([]);
   const [asignaciones, setAsignaciones] = useState([]);
+  const [usos, setUsos] = useState([]);
   const [prestamos, setPrestamos] = useState([]);
   const [ordenes, setOrdenes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,16 +92,18 @@ export default function Calendario() {
   const soloLectura = isSimulandoActivo();
 
   const cargar = useCallback(async () => {
-    const [eqs, asigs, pres, ots] = await Promise.all([
+    const [eqs, asigs, pres, ots, us] = await Promise.all([
       base44.functions.invoke("getEquiposPorCentro")
         .then(r => (r.data?.equipos || []))
         .catch(() => base44.entities.Equipo.list("-updated_date", 500).catch(() => [])),
       base44.entities.AsignacionChofer.list("-desde", 1000).catch(() => []),
       base44.entities.PrestamoVehiculo.filter({ estado: "vigente" }, "-desde", 500).catch(() => []),
       base44.entities.OrdenTrabajo.list("-created_date", 500).catch(() => []),
+      base44.entities.UsoVehiculo.list("-inicio", 3000).catch(() => []),
     ]);
     setEquipos(eqs.filter(e => esVehiculo(e.tipo)));
     setAsignaciones(asigs);
+    setUsos((us || []).filter(u => u.estado !== "rechazado"));
     setPrestamos(pres);
     setOrdenes(ots);
   }, []);
@@ -119,9 +127,12 @@ export default function Calendario() {
    *  suelto (desde === hasta) que para lo que se marcó arrastrando. */
   const enTramo = useCallback((equipoId, desde, hasta) => ({
     asignaciones: activas.filter(a => a.equipo_id === equipoId && rangosSeTocan(a.desde, a.hasta, desde, hasta)),
+    usos: usos.filter(u => u.equipo_id === equipoId && rangosSeTocan(
+      u.fecha || diaChile(u.inicio), u.estado === "en_uso" ? hoy : (diaChile(u.fin) || u.fecha), desde, hasta))
+      .sort((a, b) => String(a.inicio || "").localeCompare(String(b.inicio || ""))),
     prestamo: prestamos.find(p => p.equipo_id === equipoId && rangosSeTocan(p.desde, p.hasta_previsto, desde, hasta)) || null,
     taller: taller.find(t => t.equipo_id === equipoId && rangosSeTocan(t.desde, t.hasta, desde, hasta)) || null,
-  }), [activas, prestamos, taller]);
+  }), [activas, usos, prestamos, taller, hoy]);
 
   const mover = (n) => setAncla(a => {
     if (vista === "semana") return sumarDias(a, 7 * n);
@@ -136,7 +147,7 @@ export default function Calendario() {
   const abrirTramo = useCallback((equipo, desde, hasta) => {
     if (soloLectura) return;
     const c = enTramo(equipo.id, desde, hasta);
-    if (!c.asignaciones.length && !c.prestamo && !c.taller) {
+    if (!c.asignaciones.length && !c.usos.length && !c.prestamo && !c.taller) {
       setAsignando({ equipo, desde, hasta, prestamo: null });
     } else {
       setDetalle({ equipo, desde, hasta, ...c });
@@ -266,10 +277,10 @@ export default function Calendario() {
       </div>
 
       <div className="px-4 lg:px-10 pt-5 pb-10">
-        <AyudaPantalla clave="calendario">
-          Quién maneja qué vehículo y cuándo. <strong>Arrastra sobre los días</strong> de un vehículo
-          y suelta para programar a un chofer en esas fechas. Un día pintado se toca para
-          cambiarlo o sacarlo. Con <strong>Imprimir</strong> sale la programación de la semana o del mes.
+        <AyudaPantalla clave="calendario-turno">
+          En <strong>verde</strong>, quién usó cada vehículo y en qué horario: lo registran los choferes
+          al tomarlo en «Mi turno». En <strong>azul</strong>, tus reservas: <strong>arrastra sobre los días</strong> de
+          un vehículo y suelta para reservarlo a un chofer. Un día pintado se toca para ver el detalle.
         </AyudaPantalla>
         {choquesDelPeriodo.length > 0 && (
           <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 mb-5">
@@ -277,7 +288,7 @@ export default function Calendario() {
             <div>
               <p className="text-sm text-red-900">
                 <strong>{choquesDelPeriodo.length}</strong>{" "}
-                {choquesDelPeriodo.length === 1 ? "programación cae" : "programaciones caen"} sobre un paso por el taller.
+                {choquesDelPeriodo.length === 1 ? "reserva cae" : "reservas caen"} sobre un paso por el taller.
               </p>
               <ul className="text-xs text-red-700 mt-1 space-y-0.5">
                 {choquesDelPeriodo.slice(0, 5).map((c, i) => (
@@ -295,9 +306,8 @@ export default function Calendario() {
         )}
 
         <div className="flex flex-wrap items-center gap-4 mb-4 text-xs text-slate-500">
-          <Leyenda color="#bbf7d0" borde="#16a34a" icono={UserCheck} texto="Con chofer" />
-          <Leyenda color="#bfdbfe" borde="#2563eb" texto="Solo mañana" />
-          <Leyenda color="#ddd6fe" borde="#7c3aed" texto="Solo tarde" />
+          <Leyenda color={COLOR_USO.fondo} borde={COLOR_USO.borde} icono={UserCheck} texto="Lo usó un chofer" />
+          <Leyenda color={COLOR_RESERVA.fondo} borde={COLOR_RESERVA.borde} icono={CalendarDays} texto="Reservado" />
           <Leyenda color="#fed7aa" borde="#ea580c" icono={ArrowLeftRight} texto="Prestado" />
           <Leyenda color="#fecaca" borde="#dc2626" icono={Wrench} texto="En taller" />
         </div>
@@ -348,13 +358,20 @@ export default function Calendario() {
                     const enTaller = taller.find(t => t.equipo_id === eq.id
                       && rangosSeTocan(t.desde, t.hasta, d, d)) || null;
                     const conChoque = asigs.some(a => idsEnChoque.has(a.id));
-                    return { d, asigs, prestamo, enTaller, conChoque };
+                    const usados = usosDelDia(usos, eq.id, d, hoy);
+                    return { d, asigs, usados, prestamo, enTaller, conChoque };
                   });
 
                   // Qué se lee sobre la franja. La clave es lo que se LEE, no el
                   // id de la asignación: si el mismo chofer tiene esta semana y
                   // la siguiente, es una sola franja con su nombre, no dos.
-                  const rotulo = ({ asigs, prestamo, enTaller, conChoque }) => {
+                  const rotulo = ({ asigs, usados = [], prestamo, enTaller, conChoque }) => {
+                    if (usados.length) {
+                      const texto = usados.map(u => u.chofer_nombre || "?").filter((x, i, a) => a.indexOf(x) === i).join(" / ")
+                        + (prestamo ? ` · en ${prestamo.centro_destino}` : "");
+                      const corto = usados.map(u => nombreCorto(u.chofer_nombre)).filter((x, i, a) => a.indexOf(x) === i).join(" / ");
+                      return { clave: `u:${texto}`, texto, corto, tipo: "uso" };
+                    }
                     if (enTaller) {
                       const n = enTaller.numero_ot || "En taller";
                       const t = enTaller.cita ? `Cita taller ${n}${enTaller.porConfirmar ? " (por confirmar)" : ""}` : n;
@@ -362,10 +379,10 @@ export default function Calendario() {
                     }
                     if (asigs.length) {
                       const turno = (a) => (ABREV_TURNO[a.turno] ? ` (${ABREV_TURNO[a.turno]})` : "");
-                      const texto = asigs.map(a => `${a.chofer_nombre || "?"}${turno(a)}`).join(" / ")
+                      const texto = "Reserva · " + asigs.map(a => `${a.chofer_nombre || "?"}${turno(a)}`).join(" / ")
                         + (prestamo ? ` · en ${prestamo.centro_destino}` : "");
-                      const corto = asigs.map(a => nombreCorto(a.chofer_nombre)).join(" / ");
-                      return { clave: `a:${texto}|${conChoque}`, texto, corto, tipo: "chofer", conChoque };
+                      const corto = "Res. " + asigs.map(a => nombreCorto(a.chofer_nombre)).join(" / ");
+                      return { clave: `a:${texto}|${conChoque}`, texto, corto, tipo: "reserva", conChoque };
                     }
                     if (prestamo) {
                       return { clave: `p:${prestamo.id}`, texto: `Prestado · ${prestamo.centro_destino}`, corto: "Prestado", tipo: "prestamo" };
@@ -378,12 +395,16 @@ export default function Calendario() {
 
                   // Quién lo tiene hoy, bajo el nombre del vehículo: responde
                   // la pregunta sin tener que buscar el día en la grilla.
-                  const deHoy = rotulo({
-                    asigs: asignacionesDelDia(activas, eq.id, hoy),
-                    prestamo: null,
-                    enTaller: taller.find(t => t.equipo_id === eq.id && rangosSeTocan(t.desde, t.hasta, hoy, hoy)) || null,
-                    conChoque: false,
-                  });
+                  const abierto = usos.find(u => u.equipo_id === eq.id && u.estado === "en_uso") || null;
+                  const deHoy = abierto
+                    ? { tipo: "uso", texto: `${abierto.chofer_nombre} desde ${horaChile(abierto.inicio)}` }
+                    : rotulo({
+                      usados: usosDelDia(usos, eq.id, hoy, hoy),
+                      asigs: asignacionesDelDia(activas, eq.id, hoy),
+                      prestamo: null,
+                      enTaller: taller.find(t => t.equipo_id === eq.id && rangosSeTocan(t.desde, t.hasta, hoy, hoy)) || null,
+                      conChoque: false,
+                    });
 
                   return (
                   <tr key={eq.id}>
@@ -393,32 +414,29 @@ export default function Calendario() {
                       </p>
                       <p className="text-[10px] text-slate-400">{eq.patente || eq.numero_inventario || "—"}</p>
                       <p className={`text-[10px] font-semibold mt-0.5 truncate max-w-[10rem] ${
-                        !deHoy ? "text-amber-700" : deHoy.tipo === "taller" ? "text-red-700" : "text-green-700"}`}>
-                        {!deHoy ? "Hoy: sin chofer"
-                          : deHoy.tipo === "taller" ? `Hoy: en taller`
+                        !deHoy ? "text-slate-400" : deHoy.tipo === "taller" ? "text-red-700"
+                          : deHoy.tipo === "uso" ? "text-green-700" : deHoy.tipo === "reserva" ? "text-blue-700" : "text-orange-700"}`}>
+                        {!deHoy ? "Hoy: libre"
+                          : deHoy.tipo === "taller" ? "Hoy: en taller"
+                          : deHoy.tipo === "uso" ? (abierto ? `En uso: ${deHoy.texto}` : `Hoy lo usó ${deHoy.texto}`)
                           : `Hoy: ${deHoy.texto}`}
                       </p>
                     </td>
-                    {info.map(({ d, asigs, prestamo, enTaller, conChoque }, i) => {
+                    {info.map(({ d, asigs, usados, prestamo, enTaller, conChoque }, i) => {
                       const finde = esFinDeSemana(d);
                       const tooltip = [
-                        ...asigs.map(a => `${a.chofer_nombre}${a.turno && a.turno !== "completo" ? ` (${a.turno})` : ""}`),
+                        ...usados.map(u => `${u.chofer_nombre} ${horaChile(u.inicio)}–${u.estado === "en_uso" ? "en uso" : horaChile(u.fin)}`),
+                        ...asigs.map(a => `Reserva: ${a.chofer_nombre}${a.turno && a.turno !== "completo" ? ` (${a.turno})` : ""}`),
                         prestamo ? `Prestado a ${prestamo.centro_destino}` : "",
                         enTaller ? `En taller — ${enTaller.numero_ot}` : "",
                       ].filter(Boolean).join(" · ") || "Libre";
 
                       let fondo = finde ? "#fafafa" : "#fff";
                       let borde = "";
-                      if (enTaller) { fondo = "#fecaca"; borde = "#dc2626"; }
-                      else if (asigs.length) {
-                        // Con dos medios dias el vehiculo esta tomado la jornada
-                        // entera: pintar solo el color del primero diria "solo
-                        // manana" cuando en realidad no queda hueco.
-                        const turnos = new Set(asigs.map(a => a.turno || "completo"));
-                        const clave = turnos.size > 1 ? "completo" : [...turnos][0];
-                        const c = COLOR_TURNO[clave] || COLOR_TURNO.completo;
-                        fondo = c.fondo; borde = c.borde;
-                      } else if (prestamo) { fondo = "#fed7aa"; borde = "#ea580c"; }
+                      if (usados.length) { fondo = COLOR_USO.fondo; borde = COLOR_USO.borde; }
+                      else if (enTaller) { fondo = "#fecaca"; borde = "#dc2626"; }
+                      else if (asigs.length) { fondo = COLOR_RESERVA.fondo; borde = COLOR_RESERVA.borde; }
+                      else if (prestamo) { fondo = "#fed7aa"; borde = "#ea580c"; }
 
                       const seleccionado = marcado(eq.id, d);
                       const franja = franjaQueEmpieza.get(i);
@@ -440,16 +458,21 @@ export default function Calendario() {
                           }}>
                           {vista === "semana" ? (
                             <div className="px-1.5 py-1 text-[10px] leading-tight text-slate-700 overflow-hidden h-full">
-                              {enTaller ? (
+                              {usados.length > 0 && usados.map(u => (
+                                <span key={u.id} className="block truncate font-semibold text-green-900">
+                                  {horaChile(u.inicio)}–{u.estado === "en_uso" ? "" : horaChile(u.fin)} {nombreCorto(u.chofer_nombre)}
+                                </span>
+                              ))}
+                              {usados.length > 0 ? null : enTaller ? (
                                 <span className="font-semibold text-red-800 flex items-center gap-1">
                                   <Wrench className="w-3 h-3 shrink-0" />{enTaller.numero_ot || "Taller"}
                                 </span>
                               ) : asigs.length ? (
                                 asigs.map(a => (
-                                  <span key={a.id} className="block truncate font-semibold">
+                                  <span key={a.id} className="block truncate font-semibold text-blue-900">
                                     {conChoque && <AlertTriangle className="w-2.5 h-2.5 inline text-red-700 mr-0.5" />}
-                                    {a.chofer_nombre || "?"}
-                                    {ABREV_TURNO[a.turno] ? ` (${ABREV_TURNO[a.turno]})` : ""}
+                                    Reserva: {nombreCorto(a.chofer_nombre)}
+                                    {ABREV_TURNO[a.turno] ? ` (${ABREV_TURNO[a.turno]})` : a.hora_salida ? ` ${a.hora_salida}` : ""}
                                   </span>
                                 ))
                               ) : prestamo ? (
@@ -458,6 +481,11 @@ export default function Calendario() {
                                   {prestamo.centro_destino}
                                 </span>
                               ) : null}
+                              {usados.length > 0 && asigs.length > 0 && (
+                                <span className="block truncate text-[9px] text-blue-800">
+                                  Reserva: {asigs.map(a => nombreCorto(a.chofer_nombre)).join(", ")}
+                                </span>
+                              )}
                               {asigs.length > 0 && prestamo && (
                                 <span className="block truncate text-[9px] text-orange-800">
                                   en {prestamo.centro_destino}
@@ -472,7 +500,8 @@ export default function Calendario() {
                             <span
                               className={`absolute left-0 top-0 h-full z-[1] pointer-events-none flex items-center gap-1 px-1.5
                                           text-[10.5px] font-semibold whitespace-nowrap overflow-hidden ${
-                                r.tipo === "taller" ? "text-red-800" : r.tipo === "prestamo" ? "text-orange-800" : "text-green-900"}`}
+                                r.tipo === "taller" ? "text-red-800" : r.tipo === "prestamo" ? "text-orange-800"
+                                  : r.tipo === "reserva" ? "text-blue-900" : "text-green-900"}`}
                               style={{ width: `${franja.largo * 100}%` }}>
                               {r.tipo === "taller" && <Wrench className="w-3 h-3 shrink-0" />}
                               {r.tipo === "prestamo" && <ArrowLeftRight className="w-3 h-3 shrink-0" />}
@@ -495,9 +524,9 @@ export default function Calendario() {
 
         {!soloLectura && equipos.length > 0 && (
           <p className="text-xs text-slate-400 mt-3">
-            Arrastra sobre los días que quieres cubrir y suelta: se programa con
-            fecha de inicio y de término. Un día ocupado abre lo que ya hay, para
-            cambiarlo.
+            Arrastra sobre los días que quieres reservar y suelta: se reserva con
+            fecha de inicio y de término. Un día ocupado abre lo que hay, para
+            verlo o cambiar la reserva.
           </p>
         )}
       </div>
@@ -508,6 +537,7 @@ export default function Calendario() {
           desde={detalle.desde}
           hasta={detalle.hasta}
           asignaciones={detalle.asignaciones}
+          usos={detalle.usos}
           prestamo={detalle.prestamo}
           taller={detalle.taller}
           soloLectura={soloLectura}

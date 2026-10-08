@@ -49,8 +49,8 @@ export default function MiLicencia() {
   // tambien se comporte bien en modo local, donde no hay RLS.
   useEffect(() => {
     if (!user?.id) return;
-    base44.entities.AsignacionChofer
-      .filter({ chofer_id: user.id, estado: "activa" }, "-created_date", 50)
+    base44.entities.UsoVehiculo
+      .filter({ chofer_id: user.id, estado: "en_uso" }, "-inicio", 5)
       .then(setACargo).catch(() => setACargo([]));
   }, [user?.id]);
 
@@ -130,7 +130,7 @@ export default function MiLicencia() {
         {aCargo.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-              {aCargo.length === 1 ? "Vehículo a tu cargo" : "Vehículos a tu cargo"}
+              Vehículo a tu cargo ahora
             </p>
             <div className="space-y-2">
               {aCargo.map(a => (

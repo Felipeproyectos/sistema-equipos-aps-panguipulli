@@ -341,7 +341,7 @@ export default function Movilizacion() {
                       </p>
                       <p className="text-sm text-slate-500 mt-0.5">
                         {s
-                          ? <>Pedido por Salud · {ETIQUETA_TIPO[s.tipo] || s.tipo}{s.centro && <> · {s.centro}</>}</>
+                          ? <>{s.origen === "pauta_chofer" ? "Informado por el chofer" : "Pedido por Salud"} · {ETIQUETA_TIPO[s.tipo] || s.tipo}{s.centro && <> · {s.centro}</>}</>
                           : <>Pedido por Movilización</>}
                       </p>
                     </div>

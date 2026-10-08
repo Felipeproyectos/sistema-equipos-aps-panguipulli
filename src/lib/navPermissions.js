@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Monitor, Bell, ClipboardList, FileText,
-  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart, Route, Truck, IdCard, CalendarDays, NotebookPen
+  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart, Route, Truck, IdCard, CalendarDays, NotebookPen, KeyRound
 } from "lucide-react";
 import { ROLES } from "@/lib/roles";
 
@@ -37,8 +37,13 @@ export const NAV_ITEMS = [
   { label: "Bitácora", page: "BitacoraFlota", path: "/BitacoraFlota", icon: NotebookPen,
     roles: [ROLES.SUPER_ADMIN, ROLES.ENCARGADO_MOVILIZACION] },
 
-  // La primera pantalla del chofer. Sin ninguna, el control de acceso lo
-  // mandaba al Dashboard, que tampoco es suyo, y lo rebotaba en bucle.
+  // La pantalla principal del chofer: toma el vehículo al hacer la pauta de
+  // inicio, lo cambia si hace falta y lo entrega al terminar.
+  { label: "Mi turno", page: "MiTurno", path: "/MiTurno", icon: KeyRound,
+    roles: [ROLES.SUPER_ADMIN, ROLES.CHOFER] },
+
+  // Sin pantalla propia, el control de acceso mandaba al chofer al Dashboard,
+  // que tampoco es suyo, y lo rebotaba en bucle.
   { label: "Mi licencia", page: "MiLicencia", path: "/MiLicencia", icon: IdCard,
     roles: [ROLES.SUPER_ADMIN, ROLES.CHOFER] },
 
@@ -110,9 +115,9 @@ const ROLE_ORDER = {
   // En el orden en que se usa: lo de hoy, programar, la flota, los choferes,
   // la bitácora, y al final la bandeja del taller.
   [ROLES.ENCARGADO_MOVILIZACION]: ["PanelFlota", "Calendario", "Flota", "Choferes", "BitacoraFlota", "Movilizacion"],
-  // "Mi licencia" primero a proposito: es el tramite que lo habilita, y es
-  // ademas a donde se lo manda cuando llega a una pantalla que no es suya.
-  [ROLES.CHOFER]: ["MiLicencia", "MiBitacora"],
+  // "Mi turno" primero: es lo que hace todos los dias, y si la licencia no
+  // esta vigente lo dice ahi mismo y lo lleva a "Mi licencia".
+  [ROLES.CHOFER]: ["MiTurno", "MiBitacora", "MiLicencia"],
 };
 
 export function getNavItemsForRole(role) {

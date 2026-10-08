@@ -59,6 +59,7 @@ import Choferes from './pages/Choferes';
 import Calendario from './pages/Calendario';
 import MiLicencia from './pages/MiLicencia';
 import MiBitacora from './pages/MiBitacora';
+import MiTurno from './pages/MiTurno';
 import BitacoraFlota from './pages/BitacoraFlota';
 import SolicitudesV2 from './pages/SolicitudesV2';
 import Usuarios from './pages/Usuarios';
@@ -79,6 +80,7 @@ export const PAGES = {
     "Calendario": Calendario,
     "MiLicencia": MiLicencia,
     "MiBitacora": MiBitacora,
+    "MiTurno": MiTurno,
     "BitacoraFlota": BitacoraFlota,
     "SolicitudesV2": SolicitudesV2,
     "Usuarios": Usuarios,

@@ -1,0 +1,117 @@
+{
+  "name": "UsoVehiculo",
+  "type": "object",
+  "description": "Cada vez que un chofer toma un vehiculo: desde que hace la pauta de inicio hasta que lo entrega. Es el registro de lo que paso de verdad (quien manejo que y cuando); la programacion de Movilizacion quedo como reservas en AsignacionChofer. Un chofer puede tener varios usos en el dia (cambia de vehiculo), pero uno solo abierto a la vez, y un vehiculo tambien uno solo abierto a la vez.",
+  "properties": {
+    "equipo_id": {
+      "type": "string"
+    },
+    "equipo_label": {
+      "type": "string",
+      "description": "Marca, modelo y patente, para mostrar sin cruzar"
+    },
+    "equipo_tipo": {
+      "type": "string",
+      "description": "ambulancia, camioneta, furgon o camion_3_4"
+    },
+    "chofer_id": {
+      "type": "string",
+      "description": "Id del usuario que tomo el vehiculo"
+    },
+    "chofer_email": {
+      "type": "string"
+    },
+    "chofer_nombre": {
+      "type": "string"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "en_uso",
+        "entregado",
+        "rechazado"
+      ],
+      "default": "en_uso",
+      "description": "'rechazado' deja constancia de un intento que el sistema no permitio (licencia vencida), para que Movilizacion lo vea"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date",
+      "description": "El dia en que lo tomo (hora de Chile)"
+    },
+    "inicio": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "fin": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "km_inicio": {
+      "type": "number"
+    },
+    "km_fin": {
+      "type": "number"
+    },
+    "combustible_inicio": {
+      "type": "string"
+    },
+    "combustible_fin": {
+      "type": "string"
+    },
+    "pauta_inicio": {
+      "type": "object",
+      "description": "La revision rapida de la pauta de inicio: { item: { estado: bien|mal, obs } }"
+    },
+    "pauta_con_falla": {
+      "type": "boolean"
+    },
+    "inspeccion_id": {
+      "type": "string",
+      "description": "En ambulancias, la Pauta Diaria de inicio (InspeccionPendiente) hecha al tomarla"
+    },
+    "solicitud_id": {
+      "type": "string",
+      "description": "La solicitud que se abrio a Movilizacion por una falla de la pauta"
+    },
+    "observaciones_inicio": {
+      "type": "string"
+    },
+    "observaciones_fin": {
+      "type": "string"
+    },
+    "motivo_cambio": {
+      "type": "string",
+      "description": "Por que lo dejo y tomo otro, si fue un cambio en el dia"
+    },
+    "cerrado_por": {
+      "type": "string",
+      "enum": [
+        "chofer",
+        "relevo",
+        "movilizacion"
+      ],
+      "description": "Quien lo cerro: el mismo chofer, otro chofer que lo tomo ('me lo entrego') o Movilizacion"
+    },
+    "relevado_por": {
+      "type": "string",
+      "description": "Nombre del chofer que lo tomo cuando cerrado_por = relevo, o de quien lo libero"
+    },
+    "motivo_rechazo": {
+      "type": "string"
+    },
+    "prestamo_id": {
+      "type": "string"
+    },
+    "centro_costo": {
+      "type": "string",
+      "description": "Lo pone el disparador al nacer, igual que en la bitacora"
+    }
+  },
+  "required": [
+    "equipo_id",
+    "chofer_id"
+  ]
+  // Sin bloque "rls" a proposito, igual que asignacion_chofer: las policies y
+  // la regla de la licencia estan escritas a mano en migracion/25_turno_chofer.sql.
+}

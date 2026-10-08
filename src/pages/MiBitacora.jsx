@@ -18,17 +18,17 @@ import SalidaModal from "@/components/flota/SalidaModal";
 // todos los días. Está pensada para llenarse en el teléfono y en dos momentos:
 // al salir se anota el odómetro, al volver se cierra.
 //
-// Por qué la lista de vehículos sale de las asignaciones y no de `equipo`
-// ──────────────────────────────────────────────────────────────────────
+// Por qué la lista de vehículos sale de sus usos y no de `equipo`
+// ───────────────────────────────────────────────────────────────
 // Un chofer no necesariamente puede leer la ficha del vehículo que maneja: la
 // policy `equipo_read` lo deja ver los de su centro, y la camioneta puede ser
-// de otro. La asignación sí la ve — es suya — y ya trae el rótulo del
-// vehículo guardado. Así la pantalla funciona sin pedir permisos nuevos.
+// de otro. Sus usos (lo que tomó en «Mi turno») sí los ve — son suyos — y ya
+// traen el rótulo del vehículo. Así la pantalla funciona sin permisos nuevos.
 
 export default function MiBitacora() {
   const { user } = useAuth();
   const [registros, setRegistros] = useState([]);
-  const [asignaciones, setAsignaciones] = useState([]);
+  const [usos, setUsos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(null); // null | { registro? }
 
@@ -39,21 +39,21 @@ export default function MiBitacora() {
     setCargando(true);
     const [regs, asigs] = await Promise.all([
       base44.entities.BitacoraFlota.filter({ chofer_id: user.id }, "-fecha", 300).catch(() => []),
-      base44.entities.AsignacionChofer
-        .filter({ chofer_id: user.id, estado: "activa" }, "-desde", 50).catch(() => []),
+      base44.entities.UsoVehiculo
+        .filter({ chofer_id: user.id }, "-inicio", 60).catch(() => []),
     ]);
     setRegistros(Array.isArray(regs) ? regs : []);
-    setAsignaciones(Array.isArray(asigs) ? asigs : []);
+    setUsos(Array.isArray(asigs) ? asigs.filter(u => u.estado !== "rechazado") : []);
     setCargando(false);
   }, [user?.id]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Un vehículo por asignación activa, sin repetir: dos asignaciones del mismo
-  // vehículo (esta semana y la próxima) son un solo vehículo en la lista.
+  // Un vehículo por cada uno que tomó, sin repetir, el que tiene ahora primero.
+  const actual = usos.find(u => u.estado === "en_uso") || null;
   const vehiculos = useMemo(() => {
     const vistos = new Map();
-    for (const a of asignaciones) {
+    for (const a of usos) {
       if (a.equipo_id && !vistos.has(a.equipo_id)) {
         vistos.set(a.equipo_id, { id: a.equipo_id, label: a.equipo_label || "Vehículo" });
       }
@@ -66,7 +66,7 @@ export default function MiBitacora() {
       }
     }
     return [...vistos.values()];
-  }, [asignaciones, registros]);
+  }, [usos, registros]);
 
   const abiertas = registros.filter(r => r.estado === "en_ruta");
   const mes = new Date().toISOString().slice(0, 7);
@@ -109,7 +109,7 @@ export default function MiBitacora() {
             <p className="text-sm text-slate-600">
               Todavía no cargas tu licencia. Hazlo en{" "}
               <a href="/MiLicencia" className="font-semibold text-amber-700 hover:text-amber-900">Mi licencia</a>
-              {" "}— sin eso Movilización no puede asignarte un vehículo.
+              {" "}— sin eso no puedes tomar vehículos.
             </p>
           </div>
         )}
@@ -158,28 +158,23 @@ export default function MiBitacora() {
           </div>
         )}
 
-        {asignaciones.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-5">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-              {asignaciones.length === 1 ? "Vehículo a tu cargo" : "Vehículos a tu cargo"}
-            </p>
-            <div className="space-y-2">
-              {asignaciones.map(a => (
-                <div key={a.id} className="flex items-start gap-2 text-sm text-slate-700">
-                  <Truck className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                  <div>
-                    <p>{a.equipo_label || "Vehículo"}</p>
-                    <p className="text-xs text-slate-400">
-                      Desde el {fecha(a.desde)}
-                      {a.hasta ? ` hasta el ${fecha(a.hasta)}` : " (sin fecha de término)"}
-                      {a.destino ? ` · ${a.destino}` : ""}
-                    </p>
-                  </div>
-                </div>
-              ))}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Vehículo a tu cargo</p>
+          {actual ? (
+            <div className="flex items-start gap-2 text-sm text-slate-700">
+              <Truck className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">{actual.equipo_label || "Vehículo"}</p>
+                <p className="text-xs text-slate-400">Lo tomaste el {fecha(actual.fecha)}{actual.km_inicio != null ? ` con ${Number(actual.km_inicio).toLocaleString("es-CL")} km` : ""}</p>
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="text-sm text-slate-500">Ninguno ahora.</p>
+          )}
+          <a href="/MiTurno" className="inline-block mt-3 text-xs font-semibold text-amber-700 hover:text-amber-900">
+            {actual ? "Cambiarlo o entregarlo en Mi turno →" : "Tomar un vehículo en Mi turno →"}
+          </a>
+        </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100">

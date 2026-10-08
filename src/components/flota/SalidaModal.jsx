@@ -23,6 +23,7 @@ export default function SalidaModal({
   choferes = [],     // si viene con gente, el que registra elige por quién
   chofer,            // { id, nombre } cuando el que registra es el propio chofer
   registros = [],    // lo ya registrado, para proponer el odómetro
+  usoId,             // el uso del vehículo (Mi turno) en que se hace la salida
   onClose, onGuardado,
 }) {
   const hoy = new Date().toISOString().split("T")[0];
@@ -88,6 +89,7 @@ export default function SalidaModal({
       combustible_monto: aNumero(monto),
       observaciones: observaciones.trim() || null,
       estado: cerrar ? "cerrada" : (registro?.estado || "en_ruta"),
+      ...(usoId && !registro ? { uso_id: usoId } : {}),
     };
     try {
       if (registro) await base44.entities.BitacoraFlota.update(registro.id, datos);

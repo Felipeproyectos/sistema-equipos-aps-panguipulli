@@ -181,9 +181,11 @@ function SeccionAccordion({ seccion, momento, checklist, onChange, expanded, onT
 }
 
 // momento: "inicio" | "termino"
-export default function PautaDiariaAmbulancia({ equipoFijo, equipos = [], onSuccess, momento = "inicio" }) {
+// conductorFijo: el nombre del chofer que tiene la sesión abierta («Mi turno»),
+// que no se escribe a mano. textoBoton: lo que dice el botón de enviar.
+export default function PautaDiariaAmbulancia({ equipoFijo, equipos = [], onSuccess, momento = "inicio", conductorFijo, textoBoton }) {
   const [equipoId, setEquipoId] = useState(equipoFijo?.id || "");
-  const [conductor, setConductor] = useState("");
+  const [conductor, setConductor] = useState(conductorFijo || "");
   const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
   const [observacionesGenerales, setObservacionesGenerales] = useState("");
   const [problemasDetectados, setProblemasDetectados] = useState("");
@@ -248,7 +250,7 @@ export default function PautaDiariaAmbulancia({ equipoFijo, equipos = [], onSucc
         });
       });
 
-      await invokePublic("guardarInspeccionPendiente", {
+      const guardada = await invokePublic("guardarInspeccionPendiente", {
         tipo_formulario: "inspeccion_diaria",
         equipo_id: eq?.id || equipoId,
         equipo_label: equipoLabel,
@@ -267,7 +269,7 @@ export default function PautaDiariaAmbulancia({ equipoFijo, equipos = [], onSucc
       });
 
       setSaving(false);
-      onSuccess && onSuccess({ hasFallas, conductor });
+      onSuccess && onSuccess({ hasFallas, conductor, id: guardada?.id || null });
     } catch (err) {
       setSaving(false);
       setError("Error al guardar. Intenta nuevamente.");
@@ -315,6 +317,7 @@ export default function PautaDiariaAmbulancia({ equipoFijo, equipos = [], onSucc
               type="text"
               placeholder="Ej: Juan Pérez"
               value={conductor}
+              readOnly={!!conductorFijo}
               onChange={e => setConductor(e.target.value)}
               className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-300"
             />
@@ -384,7 +387,7 @@ export default function PautaDiariaAmbulancia({ equipoFijo, equipos = [], onSucc
       >
         {saving
           ? <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</>
-          : <><Send className="w-4 h-4" /> Enviar Inspección — {momentoLabel}</>
+          : <><Send className="w-4 h-4" /> {textoBoton || `Enviar Inspección — ${momentoLabel}`}</>
         }
       </button>
     </div>
