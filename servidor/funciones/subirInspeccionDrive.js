@@ -1,4 +1,5 @@
 import { createClientFromRequest } from '#compat';
+import { ROTULO_PARCHES } from '../compartido/fallasPauta.js';
 
 // ── Helpers de Google Drive ──────────────────────────────────────────────────
 
@@ -206,11 +207,14 @@ function tablaChecklist(titulo, items, mapEstado) {
     <thead><tr><th style="width:50%">Ítem</th><th style="width:20%">Estado</th><th>Observación</th></tr></thead>
     <tbody>`;
   for (const [item, v] of Object.entries(items)) {
-    const { badge, label } = mapEstado(v?.estado);
+    // El multiparámetros guarda el estado como texto suelto ("ok"), no { estado }.
+    const estado = typeof v === 'string' ? v : v?.estado;
+    const obs = typeof v === 'string' ? '' : v?.obs;
+    const { badge, label } = mapEstado(estado);
     html += `<tr>
-      <td>${item}</td>
+      <td>${ROTULO_PARCHES[item] || item}</td>
       <td><span class="badge ${badge}">${label}</span></td>
-      <td>${v?.obs || '—'}</td>
+      <td>${obs || '—'}</td>
     </tr>`;
   }
   html += `</tbody></table>`;
@@ -218,9 +222,9 @@ function tablaChecklist(titulo, items, mapEstado) {
 }
 
 function mapEstadoBueno(estado) {
-  if (estado === 'bueno')  return { badge: 'b-ok',    label: 'OK' };
+  if (estado === 'bueno' || estado === 'ok')  return { badge: 'b-ok',    label: 'OK' };
   if (estado === 'malo')   return { badge: 'b-falla', label: 'FALLA' };
-  if (estado === 'n/a')    return { badge: 'b-na',    label: 'N/A' };
+  if (estado === 'n/a' || estado === 'na')    return { badge: 'b-na',    label: 'N/A' };
   return { badge: 'b-na', label: estado || '—' };
 }
 
@@ -322,6 +326,9 @@ function htmlInspeccion(insp, revisor) {
   // DEA / Monitor / Multiparametros: checklist genérico si viene en datos.checklist
   if (datos.checklist && Object.keys(datos.checklist).length > 0) {
     html += tablaChecklist('Checklist de Revisión', datos.checklist, mapEstadoBueno);
+  }
+  if (datos.parches && Object.keys(datos.parches).length > 0) {
+    html += tablaChecklist('Electrodos / Parches', datos.parches, mapEstadoBueno);
   }
 
   // ── Observaciones generales ──

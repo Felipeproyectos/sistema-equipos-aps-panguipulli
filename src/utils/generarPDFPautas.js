@@ -6,6 +6,8 @@
 // Mismo mecanismo que generarPDFHistorialInspecciones.js: se arma el HTML y se
 // abre en una pestaña con el diálogo de impresión, donde el navegador ofrece
 // "Guardar como PDF". Sin librería de PDF, y sale con acentos y tildes bien.
+import { ROTULO_PARCHES, tieneChecklistPlano } from "../lib/fallasPauta.js";
+import { TIPOS_VEHICULO } from "../lib/turnoFlota.js";
 
 const TIPO_LABEL = {
   inspeccion_semanal: "Pauta Semanal",
@@ -127,8 +129,15 @@ function hoja(insp, indice, total) {
   const titulo = TIPO_LABEL[insp.tipo_formulario] || insp.tipo_formulario || "Pauta";
   const est = ESTADO_LABEL[insp.estado] || ESTADO_LABEL.pendiente;
 
-  const bloques = (BLOQUES[tipoKey] || [])
-    .map(([campo, rotulo]) => bloqueHtml(rotulo, datos[campo])).join("");
+  // Monitores, desfibriladores y DEA guardan un checklist plano (y el DEA,
+  // sus parches); las ambulancias, sus bloques. Ver src/lib/fallasPauta.js.
+  const parches = datos.parches && typeof datos.parches === "object"
+    ? Object.fromEntries(Object.entries(datos.parches).map(([k, v]) => [ROTULO_PARCHES[k] || k, v]))
+    : null;
+  const bloques = tieneChecklistPlano(datos)
+    ? bloqueHtml("Checklist semanal", datos.checklist) + bloqueHtml("Electrodos / Parches", parches)
+    : (BLOQUES[tipoKey] || []).map(([campo, rotulo]) => bloqueHtml(rotulo, datos[campo])).join("");
+  const esVehiculo = TIPOS_VEHICULO.includes(equipo.tipo) || !!insp.km_inicial || tipoKey !== "inspeccion_semanal";
 
   // La Pauta de Cabina se llena en papel: aquí van sus dos respuestas y qué
   // archivos se subieron. El detalle de insumos está en esos archivos.
@@ -187,12 +196,12 @@ function hoja(insp, indice, total) {
       <td style="padding:2px 0;color:#94a3b8">Inventario</td>
       <td style="padding:2px 0;font-weight:600">${esc(equipo.numero_inventario || "—")}</td>
     </tr>
-    <tr>
+    ${esVehiculo ? `<tr>
       <td style="padding:2px 0;color:#94a3b8">Kilometraje</td>
       <td style="padding:2px 0;font-weight:600">${insp.km_inicial ? `${Number(insp.km_inicial).toLocaleString("es-CL")} km` : "—"}</td>
       <td style="padding:2px 0;color:#94a3b8">Combustible</td>
       <td style="padding:2px 0;font-weight:600">${esc(insp.combustible || "—")}</td>
-    </tr>
+    </tr>` : ""}
     ${revision}
   </table>
 
@@ -282,5 +291,18 @@ export function _selfCheck() {
 
   console.assert(hoja({ ...semanal, equipo_label: '<img src=x onerror=alert(1)>' }, 1, 1).includes("&lt;img"),
     "el texto del formulario tiene que ir escapado");
+
+  const monitor = { ...semanal, id: "4", datos_json: JSON.stringify({
+    equipo: { tipo: "monitor_desfibrilador", centro_principal: "CESFAM Panguipulli" },
+    checklist: { "Pantalla operativa": { estado: "ok" }, "Batería cargada": { estado: "malo", obs: "40%" } },
+  }) };
+  const h4 = hoja(monitor, 1, 1);
+  console.assert(h4.includes("Checklist semanal") && h4.includes("Batería cargada") && h4.includes("1 falla(s)"),
+    "monitor: el checklist plano tiene que salir en la hoja");
+  console.assert(!h4.includes("Kilometraje"), "monitor: sin kilometraje ni combustible");
+  const dea = { ...semanal, id: "5", datos_json: JSON.stringify({
+    equipo: { tipo: "dea" }, checklist: { Autotest: "ok" }, parches: { parches_adulto: { estado: "malo" } },
+  }) };
+  console.assert(hoja(dea, 1, 1).includes("Parches Adulto"), "DEA: parches con su rótulo");
   return true;
 }

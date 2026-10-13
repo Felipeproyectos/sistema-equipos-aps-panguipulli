@@ -41,6 +41,9 @@ import {
 import { generarPDFPautas } from "@/utils/generarPDFPautas";
 import { TIPO_FORMULARIO as TIPO_CABINA, leerPautaCabina, tieneAvisos } from "@/lib/pautaCabina";
 import DetallePautaCabina from "@/components/bitacora/DetallePautaCabina";
+import ChecklistPlano from "@/components/equipos2/ChecklistPlano";
+import { pautaConFallas, tieneChecklistPlano } from "@/lib/fallasPauta";
+import { TIPOS_VEHICULO } from "@/lib/turnoFlota";
 
 const TIPO_LABEL = {
   inspeccion_semanal: "Pauta Semanal",
@@ -214,12 +217,16 @@ function InspeccionCard({ insp, onActualizar }) {
   const estado = ESTADO_CFG[insp.estado] || ESTADO_CFG.pendiente;
   const esCabina = insp.tipo_formulario === TIPO_CABINA;
   const cabina = esCabina ? leerPautaCabina(insp) : null;
-  const hasFallas = !esCabina && (insp.observaciones?.includes("Fallas:") || insp.observaciones?.includes("Daños"));
 
   // Parsear datos_json
   const datos = (() => {
     try { return insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { return {}; }
   })();
+  const hasFallas = !esCabina && pautaConFallas(insp, datos);
+  // Los monitores, desfibriladores y DEA guardan un checklist plano; las
+  // ambulancias, sus bloques (luces, motor…). Ver src/lib/fallasPauta.js.
+  const conChecklist = tieneChecklistPlano(datos);
+  const conBloquesAmbulancia = ["luces", "motor", "accesorios", "documentos", "danos"].some(k => datos[k]);
 
   // Un solo lugar donde el centro queda resuelto: la cabecera, el detalle
   // expandido y el PDF muestran todos lo mismo.
@@ -229,6 +236,15 @@ function InspeccionCard({ insp, onActualizar }) {
     subsede: insp.subsede_resuelta || datos.equipo?.subsede || "",
   };
   const horaRegistro = datos.hora_registro;
+  // Quien llena la pauta de un equipo médico no es un conductor.
+  const esVehiculo = TIPOS_VEHICULO.includes(equipo.tipo)
+    || insp.tipo_formulario === "turno_chofer" || insp.tipo_formulario === "inspeccion_diaria";
+  const IconoEquipo = esVehiculo ? Car : Stethoscope;
+  const rotuloNota = esCabina ? "Nota para quien la subió (opcional)"
+    : esVehiculo ? "Nota al conductor (opcional)" : "Nota para el responsable (opcional)";
+  const ejemploNota = esCabina ? "Ej: la foto no se lee, súbela de nuevo..."
+    : esVehiculo ? "Ej: KM no coincide con el anterior registro..."
+    : "Ej: falta indicar la fecha de vencimiento de los electrodos...";
 
   const handleAccion = async (accion) => {
     setProcessing(true);
@@ -250,7 +266,7 @@ function InspeccionCard({ insp, onActualizar }) {
       } else if (accion === "aprobar") {
         toast({ title: "Inspección aprobada", description: "Sin fallas — no se requiere orden de trabajo." });
       } else {
-        toast({ title: "Inspección rechazada", description: nota || "Se notificó al conductor." });
+        toast({ title: "Inspección rechazada", description: nota || "Quedó registrada como rechazada." });
       }
     } catch (err) {
       toast({ title: "Error", description: err.message || "No se pudo procesar", variant: "destructive" });
@@ -303,7 +319,7 @@ function InspeccionCard({ insp, onActualizar }) {
 
             {/* Tipo y nombre del equipo */}
             <div className="flex items-center gap-1.5 mb-1">
-              <Car className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+              <IconoEquipo className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
               <span className="text-sm font-semibold text-blue-700">
                 {equipo.tipo ? TIPO_EQUIPO_LABEL[equipo.tipo] || equipo.tipo : "Equipo"}
                 {" · "}
@@ -393,7 +409,7 @@ function InspeccionCard({ insp, onActualizar }) {
           {equipo.centro_principal && (
             <div className="p-3 rounded-xl text-xs space-y-1" style={{ background: "#EFF6FF", border: "1px solid #BFDBFE" }}>
               <p className="font-bold text-blue-700 mb-1.5 flex items-center gap-1.5">
-                <Car className="w-3.5 h-3.5" /> Información del Equipo
+                <IconoEquipo className="w-3.5 h-3.5" /> Información del Equipo
               </p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-700">
                 <span><span className="font-semibold">Tipo:</span> {TIPO_EQUIPO_LABEL[equipo.tipo] || equipo.tipo || "-"}</span>
@@ -409,11 +425,23 @@ function InspeccionCard({ insp, onActualizar }) {
           {insp.tipo_formulario === "inspeccion_semanal" && (
             <div className="space-y-2">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Revisión de Ítems</p>
-              <ChecklistDetail titulo="Luces" icon={Zap} color="#F59E0B" data={datos.luces} />
-              <ChecklistDetail titulo="Motor" icon={Wrench} color="#2563EB" data={datos.motor} />
-              <ChecklistDetail titulo="Accesorios" icon={Package} color="#7C3AED" data={datos.accesorios} />
-              <ChecklistDetail titulo="Documentos" icon={FileText} color="#059669" data={datos.documentos} />
-              <DanosDetail danos={datos.danos} />
+              {conChecklist ? (
+                <ChecklistPlano data={datos.checklist} parches={datos.parches} descripcion={datos.descripcion} />
+              ) : conBloquesAmbulancia ? (
+                <>
+                  <ChecklistDetail titulo="Luces" icon={Zap} color="#F59E0B" data={datos.luces} />
+                  <ChecklistDetail titulo="Motor" icon={Wrench} color="#2563EB" data={datos.motor} />
+                  <ChecklistDetail titulo="Accesorios" icon={Package} color="#7C3AED" data={datos.accesorios} />
+                  <ChecklistDetail titulo="Documentos" icon={FileText} color="#059669" data={datos.documentos} />
+                  <DanosDetail danos={datos.danos} />
+                </>
+              ) : (
+                // Pautas sin ítems guardados (las que se llenan solo con un
+                // resultado general, o las antiguas): se muestra lo que trae.
+                <div className="p-3 rounded-xl text-xs text-slate-700 bg-white" style={{ border: "1px solid #E2E8F0" }}>
+                  {insp.observaciones?.trim() || "Esta pauta no trae el detalle de los ítems revisados."}
+                </div>
+              )}
             </div>
           )}
 
@@ -474,10 +502,8 @@ function InspeccionCard({ insp, onActualizar }) {
           {insp.estado === "pendiente" && (
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">
-                  {esCabina ? "Nota para quien la subió (opcional)" : "Nota al conductor (opcional)"}
-                </label>
-                <textarea rows={2} placeholder={esCabina ? "Ej: la foto no se lee, súbela de nuevo..." : "Ej: KM no coincide con el anterior registro..."}
+                <label className="text-xs font-semibold text-slate-600 block mb-1">{rotuloNota}</label>
+                <textarea rows={2} placeholder={ejemploNota}
                   value={nota} onChange={e => setNota(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
               </div>

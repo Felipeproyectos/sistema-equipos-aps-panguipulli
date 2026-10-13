@@ -1,4 +1,5 @@
 import { createClientFromRequest } from '#compat';
+import { fallasDeInspeccion, pautaConFallas } from '../compartido/fallasPauta.js';
 
 export default async function (req) {
   try {
@@ -36,7 +37,8 @@ export default async function (req) {
     }
 
     if (accion === 'aprobar') {
-      const datos = inspeccion.datos_json ? JSON.parse(inspeccion.datos_json) : {};
+      let datos = {};
+      try { datos = inspeccion.datos_json ? JSON.parse(inspeccion.datos_json) : {}; } catch { datos = {}; }
 
       // Mapear tipo_formulario a tipo de actividad válido en el enum
       const tipoActividadMap = {
@@ -81,10 +83,10 @@ export default async function (req) {
         inspeccion_anual: 'inspeccion_rutinaria',
       };
 
-      // Calcular si hay fallas en el checklist
-      const hasFallas = !esCabina && (inspeccion.observaciones?.includes('Incorrectos:') ||
-                        inspeccion.observaciones?.includes('Fallas:') ||
-                        inspeccion.observaciones?.includes('Daños'));
+      // Fallas: los ítems malos de cualquier formulario (también el checklist
+      // de los monitores y los parches del DEA) o, en las pautas antiguas sin
+      // ítems, lo que diga el texto. Ver src/lib/fallasPauta.js.
+      const hasFallas = !esCabina && pautaConFallas(inspeccion, datos);
 
       await base44.asServiceRole.entities.HistorialMantenimiento.create({
         equipo_id: inspeccion.equipo_id,
@@ -99,24 +101,8 @@ export default async function (req) {
 
       // Si la inspección aprobada tiene fallas, crear Orden de Trabajo automáticamente
       if (hasFallas) {
-        // Recolectar detalle de fallas del checklist
-        const fallasDetalle = [];
-        const recolectar = (obj) => {
-          if (!obj) return;
-          Object.entries(obj).forEach(([item, v]) => {
-            if (v && (v.estado === 'malo' || v.estado === 'incorrecto')) {
-              fallasDetalle.push('- ' + item + (v.obs ? ': ' + v.obs : ''));
-            }
-          });
-        };
-        ['luces', 'motor', 'accesorios', 'documentos', 'exterior', 'interior', 'equipo_medico', 'accesorios_diaria', 'saneamiento', 'documentacion'].forEach(k => recolectar(datos[k]));
-        if (datos.danos) {
-          Object.entries(datos.danos).forEach(([zone, v]) => {
-            if (v && v.marcado) {
-              fallasDetalle.push('- Daño visual: ' + zone.replace(/_/g, ' ') + (v.descripcion ? ': ' + v.descripcion : ''));
-            }
-          });
-        }
+        // El detalle de las fallas, ítem por ítem
+        const fallasDetalle = fallasDeInspeccion(datos).map(f => '- ' + f.item + (f.obs ? ': ' + f.obs : ''));
 
         const ahora = new Date();
         const ymd = ahora.toISOString().slice(0, 10).replace(/-/g, '');
