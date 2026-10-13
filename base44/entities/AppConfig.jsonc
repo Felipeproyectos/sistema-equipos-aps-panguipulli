@@ -13,6 +13,15 @@
     "logo_url": {
       "type": "string",
       "description": "URL de la imagen del logo"
+    },
+    "modo_turno": {
+      "type": "string",
+      "enum": [
+        "pautas",
+        "mi_turno"
+      ],
+      "default": "pautas",
+      "description": "Como registran el turno los choferes: 'pautas' = formulario Turno Chofer de la pagina publica (como siempre); 'mi_turno' = cada chofer toma el vehiculo con su cuenta. Se cambia en Configuracion (26_modo_turno.sql)"
     }
   },
   "required": [],

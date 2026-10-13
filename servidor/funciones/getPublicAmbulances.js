@@ -1,4 +1,5 @@
 import { createClientFromRequest } from '#compat';
+import { miTurnoActivo, MODO_MI_TURNO, MODO_PAUTAS } from '../compartido/turnoFlota.js';
 
 export default async function (req) {
   if (req.method === 'OPTIONS') {
@@ -8,7 +9,10 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req, { allowUnauthenticated: true });
 
-    const equipos = await base44.asServiceRole.entities.Equipo.list();
+    const [equipos, configs] = await Promise.all([
+      base44.asServiceRole.entities.Equipo.list(),
+      base44.asServiceRole.entities.AppConfig.list().catch(() => []),
+    ]);
 
     const result = equipos.map(e => ({
       id: e.id,
@@ -23,7 +27,11 @@ export default async function (req) {
       estado: e.estado || "operativo"
     }));
 
-    return Response.json({ equipos: result }, { headers: { 'Access-Control-Allow-Origin': '*' } });
+    // Con «Mi turno» apagado (26_modo_turno.sql) la tarjeta Turno Chofer de
+    // la página pública muestra el formulario de siempre.
+    const modo_turno = miTurnoActivo(configs[0]) ? MODO_MI_TURNO : MODO_PAUTAS;
+
+    return Response.json({ equipos: result, modo_turno }, { headers: { 'Access-Control-Allow-Origin': '*' } });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
   }

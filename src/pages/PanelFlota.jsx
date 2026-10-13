@@ -11,7 +11,7 @@ import { createPageUrl } from "@/utils";
 import { esVehiculo } from "@/lib/centros";
 import { estadoLicencia } from "@/pages/Choferes";
 import { resumenDelDia, pasosDeLaPuestaEnMarcha } from "@/lib/panelFlota";
-import { resumenAhora, horaChile, rotuloVehiculo as rotuloDeFlota } from "@/lib/turnoFlota";
+import { resumenAhora, horaChile, rotuloVehiculo as rotuloDeFlota, miTurnoActivo } from "@/lib/turnoFlota";
 
 // La primera pantalla del Encargado de Movilización.
 //
@@ -30,6 +30,8 @@ import { resumenAhora, horaChile, rotuloVehiculo as rotuloDeFlota } from "@/lib/
 // Desde migracion/25_turno_chofer.sql arriba de todo va «Ahora»: quién tiene
 // cada vehículo en este momento. Los choferes lo toman en «Mi turno»; acá
 // Movilización solo mira, y puede liberar uno que quedó sin entregar.
+// Mientras «Mi turno» está apagado en Configuración (26_modo_turno.sql) el
+// turno sigue llegando por la página pública de pautas, y el panel lo dice.
 
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const MESES = ["enero","febrero","marzo","abril","mayo","junio",
@@ -59,7 +61,7 @@ export default function PanelFlota() {
   const containerRef = useRef(null);
 
   const cargar = useCallback(async () => {
-    const [equipos, gente, asignaciones, prestamos, bitacora, solicitudes, ordenes, usos] = await Promise.all([
+    const [equipos, gente, asignaciones, prestamos, bitacora, solicitudes, ordenes, usos, configs] = await Promise.all([
       base44.functions.invoke("getEquiposPorCentro")
         .then(r => r.data?.equipos || [])
         .catch(() => base44.entities.Equipo.list("-updated_date", 500).catch(() => [])),
@@ -72,12 +74,14 @@ export default function PanelFlota() {
       base44.entities.Solicitud.list("-created_date", 500).catch(() => []),
       base44.entities.OrdenTrabajo.list("-created_date", 500).catch(() => []),
       base44.entities.UsoVehiculo.list("-inicio", 1500).catch(() => []),
+      base44.entities.AppConfig.list().catch(() => []),
     ]);
     const vehiculos = equipos.filter(e => esVehiculo(e.tipo));
     setAhora({
       ...resumenAhora({ vehiculos, usos, ordenes, reservas: asignaciones, prestamos }),
       choferes: gente.filter(u => u.role === "chofer"),
       hayUsos: usos.some(u => u.estado !== "rechazado"),
+      miTurno: miTurnoActivo(configs[0]),
     });
     setDatos(resumenDelDia({
       vehiculos: equipos.filter(e => esVehiculo(e.tipo)),
@@ -184,7 +188,7 @@ export default function PanelFlota() {
   ].filter(Boolean);
 
   const pasos = pasosDeLaPuestaEnMarcha(r);
-  const hecho = (clave) => (clave === "calendario" ? a.hayUsos : pasos.find(p => p.clave === clave)?.hecho);
+  const hecho = (clave) => (clave === "calendario" && a.miTurno ? a.hayUsos : pasos.find(p => p.clave === clave)?.hecho);
 
   const PASOS = [
     {
@@ -201,13 +205,20 @@ export default function PanelFlota() {
         ? `${r.habilitados.length} de ${r.choferes.length} con licencia vigente`
         : "Aún no hay choferes",
     },
-    {
+    a.miTurno ? {
       clave: "calendario", icono: KeyRound, pagina: "Calendario", boton: "Calendario",
       titulo: "Los choferes toman los vehículos",
       texto: "Cada chofer entra a «Mi turno» en su teléfono, elige el vehículo y hace la pauta de inicio; al terminar lo entrega. Tú lo ves en el Calendario y puedes reservar un vehículo para una salida.",
       estado: a.hayUsos
         ? `${plural(a.usosHoy.length, "uso", "usos")} hoy · ${plural(a.enUso.length, "vehículo", "vehículos")} en uso ahora`
         : "Todavía ningún chofer ha tomado un vehículo",
+    } : {
+      clave: "calendario", icono: CalendarClock, pagina: "Calendario", boton: "Calendario",
+      titulo: "Reserva los vehículos",
+      texto: "Apartas el vehículo y el chofer para cada salida en el Calendario. El chofer registra su turno en la página de pautas («Turno Chofer»), como siempre.",
+      estado: r.conChofer.length
+        ? `${plural(r.conChofer.length, "vehículo reservado", "vehículos reservados")} hoy`
+        : "Hoy no hay vehículos reservados",
     },
     {
       clave: "bitacora", icono: NotebookPen, pagina: "BitacoraFlota", boton: "Bitácora",
@@ -247,7 +258,14 @@ export default function PanelFlota() {
         {/* ── 0. Ahora ──────────────────────────────────────────────────── */}
         <section>
           <h2 className="text-lg font-bold text-slate-800 mb-1">Ahora</h2>
-          <p className="text-sm text-slate-500 mb-4">Quién tiene cada vehículo en este momento. Lo registran los choferes al tomarlo en «Mi turno».</p>
+          {a.miTurno ? (
+            <p className="text-sm text-slate-500 mb-4">Quién tiene cada vehículo en este momento. Lo registran los choferes al tomarlo en «Mi turno».</p>
+          ) : (
+            <p className="text-sm text-slate-500 mb-4">
+              «Mi turno» todavía no está encendido: los choferes registran el turno en la página de pautas («Turno Chofer») y
+              llega a Revisión Bitácora. Acá ves lo reservado, lo prestado y lo que está en el taller.
+            </p>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mb-4">
             {[
               { n: a.enUso.length, t: "En uso", c: "#B45309" },
