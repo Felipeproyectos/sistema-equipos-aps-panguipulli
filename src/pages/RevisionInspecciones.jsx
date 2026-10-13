@@ -257,14 +257,19 @@ function InspeccionCard({ insp, onActualizar }) {
       const data = res.data || res;
       if (accion === "aprobar" && esCabina) {
         toast({ title: "Pauta de Cabina aprobada", description: "Quedó en el historial de la ambulancia." });
-      } else if (accion === "aprobar" && data?.ot_creada) {
+      } else if (accion === "aprobar" && data?.solicitud_creada) {
+        // Las fallas no van directo al taller: las decide Movilización (vehículos)
+        // o Salud (equipos). Ver src/lib/fallasPauta.js.
+        const aQuien = data.solicitud_creada.area === "movilizacion"
+          ? "Movilización (Solicitudes al Taller)" : "Salud (Solicitudes)";
         toast({
-          title: "Orden de Trabajo creada automáticamente",
-          description: `${data.ot_creada.numero_ot} — ${data.ot_creada.fallas} falla(s) detectada(s). Prioridad: ${data.ot_creada.prioridad}.`,
-          variant: "default",
+          title: "Pauta aprobada con fallas",
+          description: data.solicitud_creada.nueva
+            ? `Se envió una solicitud a ${aQuien}, que decide si va al taller.`
+            : `Se sumó a la solicitud que ${aQuien} ya tenía abierta para este equipo.`,
         });
       } else if (accion === "aprobar") {
-        toast({ title: "Inspección aprobada", description: "Sin fallas — no se requiere orden de trabajo." });
+        toast({ title: "Inspección aprobada", description: "Sin fallas." });
       } else {
         toast({ title: "Inspección rechazada", description: nota || "Quedó registrada como rechazada." });
       }
@@ -523,6 +528,12 @@ function InspeccionCard({ insp, onActualizar }) {
                   <CheckCircle className="w-4 h-4" /> Aprobar y Sincronizar
                 </button>
               </div>
+              {hasFallas && (
+                <p className="text-xs text-slate-500 flex items-start gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
+                  Al aprobarla, las fallas le llegan a {esVehiculo ? "Movilización (Solicitudes al Taller)" : "Salud (Solicitudes)"}, que decide si va al taller.
+                </p>
+              )}
             </div>
           )}
         </div>

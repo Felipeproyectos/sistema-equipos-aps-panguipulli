@@ -17,6 +17,56 @@
 //
 // Lo usan Revisión Bitácora y el servidor (aprobarInspeccion.js, vía la copia
 // de servidor/compartido/). `node src/lib/fallasPauta.js` corre el autotest.
+//
+// Qué pasa con las fallas al aprobar
+// ──────────────────────────────────
+// Antes se abría una OT directo en la fila del taller. Ahora se abre una
+// SOLICITUD, y la decide quien corresponde: Movilización en «Solicitudes al
+// Taller» si es un vehículo (la deriva al taller o la cierra), Salud en
+// «Solicitudes» si es un equipo. Si el equipo ya tiene una solicitud de pauta
+// sin revisar, la falla nueva se suma a esa en vez de abrir otra.
+
+export const ORIGEN_PAUTA = "pauta_inspeccion";
+
+const TIPOS_VEHICULO = ["ambulancia", "camioneta", "furgon", "camion_3_4"];
+
+const NOMBRE_PAUTA = {
+  inspeccion_diaria: "Pauta Diaria",
+  inspeccion_semanal: "Pauta Semanal",
+  inspeccion_anual: "Pauta Anual",
+  turno_chofer: "Turno Chofer",
+};
+
+/** Quién decide qué se hace con las fallas de este equipo. */
+export const areaQueDecide = (equipo) => (TIPOS_VEHICULO.includes(equipo?.tipo) ? "movilizacion" : "salud");
+
+/** De dónde vino una solicitud, en palabras de quien la recibe. */
+export function rotuloOrigenSolicitud(s) {
+  if (s?.origen === "pauta_chofer") return "Informado por el chofer";
+  if (s?.origen === ORIGEN_PAUTA) return "Falla en una pauta";
+  return "Pedido por Salud";
+}
+
+const fechaCorta = (f) => {
+  const [y, m, d] = String(f || "").slice(0, 10).split("-");
+  return d ? `${d}/${m}/${y}` : "";
+};
+
+/** El texto de la solicitud que abre una pauta aprobada con fallas. */
+export function textoSolicitudDePauta({ insp, datos, revisor }) {
+  const fallas = fallasDeInspeccion(datos);
+  const nombre = NOMBRE_PAUTA[insp?.tipo_formulario] || "pauta";
+  const momento = datos?.momento === "inicio" ? " (inicio de turno)" : datos?.momento === "termino" ? " (término de turno)" : "";
+  const extra = [datos?.descripcion, datos?.problemasDetectados].map(t => String(t || "").trim()).filter(Boolean);
+  return [
+    `${nombre}${momento} del ${fechaCorta(insp?.fecha)}${insp?.conductor ? `, hecha por ${insp.conductor}` : ""}:`,
+    ...(fallas.length
+      ? fallas.map(f => `- ${f.item}${f.obs ? `: ${f.obs}` : ""}`)
+      : [String(insp?.observaciones || "").trim() || "- (la pauta no detalla los ítems)"]),
+    ...extra.map(t => `Observaciones: ${t}`),
+    revisor ? `Aprobada por ${revisor}.` : "",
+  ].filter(Boolean).join("\n");
+}
 
 export const BLOQUES_PAUTA = [
   "luces", "motor", "accesorios", "documentos",
@@ -95,6 +145,15 @@ export function _selfCheck() {
 
   debe(tieneChecklistPlano(desfib) && tieneChecklistPlano(multi) && tieneChecklistPlano(dea), "checklist plano");
   debe(!tieneChecklistPlano(amb) && !tieneChecklistPlano({ checklist: { a: "" } }) && !tieneChecklistPlano(null), "sin checklist plano");
+
+  debe(areaQueDecide({ tipo: "camioneta" }) === "movilizacion" && areaQueDecide({ tipo: "ambulancia" }) === "movilizacion", "vehículos → Movilización");
+  debe(areaQueDecide({ tipo: "dea" }) === "salud" && areaQueDecide(null) === "salud", "equipos → Salud");
+  const txt = textoSolicitudDePauta({ insp: { tipo_formulario: "inspeccion_diaria", fecha: "2026-10-13", conductor: "Juan" },
+    datos: { momento: "inicio", exterior: { "Revisar luces": { estado: "incorrecto", obs: "foco trasero" } } }, revisor: "Ana" });
+  debe(txt === "Pauta Diaria (inicio de turno) del 13/10/2026, hecha por Juan:\n- Revisar luces: foco trasero\nAprobada por Ana.", "texto de la solicitud: " + txt);
+  debe(textoSolicitudDePauta({ insp: { tipo_formulario: "inspeccion_semanal", fecha: "2026-10-13", observaciones: "Fallas: algo" }, datos: {} })
+    .includes("Fallas: algo"), "pauta sin ítems: va su texto");
+  debe(rotuloOrigenSolicitud({ origen: ORIGEN_PAUTA }) === "Falla en una pauta" && rotuloOrigenSolicitud({}) === "Pedido por Salud", "rótulo del origen");
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("fallasPauta: autotest ok");

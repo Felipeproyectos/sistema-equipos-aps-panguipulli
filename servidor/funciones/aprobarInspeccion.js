@@ -1,5 +1,5 @@
 import { createClientFromRequest } from '#compat';
-import { fallasDeInspeccion, pautaConFallas } from '../compartido/fallasPauta.js';
+import { pautaConFallas, textoSolicitudDePauta, areaQueDecide, ORIGEN_PAUTA } from '../compartido/fallasPauta.js';
 
 export default async function (req) {
   try {
@@ -12,11 +12,17 @@ export default async function (req) {
     // Se declara aca y no dentro del `if (accion === 'aprobar')`: el return
     // final la usa desde fuera de ese bloque, y por el scope de `let` toda
     // aprobacion terminaba en 500 aunque el trabajo se hubiera hecho.
-    let otCreada = null;
+    let solicitudCreada = null;
     if (!inspeccion_id || !accion) return Response.json({ error: 'Faltan parámetros' }, { status: 400 });
 
     const inspeccion = await base44.asServiceRole.entities.InspeccionPendiente.get(inspeccion_id);
     if (!inspeccion) return Response.json({ error: 'No encontrada' }, { status: 404 });
+    // Dos revisores a la vez, o un doble clic, aprobaban dos veces: dos
+    // actividades y dos órdenes por la misma pauta.
+    if (inspeccion.estado && inspeccion.estado !== 'pendiente') {
+      const quien = inspeccion.revisor_nombre || inspeccion.revisor_email;
+      return Response.json({ error: `Esta pauta ya fue ${inspeccion.estado === 'aprobado' ? 'aprobada' : 'rechazada'}${quien ? ` por ${quien}` : ''}.` }, { status: 409 });
+    }
 
     // El encargado de salud solo resuelve inspecciones de SU centro. Apagado
     // por defecto: en Base44 no habia chequeo y uno de Coñaripe podia aprobar
@@ -99,49 +105,37 @@ export default async function (req) {
         empresa_responsable: 'Registro automático — Bitácora',
       });
 
-      // Si la inspección aprobada tiene fallas, crear Orden de Trabajo automáticamente
+      // Si la pauta aprobada trae fallas, se abre una SOLICITUD para quien
+      // decide qué se hace (src/lib/fallasPauta.js): Movilización si es un
+      // vehículo («Solicitudes al Taller»: la deriva al taller o la cierra),
+      // Salud si es un equipo («Solicitudes»). Antes se abría una OT directo
+      // en la fila del taller, sin que nadie la evaluara. Si el equipo ya tiene
+      // una solicitud de pauta sin revisar, la falla nueva se suma a esa.
       if (hasFallas) {
-        // El detalle de las fallas, ítem por ítem
-        const fallasDetalle = fallasDeInspeccion(datos).map(f => '- ' + f.item + (f.obs ? ': ' + f.obs : ''));
-
-        const ahora = new Date();
-        const ymd = ahora.toISOString().slice(0, 10).replace(/-/g, '');
-        const hhmmss = ahora.toTimeString().slice(0, 8).replace(/:/g, '');
-        const numero_ot = `OT-${ymd}-${hhmmss}`;
-
-        const equipo = datos.equipo || {};
-        const equipoLabel = inspeccion.equipo_label || `${equipo.marca || ''} ${equipo.modelo || ''}`.trim() || inspeccion.equipo_id;
-
-        // Prioridad: alta si hay daños visuales o fallas de motor, media en caso contrario
-        const tieneDanos = datos.danos && Object.values(datos.danos).some(v => v && v.marcado);
-        const fallasMotor = datos.motor && Object.values(datos.motor).some(v => v && v.estado === 'malo');
-        const prioridad = (tieneDanos || fallasMotor) ? 'alta' : 'media';
-
-        await base44.asServiceRole.entities.OrdenTrabajo.create({
-          numero_ot: numero_ot,
-          equipo_id: inspeccion.equipo_id,
-          equipo_label: equipoLabel,
-          patente: equipo.patente || '',
-          tipo_activo: ['camioneta', 'furgon', 'camion_3_4'].includes(equipo.tipo) ? 'corporativo' : 'salud',
-          prioridad,
-          estado: 'pendiente',
-          problema_reportado: `Fallas detectadas en inspección (${inspeccion.tipo_formulario}):\n${fallasDetalle.join('\n')}\n\nObservaciones: ${inspeccion.observaciones || ''}`,
-          diagnostico: '',
-          origen: 'inspeccion',
-          inspeccion_id: inspeccion_id,
-          reportado_por_email: user.email,
-          reportado_por_nombre: inspeccion.conductor || user.full_name,
-          supervisor_email: user.email,
-          supervisor_nombre: user.full_name,
-          linea_tiempo: [{
-            fecha: ahora.toISOString(),
-            evento: 'OT creada automáticamente desde inspección aprobada',
-            usuario_email: user.email,
-            usuario_nombre: user.full_name,
-            notas: `Inspección ${inspeccion_id}`,
-          }],
-        });
-        otCreada = { numero_ot, prioridad, fallas: fallasDetalle.length };
+        const db = base44.asServiceRole.entities;
+        const actual = await db.Equipo.get(inspeccion.equipo_id).catch(() => null);
+        const equipo = { ...(datos.equipo || {}), ...(actual || {}) };
+        const area = areaQueDecide(equipo);
+        const texto = textoSolicitudDePauta({ insp: inspeccion, datos, revisor: user.full_name || user.email });
+        const abiertas = await db.Solicitud.filter({ equipo_id: inspeccion.equipo_id, estado: 'pendiente' }).catch(() => []);
+        const abierta = abiertas.find(x => x.origen === ORIGEN_PAUTA);
+        if (abierta) {
+          await db.Solicitud.update(abierta.id, { observaciones: [abierta.observaciones, texto].filter(Boolean).join('\n\n') });
+          solicitudCreada = { id: abierta.id, nueva: false, area };
+        } else {
+          const nueva = await db.Solicitud.create({
+            equipo_id: inspeccion.equipo_id,
+            tipo: 'mantenimiento_correctivo',
+            fecha: inspeccion.fecha || new Date().toISOString().slice(0, 10),
+            usuario_email: user.email || '',
+            usuario_nombre: inspeccion.conductor || user.full_name || user.email || '',
+            centro: equipo.centro_principal || '',
+            estado: 'pendiente',
+            origen: ORIGEN_PAUTA,
+            observaciones: texto,
+          });
+          solicitudCreada = { id: nueva?.id, nueva: true, area };
+        }
       }
 
       // Si tiene kilometraje, registrarlo
@@ -187,7 +181,7 @@ export default async function (req) {
       });
     }
 
-    return Response.json({ ok: true, ot_creada: otCreada });
+    return Response.json({ ok: true, solicitud_creada: solicitudCreada });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
