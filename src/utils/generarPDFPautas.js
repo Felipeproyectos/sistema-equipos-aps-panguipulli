@@ -8,6 +8,7 @@
 // "Guardar como PDF". Sin librería de PDF, y sale con acentos y tildes bien.
 import { ROTULO_PARCHES, tieneChecklistPlano } from "../lib/fallasPauta.js";
 import { TIPOS_VEHICULO } from "../lib/turnoFlota.js";
+import { abrirInformeHtml } from "../lib/informeHtml.js";
 
 const TIPO_LABEL = {
   inspeccion_semanal: "Pauta Semanal",
@@ -250,11 +251,8 @@ ${lista.map((insp, i) => hoja(insp, i + 1, lista.length)).join("\n")}
 <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 </body></html>`;
 
-  const ventana = window.open("", "_blank");
-  if (!ventana) return false;   // bloqueador de pop-ups: lo avisa quien llama
-  ventana.document.write(html);
-  ventana.document.close();
-  return true;
+  // false si el bloqueador de pop-ups la frenó: lo avisa quien llama.
+  return abrirInformeHtml(html);
 }
 
 // ponytail: un self-check, no una suite. Lo que se rompe en silencio acá es el

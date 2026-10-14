@@ -20,7 +20,7 @@ import { createClientFromRequest } from '#compat';
 //   recuperar    → enlace de recuperación por correo (público, sin sesión)
 //   actualizar   → corregir el correo o el nombre de una ficha
 //   suspender    → dejar a alguien fuera sin borrar su historial (y revertirlo)
-//   eliminar     → borrar la ficha y su cuenta de acceso
+//   eliminar     → borrar la ficha (la cuenta de acceso es compartida y queda)
 //   ingreso      → dejar anotado en Auditoría que alguien entró
 
 // La misma jerarquía de src/lib/roles.js. Se repite acá a propósito: el
@@ -57,6 +57,17 @@ function puedeCrear(rolCreador, rolObjetivo) {
   // se gestiona fuera de este flujo.
   if (rolObjetivo === 'super_admin') return false;
   return (QUIEN_CREA_A_QUIEN[rolCreador] || []).includes(rolObjetivo);
+}
+
+// ¿Puede `quien` restablecer, corregir, suspender o borrar la ficha `ficha`?
+// Quien administra llega a todas MENOS a la de Base del Sistema: un
+// Administrador que pudiera fijarle la clave a Base del Sistema se convertiría
+// en ella (es la misma regla que pone la base en 23_quien_asigna_roles.sql,
+// que el servidor se salta porque escribe con la llave de servicio). El resto,
+// solo a los roles que podría haber creado.
+function puedeTocar(quien, ficha) {
+  if (ficha.role === 'super_admin') return quien.role === 'super_admin';
+  return ROLES_QUE_ADMINISTRAN.includes(quien.role) || puedeCrear(quien.role, ficha.role);
 }
 
 // Legible y tecleable por teléfono: sin caracteres que se confundan (0/O, 1/l).
@@ -139,10 +150,6 @@ async function suspenderEnAuth(authId, suspender) {
   return admin('PUT', `/auth/v1/admin/users/${authId}`, {
     ban_duration: suspender ? SUSPENSION_LARGA : 'none',
   });
-}
-
-async function borrarDeAuth(authId) {
-  return admin('DELETE', `/auth/v1/admin/users/${authId}`);
 }
 
 // Una cuenta está suspendida si su ban sigue vigente.
@@ -258,9 +265,15 @@ async function crear(base44, quien, datos) {
 
   if (ficha && cuenta) return { error: 'Ese correo ya tiene acceso al sistema', status: 409 };
 
-  const clave = claveTemporal();
+  // Supabase Auth es compartido con otro sistema (carrera.apscolab.com): una
+  // cuenta de acceso sin ficha acá puede ser de una persona de ese sistema.
+  // Antes se le cambiaba la clave y se le devolvía a quien la "creaba": así
+  // cualquiera con permiso de crear cuentas se quedaba con la de otro. Ahora
+  // se le da la ficha y su clave NO se toca: entra con la que ya tiene, o la
+  // recupera ella misma con «Olvidé mi clave», que llega a su correo.
+  const yaTeniaCuenta = !!cuenta;
+  const clave = yaTeniaCuenta ? null : claveTemporal();
   if (!cuenta) cuenta = await crearEnAuth(correo, clave, datos.full_name);
-  else await fijarClave(cuenta.id, clave);   // había cuenta suelta: se reaprovecha
 
   // Sin `activo`: esa columna no existe en `usuario` y PostgREST rechazaba el
   // insert entero con "Could not find the 'activo' column of 'usuario' in the
@@ -276,18 +289,21 @@ async function crear(base44, quien, datos) {
     centros_asignados: centro ? [centro] : [],
     subsedes_asignadas: Array.isArray(datos.subsedes_asignadas) ? datos.subsedes_asignadas : [],
     auth_id: cuenta.id,
-    force_password_reset: true,
+    force_password_reset: !yaTeniaCuenta,
   };
   const guardado = ficha
     ? await base44.asServiceRole.entities.User.update(ficha.id, campos)
     : await base44.asServiceRole.entities.User.create(campos);
+
+  if (yaTeniaCuenta) return { usuario: guardado, ya_tenia_cuenta: true };
 
   let correo_enviado = true;
   try { await avisarClaveTemporal(base44, correo, campos.full_name, clave); }
   catch (e) { correo_enviado = false; console.error('No se pudo avisar por correo:', e.message); }
 
   // La clave viaja de vuelta a propósito: si el correo no salió, quien creó la
-  // cuenta tiene que poder dictarla. Solo la ve quien acaba de crearla.
+  // cuenta tiene que poder dictarla. Solo la ve quien acaba de crearla, y solo
+  // para una cuenta que nació recién (nunca la de alguien que ya existía).
   return { usuario: guardado, clave_temporal: clave, correo_enviado };
 }
 
@@ -326,10 +342,9 @@ async function restablecer(base44, quien, datos) {
   const ficha = filas.find((u) => normalizar(u.email) === correo);
   if (!ficha) return { error: 'Ese correo no tiene ficha en el sistema', status: 404 };
 
-  // Quien administra puede restablecer a cualquiera; el resto, solo a las
-  // cuentas de los roles que podría haber creado.
-  const mando = ROLES_QUE_ADMINISTRAN.includes(quien.role) || puedeCrear(quien.role, ficha.role);
-  if (!mando) return { error: 'No puedes restablecer la clave de esa cuenta', status: 403 };
+  // Quien administra puede restablecer a cualquiera, menos a Base del
+  // Sistema; el resto, solo a las cuentas de los roles que podría haber creado.
+  if (!puedeTocar(quien, ficha)) return { error: 'No puedes restablecer la clave de esa cuenta', status: 403 };
 
   // Se puede dictar una clave concreta en vez de aceptar la generada. Cuando
   // la elige una persona NO se exige cambiarla al entrar: es a propósito — si
@@ -410,8 +425,7 @@ async function fichaBajoMando(base44, quien, datos) {
   if (normalizar(quien.email) === correo) {
     return { error: 'No puedes hacer eso sobre tu propia cuenta', status: 400 };
   }
-  const mando = ROLES_QUE_ADMINISTRAN.includes(quien.role) || puedeCrear(quien.role, ficha.role);
-  if (!mando) return { error: 'No puedes administrar esa cuenta', status: 403 };
+  if (!puedeTocar(quien, ficha)) return { error: 'No puedes administrar esa cuenta', status: 403 };
   return { ficha, filas };
 }
 
@@ -484,11 +498,12 @@ async function eliminar(base44, quien, datos) {
     return { error: 'La cuenta de Base del Sistema no se elimina desde la aplicación', status: 403 };
   }
 
-  // Primero la cuenta de acceso: si queda la ficha sin cuenta, el diagnóstico
-  // lo muestra y se puede arreglar. Al revés quedaría una cuenta suelta que
-  // ninguna pantalla lista.
+  // Se borra la ficha, que es lo que da acceso a ESTE sistema (sin ficha no
+  // hay rol: mi_rol() y auth.me() quedan en nada). La cuenta de acceso NO se
+  // borra: Supabase Auth es compartido con otro sistema y la persona puede
+  // usarla allá. Antes se borraba, y quien podía eliminar un chofer podía
+  // dejar sin acceso a alguien del otro sistema.
   const cuenta = await buscarEnAuth(normalizar(ficha.email));
-  if (cuenta) await borrarDeAuth(cuenta.id);
   await base44.asServiceRole.entities.User.delete(ficha.id);
 
   return { ok: true, email: normalizar(ficha.email), tenia_cuenta: !!cuenta };
@@ -584,7 +599,11 @@ export default async function (req) {
     const base44 = createClientFromRequest(req);
     const cuerpo = await req.json().catch(() => ({}));
     const accion = cuerpo.accion;
-    const origen = String(cuerpo.origen || '').replace(/\/+$/, '');
+    // A dónde vuelve el enlace de recuperación. Supabase ya lo valida contra
+    // sus Redirect URLs, pero además se acepta solo el dominio de la app.
+    const pedido = String(cuerpo.origen || '').replace(/\/+$/, '');
+    const propios = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean);
+    const origen = !propios.length || propios.includes(pedido) ? pedido : propios[0];
 
     // "recuperar" es la única acción sin sesión: la pide quien justamente no
     // puede entrar.

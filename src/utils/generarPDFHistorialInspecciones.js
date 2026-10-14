@@ -1,4 +1,5 @@
 import { format, parseISO } from "date-fns";
+import { escaparDatos, abrirInformeHtml } from "@/lib/informeHtml";
 
 const TIPO_LABELS = {
   dea: "DEA",
@@ -77,7 +78,9 @@ function parchesHtml(datos) {
   </div>`;
 }
 
-export function generarPDFHistorialInspecciones({ equipo, items, fechaDesde, fechaHasta }) {
+export function generarPDFHistorialInspecciones(entrada) {
+  // Todo texto de la base va escapado: ver src/lib/informeHtml.js.
+  const { equipo, items, fechaDesde, fechaHasta } = escaparDatos(entrada);
   const hoy = new Date();
   const tipoLabel = TIPO_LABELS[equipo.tipo] || equipo.tipo;
   const total = items.length;
@@ -192,6 +195,5 @@ export function generarPDFHistorialInspecciones({ equipo, items, fechaDesde, fec
 <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 </body></html>`;
 
-  const blob = new Blob([html], { type: "text/html" });
-  window.open(URL.createObjectURL(blob), "_blank");
+  return abrirInformeHtml(html);
 }

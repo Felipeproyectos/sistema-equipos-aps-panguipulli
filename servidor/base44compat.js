@@ -162,6 +162,9 @@ async function getConnection(nombre) {
   return { accessToken: j.access_token };
 }
 
+// Un texto como patrón de LIKE que solo calza consigo mismo.
+export const comoLiteral = (texto) => String(texto).replace(/[\\%_]/g, (c) => `\\${c}`);
+
 // ── cliente ─────────────────────────────────────────────────────────────────
 export function createClientFromRequest(req) {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
@@ -189,9 +192,16 @@ export function createClientFromRequest(req) {
     // El perfil vive en `usuario` (heredado de Base44): trae role,
     // centro_principal. Se busca por email porque el id de
     // Base44 es un ObjectId y el de auth.users es un uuid.
-    const { data: fila } = await servicio
-      .from('usuario').select('*').ilike('email', data.user.email).maybeSingle();
-    return fila || null;
+    //
+    // Comparación exacta sin mayúsculas, igual que mi_rol() en la base. Con
+    // ilike a secas, `_` y `%` del correo funcionan como comodines: una cuenta
+    // "ana_rojas@…" calzaba con la ficha de "ana.rojas@…" y tomaba su rol.
+    // La base filtra (ilike con los comodines escapados) y acá se confirma la
+    // igualdad exacta, por si PostgREST trata algún carácter (`*`) como comodín.
+    const correo = String(data.user.email).toLowerCase();
+    const { data: filas } = await servicio
+      .from('usuario').select('*').ilike('email', comoLiteral(correo)).limit(5);
+    return (filas || []).find((f) => String(f.email || '').toLowerCase() === correo) || null;
   }
 
   // functions.invoke resuelve en proceso, sin dar la vuelta por HTTP.

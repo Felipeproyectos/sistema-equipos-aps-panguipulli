@@ -62,9 +62,15 @@ app.post('/webhooks/:nombre', async (c) => {
   }
 });
 
+// Las que solo disparan los triggers de Postgres. Por /functions no piden el
+// secreto: registrarHistorial escribiría en Auditoría lo que cualquiera le
+// mandara (con la llave de servicio), y notificarSolicitudRepuesto mandaría
+// correos con un texto inventado. Acá no existen: solo por /webhooks.
+const SOLO_WEBHOOK = new Set(['registrarHistorial', 'notificarSolicitudRepuesto']);
+
 app.all('/functions/:nombre', async (c) => {
   const nombre = c.req.param('nombre');
-  const fn = handlers[nombre];
+  const fn = SOLO_WEBHOOK.has(nombre) ? null : handlers[nombre];
   if (!fn) return c.json({ error: `Funcion no encontrada: ${nombre}` }, 404);
   try {
     return await fn(c.req.raw);
