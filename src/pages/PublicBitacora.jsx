@@ -11,6 +11,8 @@ import PautaSemanalDEA from "@/components/bitacora/PautaSemanalDEA";
 import PautaSemanalMultiparametros from "@/components/bitacora/PautaSemanalMultiparametros";
 import PautaDiariaAmbulancia from "@/components/bitacora/PautaDiariaAmbulancia";
 import PautaCabina from "@/components/bitacora/PautaCabina";
+import TurnoChoferForm from "@/components/bitacora/TurnoChoferForm";
+import { MODO_MI_TURNO, MODO_PAUTAS } from "@/lib/turnoFlota";
 
 // Al entrar a Ambulancias se elige primero qué se revisa: el vehículo (las
 // pautas Diaria y Semanal, que se llenan en pantalla) o la cabina sanitaria
@@ -49,7 +51,8 @@ const CATEGORIAS = [
   {
     id: "turno_chofer",
     label: "Turno Chofer",
-    descripcion: "Los choferes ahora toman el vehículo desde «Mi turno», con su cuenta",
+    descripcion: "Registro de inicio de turno con conductor y kilometraje",
+    descripcionMiTurno: "Los choferes ahora toman el vehículo desde «Mi turno», con su cuenta",
     icon: Car,
     color: "#2563EB",
     bg: "#EFF6FF",
@@ -108,6 +111,10 @@ const CATEGORIAS = [
 export default function PublicBitacora() {
   const [equipos, setEquipos] = useState([]);
   const [loadingEquipos, setLoadingEquipos] = useState(true);
+  // Cómo se registra el turno (26_modo_turno.sql). Lo decide Configuración;
+  // mientras no llega, o si el servidor no lo dice, el formulario de siempre.
+  const [modoTurno, setModoTurno] = useState(MODO_PAUTAS);
+  const conMiTurno = modoTurno === MODO_MI_TURNO;
 
   // Navegación: null → categoria → pauta
   const [categoria, setCategoria] = useState(null);
@@ -126,6 +133,7 @@ export default function PublicBitacora() {
       .then(data => {
         const lista = data?.equipos || [];
         setEquipos(lista);
+        if (data?.modo_turno) setModoTurno(data.modo_turno);
         if (lista.length === 0) setError("No hay equipos registrados en el sistema.");
       })
       .catch((err) => setError(`No se pudieron cargar los equipos: ${err.message}`))
@@ -222,7 +230,9 @@ export default function PublicBitacora() {
                       </span>
                       <p className="font-bold text-slate-800">{cat.label}</p>
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5 leading-snug">{cat.descripcion}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-snug">
+                      {conMiTurno && cat.descripcionMiTurno ? cat.descripcionMiTurno : cat.descripcion}
+                    </p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-slate-300 flex-shrink-0" />
                 </button>
@@ -327,10 +337,21 @@ export default function PublicBitacora() {
               />
             )}
 
-            {/* Turno Chofer: desde 25_turno_chofer.sql el chofer toma el vehículo
-                con su cuenta, en «Mi turno». Acá ya no se registra: sin sesión no
-                se puede saber quién es, ni revisar su licencia. */}
-            {categoria === "turno_chofer" && (
+            {/* Turno Chofer, como siempre: sin cuenta, queda en Revisión
+                Bitácora para Calidad. Es lo que corre mientras «Mi turno» está
+                apagado en Configuración (26_modo_turno.sql). */}
+            {categoria === "turno_chofer" && !conMiTurno && (
+              <TurnoChoferForm
+                equipos={equiposFiltrados}
+                loading={loadingEquipos}
+                onSuccess={(msg) => handleSuccess(msg)}
+              />
+            )}
+
+            {/* Con «Mi turno» encendido el chofer toma el vehículo con su cuenta.
+                Acá ya no se registra: sin sesión no se puede saber quién es, ni
+                revisar su licencia. */}
+            {categoria === "turno_chofer" && conMiTurno && (
               <div className="bg-white rounded-3xl shadow-2xl p-6 text-center space-y-3">
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto" style={{ background: "#FFF7ED" }}>
                   <KeyRound className="w-7 h-7 text-amber-700" />

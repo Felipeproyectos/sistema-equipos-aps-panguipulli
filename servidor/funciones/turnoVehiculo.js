@@ -1,7 +1,7 @@
 import { createClientFromRequest } from '#compat';
 import {
   estadoDeVehiculos, tramosDelDia, ultimoKm, fallasDePauta, pautaCompleta,
-  esVehiculoDeFlota, rotuloVehiculo, hoyChile, horaChile,
+  esVehiculoDeFlota, rotuloVehiculo, hoyChile, horaChile, miTurnoActivo,
 } from '../compartido/turnoFlota.js';
 
 // El turno del chofer (migracion/25_turno_chofer.sql): el chofer toma el
@@ -21,6 +21,11 @@ import {
 //             de otro chofer si se lo entregó)
 //   entregar  cierra su uso abierto
 //   liberar   Movilización cierra el uso de otro (lo dejó sin entregar)
+//
+// Mientras «Mi turno» está apagado en Configuración (26_modo_turno.sql) un
+// chofer no puede tomar: el turno se registra en la página pública de pautas.
+// Sí puede entregar lo que hubiera quedado abierto. Base del Sistema puede
+// tomar igual, para probarlo antes de encenderlo.
 
 const ROLES_CHOFER = ['chofer', 'super_admin'];
 const ROLES_SUPERVISAN = ['super_admin', 'admin', 'encargado_movilizacion'];
@@ -45,6 +50,11 @@ async function cargarFlota(db) {
     db.Kilometraje.list('-fecha', 1500).catch(() => []),
   ]);
   return { equipos, usos, ordenes, reservas, prestamos, bitacora, kilometrajes };
+}
+
+async function leerActivo(db) {
+  const config = (await db.AppConfig.list().catch(() => []))[0];
+  return miTurnoActivo(config);
 }
 
 async function abrirSolicitud(db, { equipo, user, hoy, texto }) {
@@ -75,7 +85,7 @@ export default async function (req) {
     // ── estado ───────────────────────────────────────────────────────
     if (accion === 'estado') {
       if (!ROLES_CHOFER.includes(user.role)) return error('Solo para choferes', 403);
-      const f = await cargarFlota(db);
+      const [f, activo] = await Promise.all([cargarFlota(db), leerActivo(db)]);
       const estados = estadoDeVehiculos({
         vehiculos: f.equipos, usos: f.usos, ordenes: f.ordenes,
         reservas: f.reservas, prestamos: f.prestamos, choferId: user.id, hoy,
@@ -84,6 +94,7 @@ export default async function (req) {
       return Response.json({
         ok: true,
         hoy,
+        mi_turno_activo: activo,
         yo: {
           id: user.id, nombre,
           licencia_vencimiento: user.licencia_vencimiento || null,
@@ -122,6 +133,9 @@ export default async function (req) {
     // ── tomar ────────────────────────────────────────────────────────
     if (accion === 'tomar') {
       if (!ROLES_CHOFER.includes(user.role)) return error('Solo los choferes toman vehículos', 403);
+      if (user.role === 'chofer' && !(await leerActivo(db))) {
+        return error('«Mi turno» todavía no está habilitado. Por ahora registra tu turno en la página de pautas, en «Turno Chofer».', 409, { apagado: true });
+      }
       const f = await cargarFlota(db);
       const equipo = f.equipos.find(e => e.id === datos.equipo_id);
       if (!esVehiculoDeFlota(equipo)) return error('Ese vehículo no existe o fue dado de baja', 404);

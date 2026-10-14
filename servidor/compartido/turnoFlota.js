@@ -17,6 +17,15 @@
 // relativas. `node src/lib/turnoFlota.js` corre el autotest.
 import { periodosEnTaller, rangosSeTocan, asignacionDeHoy } from "./calendarioFlota.js";
 
+// ── El interruptor (migracion/26_modo_turno.sql) ─────────────────────────
+// «Mi turno» se enciende en Configuración cuando la jefatura dé el visto
+// bueno. Mientras tanto el turno se registra como siempre: el chofer llena
+// «Turno Chofer» en la página pública de pautas, sin cuenta, y queda en
+// Revisión Bitácora para Calidad. Sin la columna, o sin valor, está apagado.
+export const MODO_PAUTAS = "pautas";
+export const MODO_MI_TURNO = "mi_turno";
+export const miTurnoActivo = (config) => config?.modo_turno === MODO_MI_TURNO;
+
 export const TIPOS_VEHICULO = ["ambulancia", "camioneta", "furgon", "camion_3_4"];
 
 /** La revisión rápida de la pauta de inicio de los vehículos corporativos.
@@ -265,6 +274,10 @@ export function _selfCheck() {
 
   debe(hoyChile(new Date("2026-10-09T02:30:00Z")) === "2026-10-08", "a las 23:30 en Chile sigue siendo el 8");
   debe(horaChile("2026-10-08T11:05:00Z") === "08:05", "hora de Chile");
+
+  debe(!miTurnoActivo(null) && !miTurnoActivo({}) && !miTurnoActivo({ modo_turno: "pautas" }),
+    "Mi turno apagado si no hay configuración, columna o valor");
+  debe(miTurnoActivo({ modo_turno: "mi_turno" }), "Mi turno encendido");
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("turnoFlota: autotest ok");

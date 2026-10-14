@@ -206,3 +206,24 @@ por eso la explicación vive acá y no dentro del archivo.
 `.gitignore`: son datos reales de funcionarios y equipamiento de la Corporación.
 Van por el zip, **no por git**. Si el repositorio es público, publicarlos sería
 una filtración.
+
+## Seguridad: lo que se configura fuera del código
+
+Supabase es compartido con carrera.apscolab.com: sus usuarios tienen sesión
+válida en este proyecto. El código ya no les da acceso a nada (sin ficha en
+`usuario` no hay rol; ver `migracion/28_rls_solo_personal.sql`), pero hay
+ajustes que solo se hacen en los paneles:
+
+- **Railway → `CORS_ORIGIN`** = `https://gestion.apscolab.com`. Vacío deja la
+  API abierta a cualquier origen, y además limita a ese dominio el enlace de
+  «Olvidé mi clave».
+- **Supabase → Authentication → URL Configuration**: en Redirect URLs solo
+  `https://gestion.apscolab.com/**` (sin comodines amplios como `**` o
+  `https://*.…`). La Site URL es del otro sistema: no se cambia.
+- **Supabase → Authentication → Providers → Email**: «Confirm email» y
+  «Secure email change» encendidos.
+- **Supabase → Storage → `archivos`**: es público (cualquiera con la URL ve el
+  archivo), pero no debe tener una policy que deje LISTAR los archivos a
+  `anon`.
+- Las funciones `registrarHistorial` y `notificarSolicitudRepuesto` solo
+  existen por `/webhooks/…` con `CRON_SECRET`; por `/functions/…` responden 404.

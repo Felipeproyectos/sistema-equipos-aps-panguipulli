@@ -25,7 +25,10 @@ DESTINO = os.path.join(RAIZ, "servidor", "compartido")
 # con rutas relativas ("./x.js"), así que funcionan igual en la otra carpeta.
 # turnoFlota.js lo usa turnoVehiculo.js: el servidor decide si un vehículo
 # está disponible con la misma regla que muestra la pantalla del chofer.
-ARCHIVOS = ["agendaTaller.js", "calendarioFlota.js", "panelFlota.js", "contadoresMenu.js", "turnoFlota.js"]
+# fallasPauta.js lo usa aprobarInspeccion.js: abre la OT con las mismas
+# fallas que muestra Revisión Bitácora.
+ARCHIVOS = ["agendaTaller.js", "calendarioFlota.js", "panelFlota.js", "contadoresMenu.js", "turnoFlota.js",
+            "fallasPauta.js"]
 
 CABECERA = ("// Copia de src/lib/{nombre}, generada por migracion/sincronizar_compartido.py.\n"
             "// No editar a mano: se edita el original y se vuelve a correr el script.\n\n")

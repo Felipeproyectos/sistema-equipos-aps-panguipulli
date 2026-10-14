@@ -1,5 +1,6 @@
 import { format, parseISO } from "date-fns";
 import { etiquetaEquipo } from "@/utils/etiquetaEquipo";
+import { escaparDatos, abrirInformeHtml } from "@/lib/informeHtml";
 
 const ESTADO_STYLES = {
   pendiente: { bg: "#fef9c3", color: "#ca8a04", label: "PENDIENTE" },
@@ -23,7 +24,9 @@ const fmtFechaHora = (f) => {
   try { return format(new Date(f), "dd/MM/yyyy HH:mm"); } catch { return f; }
 };
 
-export function generarPDFOrdenTrabajo(ot) {
+export function generarPDFOrdenTrabajo(orden) {
+  // Todo texto de la base va escapado: ver src/lib/informeHtml.js.
+  const ot = escaparDatos(orden);
   const hoy = new Date();
   const est = ESTADO_STYLES[ot.estado] || { bg: "#f1f5f9", color: "#64748b", label: ot.estado };
 
@@ -155,6 +158,5 @@ export function generarPDFOrdenTrabajo(ot) {
 <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 </body></html>`;
 
-  const blob = new Blob([html], { type: "text/html" });
-  window.open(URL.createObjectURL(blob), "_blank");
+  return abrirInformeHtml(html);
 }

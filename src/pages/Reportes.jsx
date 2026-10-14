@@ -6,6 +6,7 @@ import { esRolTaller, esSuperAdmin, esMonitorCorporativo } from "@/lib/roles";
 import ReporteTaller from "@/components/reportes/ReporteTaller";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/AuthContext";
+import { esc, abrirInformeHtml } from "@/lib/informeHtml";
 
 export default function Reportes() {
   const { user } = useAuth();
@@ -80,11 +81,11 @@ export default function Reportes() {
         const eq = equipos.find(e => e.id === al.equipo_id);
         const color = NIVEL_COLORS[al.nivel] || "#64748b";
         return `<tr>
-          <td><span style="background:${color}18;color:${color};padding:2px 7px;border-radius:4px;font-size:8.5px;font-weight:700">${NIVEL_LABELS[al.nivel]||al.nivel}</span></td>
-          <td>${TIPO_ALERTA_LABELS[al.tipo]||al.tipo}</td>
-          <td>${eq ? `${eq.marca} ${eq.modelo}` : "—"}</td>
-          <td>${al.centro||"—"}${al.subsede?" / "+al.subsede:""}</td>
-          <td style="word-break:break-word">${al.descripcion||"—"}</td>
+          <td><span style="background:${color}18;color:${color};padding:2px 7px;border-radius:4px;font-size:8.5px;font-weight:700">${esc(NIVEL_LABELS[al.nivel]||al.nivel)}</span></td>
+          <td>${esc(TIPO_ALERTA_LABELS[al.tipo]||al.tipo)}</td>
+          <td>${eq ? esc(`${eq.marca} ${eq.modelo}`) : "—"}</td>
+          <td>${esc(al.centro||"—")}${al.subsede?" / "+esc(al.subsede):""}</td>
+          <td style="word-break:break-word">${esc(al.descripcion||"—")}</td>
         </tr>`;
       }).join("");
 
@@ -115,7 +116,7 @@ export default function Reportes() {
   <div class="header-bar">
     <div>
       <h1>🔔 Reporte de Alertas Activas</h1>
-      <p>${filtroCentro||"Todos los centros"}</p>
+      <p>${esc(filtroCentro||"Todos los centros")}</p>
     </div>
     <div class="header-right">Corporación Municipal de Panguipulli<br/>Departamento de Informática<br/>Generado: ${format(hoy,"dd/MM/yyyy")} a las ${format(hoy,"HH:mm")} hrs</div>
   </div>
@@ -133,8 +134,7 @@ export default function Reportes() {
 <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 </body></html>`;
 
-    const blob = new Blob([html], { type: "text/html" });
-    window.open(URL.createObjectURL(blob), "_blank");
+    abrirInformeHtml(html);
     setGenerandoAlertas(false);
   };
 
@@ -154,13 +154,13 @@ export default function Reportes() {
         const eq = equipos.find(e => e.id === sol.equipo_id);
         const color = ESTADO_SOL_COLORS[sol.estado] || "#64748b";
         return `<tr>
-          <td>${sol.fecha||"—"}</td>
-          <td>${TIPO_SOL_LABELS[sol.tipo]||sol.tipo}</td>
-          <td>${eq ? `${eq.marca} ${eq.modelo}` : "—"}</td>
-          <td>${sol.centro||"—"}</td>
-          <td>${sol.usuario_nombre||"—"}</td>
-          <td><span style="background:${color}18;color:${color};padding:2px 7px;border-radius:4px;font-size:8.5px;font-weight:700">${ESTADO_SOL_LABELS[sol.estado]||sol.estado}</span></td>
-          <td style="word-break:break-word">${sol.observaciones||"—"}</td>
+          <td>${esc(sol.fecha||"—")}</td>
+          <td>${esc(TIPO_SOL_LABELS[sol.tipo]||sol.tipo)}</td>
+          <td>${eq ? esc(`${eq.marca} ${eq.modelo}`) : "—"}</td>
+          <td>${esc(sol.centro||"—")}</td>
+          <td>${esc(sol.usuario_nombre||"—")}</td>
+          <td><span style="background:${color}18;color:${color};padding:2px 7px;border-radius:4px;font-size:8.5px;font-weight:700">${esc(ESTADO_SOL_LABELS[sol.estado]||sol.estado)}</span></td>
+          <td style="word-break:break-word">${esc(sol.observaciones||"—")}</td>
         </tr>`;
       }).join("");
 
@@ -191,7 +191,7 @@ export default function Reportes() {
   <div class="header-bar">
     <div>
       <h1>📋 Reporte de Solicitudes</h1>
-      <p>${filtroCentro||"Todos los centros"}</p>
+      <p>${esc(filtroCentro||"Todos los centros")}</p>
     </div>
     <div class="header-right">Corporación Municipal de Panguipulli<br/>Departamento de Informática<br/>Generado: ${format(hoy,"dd/MM/yyyy")} a las ${format(hoy,"HH:mm")} hrs</div>
   </div>
@@ -209,8 +209,7 @@ export default function Reportes() {
 <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 </body></html>`;
 
-    const blob = new Blob([html], { type: "text/html" });
-    window.open(URL.createObjectURL(blob), "_blank");
+    abrirInformeHtml(html);
     setGenerandoSolicitudes(false);
   };
 

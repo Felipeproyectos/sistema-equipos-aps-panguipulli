@@ -1,4 +1,5 @@
 import { format, parseISO, isValid } from "date-fns";
+import { escaparDatos, abrirInformeHtml } from "@/lib/informeHtml";
 
 const ESTADO_LABEL = {
   borrador: "Borrador",
@@ -28,13 +29,9 @@ const fmtFecha = (f) => {
 
 const fmtMonto = (n) => "$" + (n || 0).toLocaleString("es-CL");
 
-export function generarInformeFinanciero({
-  proveedores,
-  ordenes,
-  fechaDesde,
-  fechaHasta,
-  esMulti,
-}) {
+export function generarInformeFinanciero(entrada) {
+  // Todo texto de la base va escapado: ver src/lib/informeHtml.js.
+  const { proveedores, ordenes, fechaDesde, fechaHasta, esMulti } = escaparDatos(entrada);
   const hoy = new Date();
   const desdeLabel = fechaDesde ? fmtFecha(fechaDesde) : "Sin límite inferior";
   const hastaLabel = fechaHasta ? fmtFecha(fechaHasta) : "Sin límite superior";
@@ -162,6 +159,5 @@ export function generarInformeFinanciero({
 <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 </body></html>`;
 
-  const blob = new Blob([html], { type: "text/html" });
-  window.open(URL.createObjectURL(blob), "_blank");
+  return abrirInformeHtml(html);
 }

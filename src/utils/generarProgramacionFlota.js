@@ -1,6 +1,7 @@
 import {
   asignacionesDelDia, tramosDelPeriodo, rangosSeTocan, esFinDeSemana,
 } from "@/lib/calendarioFlota";
+import { abrirInformeHtml } from "@/lib/informeHtml";
 
 // La programación de la flota, para imprimir o guardar en PDF.
 //
@@ -255,6 +256,5 @@ export function generarProgramacionFlota({ modo, dias, equipos, asignaciones, pr
 <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 </body></html>`;
 
-  const blob = new Blob([html], { type: "text/html" });
-  window.open(URL.createObjectURL(blob), "_blank");
+  return abrirInformeHtml(html);
 }

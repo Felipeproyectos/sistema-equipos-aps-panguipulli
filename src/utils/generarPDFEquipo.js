@@ -1,4 +1,5 @@
 import { differenceInDays, parseISO, format } from "date-fns";
+import { escaparDatos, abrirInformeHtml } from "@/lib/informeHtml";
 
 const TIPO_LABELS = {
   dea: "DEA",
@@ -36,7 +37,9 @@ const semaforo = (estado) => {
 // `prestamos` y `asignaciones` son opcionales: si no llegan, el informe sale
 // como antes. Solo los vehiculos tienen prestamos, y a un DEA no hay que
 // mostrarle una seccion vacia.
-export function generarPDFEquipo({ equipo, actividades, parches, prestamos = [], asignaciones = [] }) {
+export function generarPDFEquipo(entrada) {
+  // Todo texto de la base va escapado: ver src/lib/informeHtml.js.
+  const { equipo, actividades, parches, prestamos = [], asignaciones = [] } = escaparDatos(entrada);
   const hoy = new Date();
   const est = ESTADO_STYLES[equipo.estado] || { bg: "#f1f5f9", color: "#64748b", label: equipo.estado };
   const tipoLabel = TIPO_LABELS[equipo.tipo] || equipo.tipo;
@@ -348,6 +351,5 @@ export function generarPDFEquipo({ equipo, actividades, parches, prestamos = [],
 <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 </body></html>`;
 
-  const blob = new Blob([html], { type: "text/html" });
-  window.open(URL.createObjectURL(blob), "_blank");
+  return abrirInformeHtml(html);
 }
