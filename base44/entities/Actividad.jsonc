@@ -35,6 +35,14 @@
     "centro_origen": {
       "type": "string"
     },
+    "centro_responsable": {
+      "type": "string",
+      "description": "El centro que tenia el equipo cuando se hizo (si estaba prestado, el que lo recibio). Lo pone aprobarInspeccion; con el, ese centro conserva el historial aunque el equipo ya se haya devuelto (30_historial_prestamo.sql)"
+    },
+    "prestamo_id": {
+      "type": "string",
+      "description": "El prestamo vigente cuando se hizo la pauta, si lo habia"
+    },
     "subsede_origen": {
       "type": "string"
     },

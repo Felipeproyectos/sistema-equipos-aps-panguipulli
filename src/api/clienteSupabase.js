@@ -51,9 +51,14 @@ function ordenar(q, sort) {
   return q.order(desc ? sort.slice(1) : sort, { ascending: !desc });
 }
 
+// { campo: valor } | { campo: { $in: [...] } } | { campo: { $gte, $lte } }
+// (el rango sirve para pedir un período: las pautas de un mes, por ejemplo).
 function condiciones(q, filtro) {
   for (const [campo, valor] of Object.entries(filtro || {})) {
-    if (valor && typeof valor === 'object' && Array.isArray(valor.$in)) q = q.in(campo, valor.$in);
+    if (valor && typeof valor === 'object' && ('$gte' in valor || '$lte' in valor)) {
+      if (valor.$gte != null && valor.$gte !== '') q = q.gte(campo, valor.$gte);
+      if (valor.$lte != null && valor.$lte !== '') q = q.lte(campo, valor.$lte);
+    } else if (valor && typeof valor === 'object' && Array.isArray(valor.$in)) q = q.in(campo, valor.$in);
     else if (valor === null) q = q.is(campo, null);
     else q = q.eq(campo, valor);
   }

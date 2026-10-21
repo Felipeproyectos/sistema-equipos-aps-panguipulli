@@ -47,7 +47,7 @@ function subsedeDeInspeccion(insp, equiposPorId = {}) {
 }
 import {
   CheckCircle, XCircle, ChevronDown, ChevronUp, ClipboardCheck, Car, MapPin, User, Calendar,
-  Fuel, Gauge, Zap, Wrench, Package, FileText, AlertCircle, Printer, Stethoscope
+  Fuel, Gauge, Zap, Wrench, Package, FileText, AlertCircle, Printer, Stethoscope, FileSpreadsheet, ArrowLeftRight
 } from "lucide-react";
 import { generarPDFPautas } from "@/utils/generarPDFPautas";
 import { TIPO_FORMULARIO as TIPO_CABINA, leerPautaCabina, tieneAvisos } from "@/lib/pautaCabina";
@@ -56,6 +56,7 @@ import ChecklistPlano from "@/components/equipos2/ChecklistPlano";
 import { pautaConFallas, tieneChecklistPlano } from "@/lib/fallasPauta";
 import { TIPOS_VEHICULO } from "@/lib/turnoFlota";
 import { prestamoEnFecha } from "@/lib/prestamoEquipo";
+import { descargarPautasExcel } from "@/utils/exportarPautasExcel";
 
 const TIPO_LABEL = {
   inspeccion_semanal: "Pauta Semanal",
@@ -566,6 +567,12 @@ export default function RevisionInspecciones() {
   const [filtro, setFiltro] = useState("pendiente");
   const [centroSeleccionado, setCentroSeleccionado] = useState("todos");
   const [tipoSeleccionado, setTipoSeleccionado] = useState("todos");
+  // Para una revisión: un período y, si se quiere, solo lo que se hizo con
+  // ambulancias prestadas. Con período se piden todas las de esas fechas,
+  // no las 500 más recientes.
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [soloPrestadas, setSoloPrestadas] = useState(false);
   const { toast } = useToast();
 
   // Antes: list("-created_date", 100) sobre 259 registros. Las inspecciones
@@ -576,10 +583,15 @@ export default function RevisionInspecciones() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
+      const conPeriodo = !!(desde || hasta);
+      const condicion = {
+        ...(filtro === "todos" ? {} : { estado: filtro }),
+        ...(conPeriodo ? { fecha: { $gte: desde, $lte: hasta } } : {}),
+      };
       const [data, equipos, prestamos] = await Promise.all([
-        filtro === "todos"
-          ? base44.entities.InspeccionPendiente.list("-created_date", 500)
-          : base44.entities.InspeccionPendiente.filter({ estado: filtro }, "-created_date", 500),
+        Object.keys(condicion).length
+          ? base44.entities.InspeccionPendiente.filter(condicion, conPeriodo ? "-fecha" : "-created_date", conPeriodo ? 5000 : 500)
+          : base44.entities.InspeccionPendiente.list("-created_date", 500),
         base44.entities.Equipo.list("-created_date", 500).catch(() => []),
         base44.entities.PrestamoVehiculo.list("-desde", 500).catch(() => []),
       ]);
@@ -602,7 +614,7 @@ export default function RevisionInspecciones() {
       setInspecciones([]);
     }
     setLoading(false);
-  }, [filtro]);
+  }, [filtro, desde, hasta]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -613,6 +625,7 @@ export default function RevisionInspecciones() {
     ? inspecciones.filter(i => permitidos.includes(i.centro_resuelto) || permitidos.includes(i.centro_dueno))
     : inspecciones;
   const filtradas = enAlcance
+    .filter(i => !soloPrestadas || i.prestada_por)
     .filter(i => filtro === "todos" || i.estado === filtro)
     .filter(i => tipoSeleccionado === "todos" || i.tipo_formulario === tipoSeleccionado);
   const pendientes = enAlcance.filter(i => i.estado === "pendiente").length;
@@ -673,6 +686,38 @@ export default function RevisionInspecciones() {
             style={{ background: "#0F172A" }}>
             <Printer className="w-4 h-4" />
             Imprimir {paraImprimir.length} pauta{paraImprimir.length === 1 ? "" : "s"} en PDF
+          </button>
+        </div>
+
+        {/* Período, prestadas y planilla: para sacar la información de una
+            revisión o auditoría (src/utils/exportarPautasExcel.js) */}
+        <div className="flex flex-wrap items-end gap-3 mb-5 p-3 rounded-2xl bg-white" style={{ border: "1px solid #E2E8F0" }}>
+          <div>
+            <label htmlFor="rev-desde" className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1">Desde</label>
+            <input id="rev-desde" type="date" value={desde} onChange={e => setDesde(e.target.value)}
+              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label htmlFor="rev-hasta" className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1">Hasta</label>
+            <input id="rev-hasta" type="date" value={hasta} onChange={e => setHasta(e.target.value)}
+              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm" />
+          </div>
+          {(desde || hasta) && (
+            <button onClick={() => { setDesde(""); setHasta(""); }} className="text-xs font-semibold text-slate-500 underline pb-2">
+              Quitar período
+            </button>
+          )}
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 pb-1.5 cursor-pointer">
+            <input type="checkbox" checked={soloPrestadas} onChange={e => setSoloPrestadas(e.target.checked)} />
+            <ArrowLeftRight className="w-4 h-4 text-amber-700" /> Solo ambulancias prestadas
+          </label>
+          <button
+            onClick={() => descargarPautasExcel(paraImprimir, { desde, hasta, centro: centroSeleccionado })}
+            disabled={paraImprimir.length === 0}
+            className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white disabled:opacity-40"
+            style={{ background: "#15803D" }}>
+            <FileSpreadsheet className="w-4 h-4" />
+            Descargar Excel ({paraImprimir.length})
           </button>
         </div>
 

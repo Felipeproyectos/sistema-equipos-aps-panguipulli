@@ -25,8 +25,9 @@ export default function TurnoChoferForm({ equipos, loading, onSuccess, equipoFij
     }
     setError("");
     setSaving(true);
-    const equipoLabel = equipoFijo
-      ? `${equipoFijo.marca} ${equipoFijo.modelo}${equipoFijo.patente ? ` — ${equipoFijo.patente}` : ""}`
+    const elegido = equipoFijo || equipo;
+    const equipoLabel = elegido
+      ? `${elegido.marca} ${elegido.modelo}${elegido.patente ? ` — ${elegido.patente}` : ""}`
       : form.equipo_id;
 
     try {

@@ -441,7 +441,10 @@ export default async function (req) {
       const datos = (() => { try { return insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { return {}; } })();
       const equipo = datos.equipo || {};
 
-      const establecimiento = normalizarEstablecimiento(equipo.centro_principal) || 'Sin Establecimiento';
+      // Si estaba prestada, el PDF va a la carpeta del centro que la tenía: es
+      // el que la revisó y el que la va a buscar en una auditoría.
+      const centroACargo = datos.prestamo?.centro_destino || equipo.centro_principal;
+      const establecimiento = normalizarEstablecimiento(centroACargo) || 'Sin Establecimiento';
       const categoriaEquipo = TIPO_FORMULARIO_LABEL[insp.tipo_formulario] === 'Turno Chofer'
         ? 'Turno Chofer'
         : TIPO_EQUIPO_CATEGORIA[equipo.tipo] || equipo.tipo || 'Otros';
@@ -457,7 +460,8 @@ export default async function (req) {
       const mesCarpetaId = await obtenerOCrearCarpeta(`${mesLabel} ${anio}`, categoriaCarpetaId, accessToken);
 
       const tipoLabel = TIPO_FORMULARIO_LABEL[insp.tipo_formulario] || insp.tipo_formulario;
-      const nombreArchivo = `${tipoLabel} - ${insp.equipo_label || insp.equipo_id} - ${insp.fecha || 'sin-fecha'}`;
+      const nombreArchivo = `${tipoLabel} - ${insp.equipo_label || insp.equipo_id} - ${insp.fecha || 'sin-fecha'}`
+        + (datos.prestamo?.centro_destino ? ` (prestada por ${equipo.centro_principal || datos.prestamo.centro_origen || ''})` : '');
 
       const revisorInfo = { full_name: insp.revisor_nombre || user.full_name, email: insp.revisor_email || user.email };
       const htmlContent = htmlInspeccion(insp, revisorInfo);

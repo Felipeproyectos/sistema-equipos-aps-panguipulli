@@ -75,7 +75,11 @@ export default async function (req) {
         : '';
 
       // Crear actividad
-      await base44.asServiceRole.entities.Actividad.create({
+      // El centro que tenía el equipo al hacer la pauta (si estaba prestado,
+      // el que lo recibió): con él ese centro conserva el historial después
+      // de devolverlo (30_historial_prestamo.sql). Si la columna todavía no
+      // existe, la actividad se guarda igual, sin él.
+      const actividad = {
         equipo_id: inspeccion.equipo_id,
         tipo: tipoActividad,
         fecha: inspeccion.fecha,
@@ -83,6 +87,14 @@ export default async function (req) {
         usuario_email: inspeccion.revisor_email || user.email,
         observaciones: esCabina ? resumenCabina : (inspeccion.observaciones || ''),
         ...(archivosCabina[0] && { archivo_url: archivosCabina[0].url }),
+      };
+      const aCargo = {
+        centro_responsable: datos.prestamo?.centro_destino || datos.equipo?.centro_principal || '',
+        ...(datos.prestamo?.id && { prestamo_id: datos.prestamo.id }),
+      };
+      await base44.asServiceRole.entities.Actividad.create({ ...actividad, ...aCargo }).catch((e) => {
+        if (!/centro_responsable|prestamo_id/.test(String(e?.message))) throw e;
+        return base44.asServiceRole.entities.Actividad.create(actividad);
       });
 
       // Crear registro en HistorialMantenimiento
