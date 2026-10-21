@@ -1,5 +1,5 @@
 import { differenceInDays, parseISO } from "date-fns";
-import { AlertTriangle, Zap, Activity, Car, Monitor, MapPin, Hash, Truck, Bus } from "lucide-react";
+import { AlertTriangle, Zap, Activity, Car, Monitor, MapPin, Hash, Truck, Bus, ArrowLeftRight } from "lucide-react";
 import { TIPOS_EQUIPO, ESTADOS_EQUIPO, resolverUbicacion } from "@/lib/centros";
 
 const TIPO_ICONS = {
@@ -107,6 +107,14 @@ export default function EquipoCard({ equipo, parches, onClick, onEdit }) {
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <Car className="w-3 h-3 text-slate-400" />
               <span className="font-semibold text-slate-700">{equipo.patente}</span>
+            </div>
+          )}
+          {/* Prestada a otro centro (src/lib/prestamoEquipo.js) */}
+          {equipo.prestamo && (
+            <div className="flex items-center gap-2 text-xs font-semibold px-2.5 py-1.5 rounded-lg"
+              style={{ background: "#FEF3C7", color: "#92400E" }}>
+              <ArrowLeftRight className="w-3 h-3 flex-shrink-0" />
+              <span>Prestada a {equipo.prestamo.centro_destino}</span>
             </div>
           )}
         </div>

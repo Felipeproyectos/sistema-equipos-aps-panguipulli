@@ -27,8 +27,10 @@ DESTINO = os.path.join(RAIZ, "servidor", "compartido")
 # está disponible con la misma regla que muestra la pantalla del chofer.
 # fallasPauta.js lo usa aprobarInspeccion.js: abre la OT con las mismas
 # fallas que muestra Revisión Bitácora.
+# prestamoEquipo.js lo usan las funciones que reparten equipos y pautas por
+# centro: una ambulancia prestada cuenta también en el centro que la tiene.
 ARCHIVOS = ["agendaTaller.js", "calendarioFlota.js", "panelFlota.js", "contadoresMenu.js", "turnoFlota.js",
-            "fallasPauta.js"]
+            "fallasPauta.js", "prestamoEquipo.js"]
 
 CABECERA = ("// Copia de src/lib/{nombre}, generada por migracion/sincronizar_compartido.py.\n"
             "// No editar a mano: se edita el original y se vuelve a correr el script.\n\n")

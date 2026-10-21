@@ -65,6 +65,7 @@ EDITADAS_EN_SERVIDOR = [
     "getMonitorData",
     "getPublicAmbulances",
     "getUsuariosPorCentro",
+    "guardarInspeccionPendiente",
     "subirInspeccionDrive",
 ]
 

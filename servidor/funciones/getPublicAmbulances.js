@@ -1,5 +1,6 @@
 import { createClientFromRequest } from '#compat';
 import { miTurnoActivo, MODO_MI_TURNO, MODO_PAUTAS } from '../compartido/turnoFlota.js';
+import { prestamoVigente } from '../compartido/prestamoEquipo.js';
 
 export default async function (req) {
   if (req.method === 'OPTIONS') {
@@ -9,9 +10,10 @@ export default async function (req) {
   try {
     const base44 = createClientFromRequest(req, { allowUnauthenticated: true });
 
-    const [equipos, configs] = await Promise.all([
+    const [equipos, configs, prestamos] = await Promise.all([
       base44.asServiceRole.entities.Equipo.list(),
       base44.asServiceRole.entities.AppConfig.list().catch(() => []),
+      base44.asServiceRole.entities.PrestamoVehiculo.filter({ estado: 'vigente' }).catch(() => []),
     ]);
 
     const result = equipos.map(e => ({
@@ -24,7 +26,9 @@ export default async function (req) {
       centro_principal: e.centro_principal,
       subsede: e.subsede || "",
       ubicacion_especifica: e.ubicacion_especifica || "",
-      estado: e.estado || "operativo"
+      estado: e.estado || "operativo",
+      // Prestada: el centro que la tiene hoy, para que la encuentre al llenar la pauta.
+      prestada_a: prestamoVigente(prestamos, e.id)?.centro_destino || ""
     }));
 
     // Con «Mi turno» apagado (26_modo_turno.sql) la tarjeta Turno Chofer de

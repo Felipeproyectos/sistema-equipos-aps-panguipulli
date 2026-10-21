@@ -34,7 +34,11 @@ export default async function (req) {
       const equipo = inspeccion.equipo_id
         ? await base44.asServiceRole.entities.Equipo.get(inspeccion.equipo_id)
         : null;
-      if (!equipo || !user.centro_principal || equipo.centro_principal !== user.centro_principal) {
+      // Si estaba prestada, también la aprueba el centro que la tenía.
+      let datosInsp = {};
+      try { datosInsp = inspeccion.datos_json ? JSON.parse(inspeccion.datos_json) : {}; } catch { datosInsp = {}; }
+      const centros = [equipo?.centro_principal, datosInsp.prestamo?.centro_destino].filter(Boolean);
+      if (!equipo || !user.centro_principal || !centros.includes(user.centro_principal)) {
         return Response.json(
           { error: 'Esta inspección pertenece a otro centro' },
           { status: 403 },

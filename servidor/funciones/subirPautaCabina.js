@@ -1,4 +1,5 @@
 import { createClientFromRequest } from '#compat';
+import { prestamoVigente } from '../compartido/prestamoEquipo.js';
 
 // Recibe la Pauta de Cabina de una ambulancia desde la pagina publica de
 // pautas (o desde la ficha del vehiculo): los archivos que la persona subio
@@ -105,6 +106,10 @@ export default async function (req) {
     // Igual que guardarInspeccionPendiente: marca y modelo. La patente la
     // agrega la pantalla al lado, desde datos_json.equipo.
     const etiqueta = `${equipo.marca || ''} ${equipo.modelo || ''}`.trim();
+    // Si está prestada, la revisa el centro que la tiene (src/lib/prestamoEquipo.js).
+    const vigentes = await base44.asServiceRole.entities.PrestamoVehiculo
+      .filter({ equipo_id: equipo.id, estado: 'vigente' }).catch(() => []);
+    const pv = prestamoVigente(vigentes, equipo.id);
     const registro = await base44.asServiceRole.entities.InspeccionPendiente.create({
       tipo_formulario: 'pauta_cabina',
       equipo_id: equipo.id,
@@ -128,6 +133,7 @@ export default async function (req) {
         material_caducado: datos.material_caducado,
         reponer_material: datos.reponer_material,
         archivos: guardados,
+        prestamo: pv ? { id: pv.id, centro_origen: pv.centro_origen || '', centro_destino: pv.centro_destino || '', desde: pv.desde || '' } : null,
       }),
       estado: 'pendiente',
     });

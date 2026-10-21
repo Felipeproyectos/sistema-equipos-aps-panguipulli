@@ -29,6 +29,17 @@ function centroDeInspeccion(insp, equiposPorId = {}) {
   return datos.equipo?.centro_principal || equipoActual?.centro_principal || "";
 }
 
+// Si la ambulancia estaba prestada el día de la pauta, la pauta es del centro
+// que la tenía: ahí se agrupa y ese centro la revisa (el dueño también la ve).
+// El servidor deja el préstamo dentro de la pauta al recibirla; para las de
+// antes se busca entre los préstamos (src/lib/prestamoEquipo.js).
+function centroPrestamoDeInspeccion(insp, prestamos = []) {
+  let datos = {};
+  try { datos = insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { datos = {}; }
+  return datos.prestamo?.centro_destino
+    || prestamoEnFecha(prestamos, insp.equipo_id, insp.fecha)?.centro_destino || "";
+}
+
 function subsedeDeInspeccion(insp, equiposPorId = {}) {
   let datos = {};
   try { datos = insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { datos = {}; }
@@ -44,6 +55,7 @@ import DetallePautaCabina from "@/components/bitacora/DetallePautaCabina";
 import ChecklistPlano from "@/components/equipos2/ChecklistPlano";
 import { pautaConFallas, tieneChecklistPlano } from "@/lib/fallasPauta";
 import { TIPOS_VEHICULO } from "@/lib/turnoFlota";
+import { prestamoEnFecha } from "@/lib/prestamoEquipo";
 
 const TIPO_LABEL = {
   inspeccion_semanal: "Pauta Semanal",
@@ -341,6 +353,11 @@ function InspeccionCard({ insp, onActualizar }) {
                   {equipo.centro_principal}
                   {equipo.subsede && ` · ${equipo.subsede}`}
                 </span>
+                {insp.prestada_por && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#FEF3C7", color: "#92400E" }}>
+                    Prestada por {insp.prestada_por}
+                  </span>
+                )}
               </div>
             )}
 
@@ -559,20 +576,27 @@ export default function RevisionInspecciones() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, equipos] = await Promise.all([
+      const [data, equipos, prestamos] = await Promise.all([
         filtro === "todos"
           ? base44.entities.InspeccionPendiente.list("-created_date", 500)
           : base44.entities.InspeccionPendiente.filter({ estado: filtro }, "-created_date", 500),
         base44.entities.Equipo.list("-created_date", 500).catch(() => []),
+        base44.entities.PrestamoVehiculo.list("-desde", 500).catch(() => []),
       ]);
       const porId = Object.fromEntries((equipos || []).map(e => [e.id, e]));
       // El centro se resuelve una vez, aca: agrupacion, permisos, tarjeta y PDF
       // leen todos el mismo campo y no pueden discrepar entre si.
-      setInspecciones((data || []).map(i => ({
-        ...i,
-        centro_resuelto: centroDeInspeccion(i, porId),
-        subsede_resuelta: subsedeDeInspeccion(i, porId),
-      })));
+      setInspecciones((data || []).map(i => {
+        const dueno = centroDeInspeccion(i, porId);
+        const prestada = centroPrestamoDeInspeccion(i, prestamos || []);
+        return {
+          ...i,
+          centro_resuelto: prestada || dueno,
+          centro_dueno: dueno,
+          prestada_por: prestada && prestada !== dueno ? dueno : "",
+          subsede_resuelta: prestada ? "" : subsedeDeInspeccion(i, porId),
+        };
+      }));
     } catch (e) {
       console.error("No se pudieron cargar las inspecciones:", e);
       setInspecciones([]);
@@ -586,7 +610,7 @@ export default function RevisionInspecciones() {
 
   const permitidos = centrosPermitidos(user);
   const enAlcance = permitidos
-    ? inspecciones.filter(i => permitidos.includes(i.centro_resuelto))
+    ? inspecciones.filter(i => permitidos.includes(i.centro_resuelto) || permitidos.includes(i.centro_dueno))
     : inspecciones;
   const filtradas = enAlcance
     .filter(i => filtro === "todos" || i.estado === filtro)
