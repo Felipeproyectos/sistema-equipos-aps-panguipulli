@@ -17,6 +17,7 @@ import {
   textoCita, casosDeMovilizacion, pesoDelCaso,
 } from "@/lib/agendaTaller";
 import { esVehiculo } from "@/lib/centros";
+import { rotuloOrigenSolicitud } from "@/lib/fallasPauta";
 import { isSimulandoActivo } from "@/lib/roleSimulator";
 import AyudaPantalla from "@/components/flota/AyudaPantalla";
 import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
@@ -282,7 +283,7 @@ export default function Movilizacion() {
 
       <div className="max-w-5xl mx-auto px-4 lg:px-10 pt-5 pb-10">
         <AyudaPantalla clave="solicitudes-agenda">
-          <strong>1.</strong> Lo que pide Salud llega a <em>Por revisar</em>: <strong>Derivar al taller</strong> o
+          <strong>1.</strong> Lo que pide Salud y las fallas de las pautas llegan a <em>Por revisar</em>: <strong>Derivar al taller</strong> o
           {" "}<strong>Cerrar sin taller</strong>. También puedes <strong>Pedir revisión</strong> tú mismo.
           {" "}<strong>2.</strong> El Jefe de Taller te <strong>propone día y hora</strong> de ingreso y cuándo lo
           devuelve. <strong>3.</strong> En <em>Con el taller</em> la <strong>confirmas</strong> o
@@ -341,7 +342,7 @@ export default function Movilizacion() {
                       </p>
                       <p className="text-sm text-slate-500 mt-0.5">
                         {s
-                          ? <>{s.origen === "pauta_chofer" ? "Informado por el chofer" : "Pedido por Salud"} · {ETIQUETA_TIPO[s.tipo] || s.tipo}{s.centro && <> · {s.centro}</>}</>
+                          ? <>{rotuloOrigenSolicitud(s)} · {ETIQUETA_TIPO[s.tipo] || s.tipo}{s.centro && <> · {s.centro}</>}</>
                           : <>Pedido por Movilización</>}
                       </p>
                     </div>

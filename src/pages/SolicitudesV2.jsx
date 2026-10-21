@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import { puedeEliminar } from "@/lib/roles";
 import { esSolicitudDeFlota } from "@/lib/panelFlota";
+import { ORIGEN_PAUTA } from "@/lib/fallasPauta";
 import SeguimientoTaller from "@/components/salud/SeguimientoTaller";
 
 const ESTADO_CONFIG = {
@@ -149,7 +150,8 @@ export default function SolicitudesV2() {
                     </p>
                     {isAdmin && sol.usuario_nombre && <p className="text-xs text-slate-400">Solicitante: {sol.usuario_nombre}</p>}
                     {sol.alerta_id && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200 inline-block mt-1">Desde alerta</span>}
-                    {sol.observaciones && <p className="text-xs text-slate-500 mt-1">{sol.observaciones}</p>}
+                    {sol.origen === ORIGEN_PAUTA && <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 inline-block mt-1">Falla en una pauta</span>}
+                    {sol.observaciones && <p className="text-xs text-slate-500 mt-1 whitespace-pre-line">{sol.observaciones}</p>}
                     {sol.respuesta_admin && (
                       <p className="text-xs text-blue-600 mt-1 bg-blue-50 rounded-lg px-2 py-1">Resp: {sol.respuesta_admin}</p>
                     )}

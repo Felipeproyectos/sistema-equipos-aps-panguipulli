@@ -99,6 +99,11 @@ function coincide(fila, filtro) {
     if (valor && typeof valor === 'object' && Array.isArray(valor.$in)) {
       return valor.$in.includes(fila[campo]);
     }
+    if (valor && typeof valor === 'object' && ('$gte' in valor || '$lte' in valor)) {
+      const v = fila[campo] ?? '';
+      return (valor.$gte == null || valor.$gte === '' || v >= valor.$gte)
+        && (valor.$lte == null || valor.$lte === '' || v <= valor.$lte);
+    }
     return fila[campo] === valor;
   });
 }

@@ -1,4 +1,5 @@
 import { format, parseISO } from "date-fns";
+import { escaparDatos, abrirInformeHtml } from "@/lib/informeHtml";
 
 const ESTADO_STYLES = {
   pendiente: { bg: "#fef9c3", color: "#ca8a04", label: "PENDIENTE" },
@@ -19,7 +20,9 @@ const fmtFecha = (f) => {
   try { return format(parseISO(f), "dd/MM/yyyy"); } catch { return f; }
 };
 
-export function generarPDFSolicitudRepuesto(sol) {
+export function generarPDFSolicitudRepuesto(solicitud) {
+  // Todo texto de la base va escapado: ver src/lib/informeHtml.js.
+  const sol = escaparDatos(solicitud);
   const hoy = new Date();
   const est = ESTADO_STYLES[sol.estado] || ESTADO_STYLES.pendiente;
 
@@ -109,6 +112,5 @@ export function generarPDFSolicitudRepuesto(sol) {
 <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 </body></html>`;
 
-  const blob = new Blob([html], { type: "text/html" });
-  window.open(URL.createObjectURL(blob), "_blank");
+  return abrirInformeHtml(html);
 }

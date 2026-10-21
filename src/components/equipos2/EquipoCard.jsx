@@ -1,6 +1,7 @@
 import { differenceInDays, parseISO } from "date-fns";
 import { AlertTriangle, Zap, Activity, Car, Monitor, MapPin, Hash, Truck, Bus } from "lucide-react";
 import { TIPOS_EQUIPO, ESTADOS_EQUIPO, resolverUbicacion } from "@/lib/centros";
+import BadgeCedida from "@/components/BadgeCedida";
 
 const TIPO_ICONS = {
   dea: Zap,
@@ -109,6 +110,8 @@ export default function EquipoCard({ equipo, parches, onClick, onEdit }) {
               <span className="font-semibold text-slate-700">{equipo.patente}</span>
             </div>
           )}
+          {/* Cedida a otro centro (src/lib/prestamoEquipo.js) */}
+          {equipo.prestamo && <BadgeCedida detalle={`a ${equipo.prestamo.centro_destino}`} />}
         </div>
 
         {/* Alert strip */}

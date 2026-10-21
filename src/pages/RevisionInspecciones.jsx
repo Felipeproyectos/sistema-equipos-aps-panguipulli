@@ -29,6 +29,17 @@ function centroDeInspeccion(insp, equiposPorId = {}) {
   return datos.equipo?.centro_principal || equipoActual?.centro_principal || "";
 }
 
+// Si la ambulancia estaba prestada el día de la pauta, la pauta es del centro
+// que la tenía: ahí se agrupa y ese centro la revisa (el dueño también la ve).
+// El servidor deja el préstamo dentro de la pauta al recibirla; para las de
+// antes se busca entre los préstamos (src/lib/prestamoEquipo.js).
+function centroPrestamoDeInspeccion(insp, prestamos = []) {
+  let datos = {};
+  try { datos = insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { datos = {}; }
+  return datos.prestamo?.centro_destino
+    || prestamoEnFecha(prestamos, insp.equipo_id, insp.fecha)?.centro_destino || "";
+}
+
 function subsedeDeInspeccion(insp, equiposPorId = {}) {
   let datos = {};
   try { datos = insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { datos = {}; }
@@ -36,11 +47,17 @@ function subsedeDeInspeccion(insp, equiposPorId = {}) {
 }
 import {
   CheckCircle, XCircle, ChevronDown, ChevronUp, ClipboardCheck, Car, MapPin, User, Calendar,
-  Fuel, Gauge, Zap, Wrench, Package, FileText, AlertCircle, Printer, Stethoscope
+  Fuel, Gauge, Zap, Wrench, Package, FileText, AlertCircle, Printer, Stethoscope, FileSpreadsheet, ArrowLeftRight
 } from "lucide-react";
 import { generarPDFPautas } from "@/utils/generarPDFPautas";
 import { TIPO_FORMULARIO as TIPO_CABINA, leerPautaCabina, tieneAvisos } from "@/lib/pautaCabina";
 import DetallePautaCabina from "@/components/bitacora/DetallePautaCabina";
+import ChecklistPlano from "@/components/equipos2/ChecklistPlano";
+import { pautaConFallas, tieneChecklistPlano } from "@/lib/fallasPauta";
+import { TIPOS_VEHICULO } from "@/lib/turnoFlota";
+import { prestamoEnFecha } from "@/lib/prestamoEquipo";
+import { descargarPautasExcel } from "@/utils/exportarPautasExcel";
+import BadgeCedida from "@/components/BadgeCedida";
 
 const TIPO_LABEL = {
   inspeccion_semanal: "Pauta Semanal",
@@ -214,12 +231,16 @@ function InspeccionCard({ insp, onActualizar }) {
   const estado = ESTADO_CFG[insp.estado] || ESTADO_CFG.pendiente;
   const esCabina = insp.tipo_formulario === TIPO_CABINA;
   const cabina = esCabina ? leerPautaCabina(insp) : null;
-  const hasFallas = !esCabina && (insp.observaciones?.includes("Fallas:") || insp.observaciones?.includes("Daños"));
 
   // Parsear datos_json
   const datos = (() => {
     try { return insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { return {}; }
   })();
+  const hasFallas = !esCabina && pautaConFallas(insp, datos);
+  // Los monitores, desfibriladores y DEA guardan un checklist plano; las
+  // ambulancias, sus bloques (luces, motor…). Ver src/lib/fallasPauta.js.
+  const conChecklist = tieneChecklistPlano(datos);
+  const conBloquesAmbulancia = ["luces", "motor", "accesorios", "documentos", "danos"].some(k => datos[k]);
 
   // Un solo lugar donde el centro queda resuelto: la cabecera, el detalle
   // expandido y el PDF muestran todos lo mismo.
@@ -229,6 +250,15 @@ function InspeccionCard({ insp, onActualizar }) {
     subsede: insp.subsede_resuelta || datos.equipo?.subsede || "",
   };
   const horaRegistro = datos.hora_registro;
+  // Quien llena la pauta de un equipo médico no es un conductor.
+  const esVehiculo = TIPOS_VEHICULO.includes(equipo.tipo)
+    || insp.tipo_formulario === "turno_chofer" || insp.tipo_formulario === "inspeccion_diaria";
+  const IconoEquipo = esVehiculo ? Car : Stethoscope;
+  const rotuloNota = esCabina ? "Nota para quien la subió (opcional)"
+    : esVehiculo ? "Nota al conductor (opcional)" : "Nota para el responsable (opcional)";
+  const ejemploNota = esCabina ? "Ej: la foto no se lee, súbela de nuevo..."
+    : esVehiculo ? "Ej: KM no coincide con el anterior registro..."
+    : "Ej: falta indicar la fecha de vencimiento de los electrodos...";
 
   const handleAccion = async (accion) => {
     setProcessing(true);
@@ -241,16 +271,21 @@ function InspeccionCard({ insp, onActualizar }) {
       const data = res.data || res;
       if (accion === "aprobar" && esCabina) {
         toast({ title: "Pauta de Cabina aprobada", description: "Quedó en el historial de la ambulancia." });
-      } else if (accion === "aprobar" && data?.ot_creada) {
+      } else if (accion === "aprobar" && data?.solicitud_creada) {
+        // Las fallas no van directo al taller: las decide Movilización (vehículos)
+        // o Salud (equipos). Ver src/lib/fallasPauta.js.
+        const aQuien = data.solicitud_creada.area === "movilizacion"
+          ? "Movilización (Solicitudes al Taller)" : "Salud (Solicitudes)";
         toast({
-          title: "Orden de Trabajo creada automáticamente",
-          description: `${data.ot_creada.numero_ot} — ${data.ot_creada.fallas} falla(s) detectada(s). Prioridad: ${data.ot_creada.prioridad}.`,
-          variant: "default",
+          title: "Pauta aprobada con fallas",
+          description: data.solicitud_creada.nueva
+            ? `Se envió una solicitud a ${aQuien}, que decide si va al taller.`
+            : `Se sumó a la solicitud que ${aQuien} ya tenía abierta para este equipo.`,
         });
       } else if (accion === "aprobar") {
-        toast({ title: "Inspección aprobada", description: "Sin fallas — no se requiere orden de trabajo." });
+        toast({ title: "Inspección aprobada", description: "Sin fallas." });
       } else {
-        toast({ title: "Inspección rechazada", description: nota || "Se notificó al conductor." });
+        toast({ title: "Inspección rechazada", description: nota || "Quedó registrada como rechazada." });
       }
     } catch (err) {
       toast({ title: "Error", description: err.message || "No se pudo procesar", variant: "destructive" });
@@ -275,6 +310,7 @@ function InspeccionCard({ insp, onActualizar }) {
             {/* Título y estado */}
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <p className="font-bold text-slate-800">{TIPO_LABEL[insp.tipo_formulario] || insp.tipo_formulario}</p>
+              {insp.prestada_por && <BadgeCedida detalle={`por ${insp.prestada_por}`} />}
               <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                 style={{ background: estado.bg, color: estado.color }}>
                 {estado.label}
@@ -303,7 +339,7 @@ function InspeccionCard({ insp, onActualizar }) {
 
             {/* Tipo y nombre del equipo */}
             <div className="flex items-center gap-1.5 mb-1">
-              <Car className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+              <IconoEquipo className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
               <span className="text-sm font-semibold text-blue-700">
                 {equipo.tipo ? TIPO_EQUIPO_LABEL[equipo.tipo] || equipo.tipo : "Equipo"}
                 {" · "}
@@ -320,6 +356,9 @@ function InspeccionCard({ insp, onActualizar }) {
                   {equipo.centro_principal}
                   {equipo.subsede && ` · ${equipo.subsede}`}
                 </span>
+                {insp.prestada_por && (
+                  <span className="text-xs text-amber-800 font-semibold">· cedida por {insp.prestada_por}</span>
+                )}
               </div>
             )}
 
@@ -393,7 +432,7 @@ function InspeccionCard({ insp, onActualizar }) {
           {equipo.centro_principal && (
             <div className="p-3 rounded-xl text-xs space-y-1" style={{ background: "#EFF6FF", border: "1px solid #BFDBFE" }}>
               <p className="font-bold text-blue-700 mb-1.5 flex items-center gap-1.5">
-                <Car className="w-3.5 h-3.5" /> Información del Equipo
+                <IconoEquipo className="w-3.5 h-3.5" /> Información del Equipo
               </p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-700">
                 <span><span className="font-semibold">Tipo:</span> {TIPO_EQUIPO_LABEL[equipo.tipo] || equipo.tipo || "-"}</span>
@@ -409,11 +448,23 @@ function InspeccionCard({ insp, onActualizar }) {
           {insp.tipo_formulario === "inspeccion_semanal" && (
             <div className="space-y-2">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Revisión de Ítems</p>
-              <ChecklistDetail titulo="Luces" icon={Zap} color="#F59E0B" data={datos.luces} />
-              <ChecklistDetail titulo="Motor" icon={Wrench} color="#2563EB" data={datos.motor} />
-              <ChecklistDetail titulo="Accesorios" icon={Package} color="#7C3AED" data={datos.accesorios} />
-              <ChecklistDetail titulo="Documentos" icon={FileText} color="#059669" data={datos.documentos} />
-              <DanosDetail danos={datos.danos} />
+              {conChecklist ? (
+                <ChecklistPlano data={datos.checklist} parches={datos.parches} descripcion={datos.descripcion} />
+              ) : conBloquesAmbulancia ? (
+                <>
+                  <ChecklistDetail titulo="Luces" icon={Zap} color="#F59E0B" data={datos.luces} />
+                  <ChecklistDetail titulo="Motor" icon={Wrench} color="#2563EB" data={datos.motor} />
+                  <ChecklistDetail titulo="Accesorios" icon={Package} color="#7C3AED" data={datos.accesorios} />
+                  <ChecklistDetail titulo="Documentos" icon={FileText} color="#059669" data={datos.documentos} />
+                  <DanosDetail danos={datos.danos} />
+                </>
+              ) : (
+                // Pautas sin ítems guardados (las que se llenan solo con un
+                // resultado general, o las antiguas): se muestra lo que trae.
+                <div className="p-3 rounded-xl text-xs text-slate-700 bg-white" style={{ border: "1px solid #E2E8F0" }}>
+                  {insp.observaciones?.trim() || "Esta pauta no trae el detalle de los ítems revisados."}
+                </div>
+              )}
             </div>
           )}
 
@@ -474,10 +525,8 @@ function InspeccionCard({ insp, onActualizar }) {
           {insp.estado === "pendiente" && (
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">
-                  {esCabina ? "Nota para quien la subió (opcional)" : "Nota al conductor (opcional)"}
-                </label>
-                <textarea rows={2} placeholder={esCabina ? "Ej: la foto no se lee, súbela de nuevo..." : "Ej: KM no coincide con el anterior registro..."}
+                <label className="text-xs font-semibold text-slate-600 block mb-1">{rotuloNota}</label>
+                <textarea rows={2} placeholder={ejemploNota}
                   value={nota} onChange={e => setNota(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
               </div>
@@ -497,6 +546,12 @@ function InspeccionCard({ insp, onActualizar }) {
                   <CheckCircle className="w-4 h-4" /> Aprobar y Sincronizar
                 </button>
               </div>
+              {hasFallas && (
+                <p className="text-xs text-slate-500 flex items-start gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
+                  Al aprobarla, las fallas le llegan a {esVehiculo ? "Movilización (Solicitudes al Taller)" : "Salud (Solicitudes)"}, que decide si va al taller.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -512,6 +567,12 @@ export default function RevisionInspecciones() {
   const [filtro, setFiltro] = useState("pendiente");
   const [centroSeleccionado, setCentroSeleccionado] = useState("todos");
   const [tipoSeleccionado, setTipoSeleccionado] = useState("todos");
+  // Para una revisión: un período y, si se quiere, solo lo que se hizo con
+  // ambulancias prestadas. Con período se piden todas las de esas fechas,
+  // no las 500 más recientes.
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [soloPrestadas, setSoloPrestadas] = useState(false);
   const { toast } = useToast();
 
   // Antes: list("-created_date", 100) sobre 259 registros. Las inspecciones
@@ -522,26 +583,38 @@ export default function RevisionInspecciones() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, equipos] = await Promise.all([
-        filtro === "todos"
-          ? base44.entities.InspeccionPendiente.list("-created_date", 500)
-          : base44.entities.InspeccionPendiente.filter({ estado: filtro }, "-created_date", 500),
+      const conPeriodo = !!(desde || hasta);
+      const condicion = {
+        ...(filtro === "todos" ? {} : { estado: filtro }),
+        ...(conPeriodo ? { fecha: { $gte: desde, $lte: hasta } } : {}),
+      };
+      const [data, equipos, prestamos] = await Promise.all([
+        Object.keys(condicion).length
+          ? base44.entities.InspeccionPendiente.filter(condicion, conPeriodo ? "-fecha" : "-created_date", conPeriodo ? 5000 : 500)
+          : base44.entities.InspeccionPendiente.list("-created_date", 500),
         base44.entities.Equipo.list("-created_date", 500).catch(() => []),
+        base44.entities.PrestamoVehiculo.list("-desde", 500).catch(() => []),
       ]);
       const porId = Object.fromEntries((equipos || []).map(e => [e.id, e]));
       // El centro se resuelve una vez, aca: agrupacion, permisos, tarjeta y PDF
       // leen todos el mismo campo y no pueden discrepar entre si.
-      setInspecciones((data || []).map(i => ({
-        ...i,
-        centro_resuelto: centroDeInspeccion(i, porId),
-        subsede_resuelta: subsedeDeInspeccion(i, porId),
-      })));
+      setInspecciones((data || []).map(i => {
+        const dueno = centroDeInspeccion(i, porId);
+        const prestada = centroPrestamoDeInspeccion(i, prestamos || []);
+        return {
+          ...i,
+          centro_resuelto: prestada || dueno,
+          centro_dueno: dueno,
+          prestada_por: prestada && prestada !== dueno ? dueno : "",
+          subsede_resuelta: prestada ? "" : subsedeDeInspeccion(i, porId),
+        };
+      }));
     } catch (e) {
       console.error("No se pudieron cargar las inspecciones:", e);
       setInspecciones([]);
     }
     setLoading(false);
-  }, [filtro]);
+  }, [filtro, desde, hasta]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -549,9 +622,10 @@ export default function RevisionInspecciones() {
 
   const permitidos = centrosPermitidos(user);
   const enAlcance = permitidos
-    ? inspecciones.filter(i => permitidos.includes(i.centro_resuelto))
+    ? inspecciones.filter(i => permitidos.includes(i.centro_resuelto) || permitidos.includes(i.centro_dueno))
     : inspecciones;
   const filtradas = enAlcance
+    .filter(i => !soloPrestadas || i.prestada_por)
     .filter(i => filtro === "todos" || i.estado === filtro)
     .filter(i => tipoSeleccionado === "todos" || i.tipo_formulario === tipoSeleccionado);
   const pendientes = enAlcance.filter(i => i.estado === "pendiente").length;
@@ -612,6 +686,38 @@ export default function RevisionInspecciones() {
             style={{ background: "#0F172A" }}>
             <Printer className="w-4 h-4" />
             Imprimir {paraImprimir.length} pauta{paraImprimir.length === 1 ? "" : "s"} en PDF
+          </button>
+        </div>
+
+        {/* Período, prestadas y planilla: para sacar la información de una
+            revisión o auditoría (src/utils/exportarPautasExcel.js) */}
+        <div className="flex flex-wrap items-end gap-3 mb-5 p-3 rounded-2xl bg-white" style={{ border: "1px solid #E2E8F0" }}>
+          <div>
+            <label htmlFor="rev-desde" className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1">Desde</label>
+            <input id="rev-desde" type="date" value={desde} onChange={e => setDesde(e.target.value)}
+              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label htmlFor="rev-hasta" className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1">Hasta</label>
+            <input id="rev-hasta" type="date" value={hasta} onChange={e => setHasta(e.target.value)}
+              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm" />
+          </div>
+          {(desde || hasta) && (
+            <button onClick={() => { setDesde(""); setHasta(""); }} className="text-xs font-semibold text-slate-500 underline pb-2">
+              Quitar período
+            </button>
+          )}
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 pb-1.5 cursor-pointer">
+            <input type="checkbox" checked={soloPrestadas} onChange={e => setSoloPrestadas(e.target.checked)} />
+            <ArrowLeftRight className="w-4 h-4 text-amber-700" /> Solo ambulancias cedidas
+          </label>
+          <button
+            onClick={() => descargarPautasExcel(paraImprimir, { desde, hasta, centro: centroSeleccionado })}
+            disabled={paraImprimir.length === 0}
+            className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white disabled:opacity-40"
+            style={{ background: "#15803D" }}>
+            <FileSpreadsheet className="w-4 h-4" />
+            Descargar Excel ({paraImprimir.length})
           </button>
         </div>
 

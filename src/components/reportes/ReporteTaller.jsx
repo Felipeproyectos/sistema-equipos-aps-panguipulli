@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Wrench, Loader2, FileText, Clock, DollarSign, Package, User } from "lucide-react";
 import { format, differenceInDays, parseISO } from "date-fns";
 import { esVehiculo } from "@/lib/centros";
+import { esc, abrirInformeHtml } from "@/lib/informeHtml";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts";
@@ -111,18 +112,18 @@ export default function ReporteTaller() {
   const generarPDF = () => {
     setGenerando(true);
     const filasMec = dataMecanico.map(m => `<tr>
-      <td>${m.nombre}</td><td style="text-align:center">${m.total}</td>
+      <td>${esc(m.nombre)}</td><td style="text-align:center">${m.total}</td>
       <td style="text-align:center">${m.completadas}</td>
       <td style="text-align:right">$${m.costo.toLocaleString("es-CL")}</td>
     </tr>`).join("");
 
     const filasVeh = dataVehiculo.map(v => `<tr>
-      <td>${v.label}</td><td style="text-align:center">${v.ot}</td>
+      <td>${esc(v.label)}</td><td style="text-align:center">${v.ot}</td>
       <td style="text-align:right">$${v.costo.toLocaleString("es-CL")}</td>
     </tr>`).join("");
 
     const filasRep = dataConsumo.map(r => `<tr>
-      <td>${r.nombre}</td><td style="text-align:center">${r.cantidad}</td>
+      <td>${esc(r.nombre)}</td><td style="text-align:center">${r.cantidad}</td>
       <td style="text-align:right">$${r.costo.toLocaleString("es-CL")}</td>
     </tr>`).join("");
 
@@ -175,8 +176,7 @@ export default function ReporteTaller() {
 <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 </body></html>`;
 
-    const blob = new Blob([html], { type: "text/html" });
-    window.open(URL.createObjectURL(blob), "_blank");
+    abrirInformeHtml(html);
     setGenerando(false);
   };
 

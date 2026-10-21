@@ -1,4 +1,5 @@
 import { createClientFromRequest } from '#compat';
+import { ROTULO_PARCHES } from '../compartido/fallasPauta.js';
 
 // ── Helpers de Google Drive ──────────────────────────────────────────────────
 
@@ -206,11 +207,14 @@ function tablaChecklist(titulo, items, mapEstado) {
     <thead><tr><th style="width:50%">Ítem</th><th style="width:20%">Estado</th><th>Observación</th></tr></thead>
     <tbody>`;
   for (const [item, v] of Object.entries(items)) {
-    const { badge, label } = mapEstado(v?.estado);
+    // El multiparámetros guarda el estado como texto suelto ("ok"), no { estado }.
+    const estado = typeof v === 'string' ? v : v?.estado;
+    const obs = typeof v === 'string' ? '' : v?.obs;
+    const { badge, label } = mapEstado(estado);
     html += `<tr>
-      <td>${item}</td>
+      <td>${ROTULO_PARCHES[item] || item}</td>
       <td><span class="badge ${badge}">${label}</span></td>
-      <td>${v?.obs || '—'}</td>
+      <td>${obs || '—'}</td>
     </tr>`;
   }
   html += `</tbody></table>`;
@@ -218,9 +222,9 @@ function tablaChecklist(titulo, items, mapEstado) {
 }
 
 function mapEstadoBueno(estado) {
-  if (estado === 'bueno')  return { badge: 'b-ok',    label: 'OK' };
+  if (estado === 'bueno' || estado === 'ok')  return { badge: 'b-ok',    label: 'OK' };
   if (estado === 'malo')   return { badge: 'b-falla', label: 'FALLA' };
-  if (estado === 'n/a')    return { badge: 'b-na',    label: 'N/A' };
+  if (estado === 'n/a' || estado === 'na')    return { badge: 'b-na',    label: 'N/A' };
   return { badge: 'b-na', label: estado || '—' };
 }
 
@@ -322,6 +326,9 @@ function htmlInspeccion(insp, revisor) {
   // DEA / Monitor / Multiparametros: checklist genérico si viene en datos.checklist
   if (datos.checklist && Object.keys(datos.checklist).length > 0) {
     html += tablaChecklist('Checklist de Revisión', datos.checklist, mapEstadoBueno);
+  }
+  if (datos.parches && Object.keys(datos.parches).length > 0) {
+    html += tablaChecklist('Electrodos / Parches', datos.parches, mapEstadoBueno);
   }
 
   // ── Observaciones generales ──
@@ -434,7 +441,10 @@ export default async function (req) {
       const datos = (() => { try { return insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { return {}; } })();
       const equipo = datos.equipo || {};
 
-      const establecimiento = normalizarEstablecimiento(equipo.centro_principal) || 'Sin Establecimiento';
+      // Si estaba prestada, el PDF va a la carpeta del centro que la tenía: es
+      // el que la revisó y el que la va a buscar en una auditoría.
+      const centroACargo = datos.prestamo?.centro_destino || equipo.centro_principal;
+      const establecimiento = normalizarEstablecimiento(centroACargo) || 'Sin Establecimiento';
       const categoriaEquipo = TIPO_FORMULARIO_LABEL[insp.tipo_formulario] === 'Turno Chofer'
         ? 'Turno Chofer'
         : TIPO_EQUIPO_CATEGORIA[equipo.tipo] || equipo.tipo || 'Otros';
@@ -450,7 +460,8 @@ export default async function (req) {
       const mesCarpetaId = await obtenerOCrearCarpeta(`${mesLabel} ${anio}`, categoriaCarpetaId, accessToken);
 
       const tipoLabel = TIPO_FORMULARIO_LABEL[insp.tipo_formulario] || insp.tipo_formulario;
-      const nombreArchivo = `${tipoLabel} - ${insp.equipo_label || insp.equipo_id} - ${insp.fecha || 'sin-fecha'}`;
+      const nombreArchivo = `${tipoLabel} - ${insp.equipo_label || insp.equipo_id} - ${insp.fecha || 'sin-fecha'}`
+        + (datos.prestamo?.centro_destino ? ` (prestada por ${equipo.centro_principal || datos.prestamo.centro_origen || ''})` : '');
 
       const revisorInfo = { full_name: insp.revisor_nombre || user.full_name, email: insp.revisor_email || user.email };
       const htmlContent = htmlInspeccion(insp, revisorInfo);

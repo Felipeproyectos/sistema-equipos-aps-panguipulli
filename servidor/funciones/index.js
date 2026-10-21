@@ -21,7 +21,6 @@ import reportarIncidenteAmbulancia from './reportarIncidenteAmbulancia.js';
 import resumenDiarioPendientes from './resumenDiarioPendientes.js';
 import subirInspeccionDrive from './subirInspeccionDrive.js';
 import subirPautaCabina from './subirPautaCabina.js';
-import submitPublicBitacora from './submitPublicBitacora.js';
 import turnoVehiculo from './turnoVehiculo.js';
 import verificarStockRepuestos from './verificarStockRepuestos.js';
 
@@ -47,7 +46,6 @@ export const handlers = {
   resumenDiarioPendientes,
   subirInspeccionDrive,
   subirPautaCabina,
-  submitPublicBitacora,
   turnoVehiculo,
   verificarStockRepuestos,
 };

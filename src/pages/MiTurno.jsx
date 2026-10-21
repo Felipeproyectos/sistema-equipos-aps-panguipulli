@@ -135,7 +135,7 @@ export default function MiTurno() {
         {datos && paso === null && (
           <Inicio
             datos={datos} actual={actual} vehiculoActual={vehiculoActual} aviso={aviso}
-            soloLectura={soloLectura}
+            soloLectura={soloLectura} rol={user?.role}
             onTomar={() => { setAviso(""); setPaso("elegir"); }}
             onCambiar={() => { setAviso(""); setPaso("elegir"); }}
             onEntregar={() => { setAviso(""); setPaso("entregar"); }}
@@ -191,9 +191,14 @@ export default function MiTurno() {
 }
 
 /* ── Inicio: licencia, lo que tiene a cargo y su día ─────────────────── */
-function Inicio({ datos, actual, vehiculoActual, aviso, soloLectura, onTomar, onCambiar, onEntregar, onSalida, onCerrarSalida, registros }) {
+function Inicio({ datos, actual, vehiculoActual, aviso, soloLectura, rol, onTomar, onCambiar, onEntregar, onSalida, onCerrarSalida, registros }) {
   const lic = estadoLicencia(datos.yo.licencia_vencimiento);
-  const puede = datos.yo.licencia_vigente;
+  // Con «Mi turno» apagado en Configuración (26_modo_turno.sql) el chofer
+  // no toma vehículos acá: su turno va por la página pública de pautas. Sí
+  // puede entregar lo que tuviera abierto. Base del Sistema lo prueba igual.
+  const apagado = datos.mi_turno_activo === false;
+  const bloqueado = apagado && rol === "chofer";
+  const puede = datos.yo.licencia_vigente && !bloqueado;
   const abiertas = actual ? registros.filter(r => r.estado === "en_ruta" && r.equipo_id === actual.equipo_id) : [];
 
   return (
@@ -204,7 +209,26 @@ function Inicio({ datos, actual, vehiculoActual, aviso, soloLectura, onTomar, on
         </div>
       )}
 
-      {puede ? (
+      {bloqueado && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5 flex items-start gap-3">
+          <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-900">
+            <p className="font-bold">«Mi turno» todavía no está habilitado</p>
+            <p className="mt-0.5">Por ahora registra tu turno como siempre, en la página de pautas: <strong>Turno Chofer</strong>.</p>
+            <a href="/bitacora-publica" className="inline-flex items-center gap-1 mt-2 text-xs font-bold text-white bg-blue-600 rounded-lg px-3 py-1.5">
+              Ir a la página de pautas <ChevronRight className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        </div>
+      )}
+      {apagado && !bloqueado && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs text-blue-900 flex items-start gap-2">
+          <Info className="w-4 h-4 shrink-0" />
+          <span>«Mi turno» está apagado para los choferes (Configuración → Turno de los choferes). Tú puedes probarlo igual.</span>
+        </div>
+      )}
+
+      {datos.yo.licencia_vigente ? (
         <div className={`rounded-xl border px-3.5 py-2.5 text-xs font-semibold flex items-center gap-2 ${
           lic.clave === "por_vencer" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-green-200 bg-green-50 text-green-800"}`}>
           {lic.clave === "por_vencer" ? <Clock className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}

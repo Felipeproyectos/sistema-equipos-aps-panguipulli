@@ -7,6 +7,7 @@ import GestionSedes from "@/components/configuracion/GestionSedes";
 import BackupSection from "@/components/configuracion/BackupSection";
 import DatosDePruebaSection from "@/components/configuracion/DatosDePruebaSection";
 import ResumenDiarioSection from "@/components/configuracion/ResumenDiarioSection";
+import ModoTurnoSection from "@/components/configuracion/ModoTurnoSection";
 import { QRCodeSVG } from "qrcode.react";
 import { useAuth } from "@/lib/AuthContext";
 import { esAdministrador } from "@/lib/roles";
@@ -14,6 +15,7 @@ import { esAdministrador } from "@/lib/roles";
 export default function Configuracion() {
   const { user } = useAuth();
   const [config, setConfig] = useState(null);
+  const [configCargada, setConfigCargada] = useState(false);
   const [form, setForm]     = useState({ nombre_app: "", subtitulo: "", logo_url: "" });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,6 +32,7 @@ export default function Configuracion() {
       // la personalización sin cargar, porque los datos nunca se pedían.
       if (!esAdministrador(user?.role)) return;
       const configs = await base44.entities.AppConfig.list();
+      setConfigCargada(true);
       if (configs.length > 0) {
         setConfig(configs[0]);
         setForm({ nombre_app: configs[0].nombre_app || "", subtitulo: configs[0].subtitulo || "", logo_url: configs[0].logo_url || "" });
@@ -136,6 +139,9 @@ export default function Configuracion() {
             {saved ? "¡Guardado!" : "Guardar cambios"}
           </button>
         </div>
+
+        {/* Turno de los choferes: pautas o «Mi turno» (26_modo_turno.sql) */}
+        {configCargada && <ModoTurnoSection config={config} onGuardado={setConfig} />}
 
         {/* Las cuentas se administran en Usuarios. Acá había una copia vieja
             (de Base44) que cambiaba roles y borraba fichas escribiendo directo

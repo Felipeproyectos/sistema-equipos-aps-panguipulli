@@ -71,7 +71,7 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser,
         role,
         centro_principal: centroInfo,
       });
-      setCreada({ email: correo, clave: r.clave_temporal, correo_enviado: r.correo_enviado });
+      setCreada({ email: correo, clave: r.clave_temporal, correo_enviado: r.correo_enviado, ya_tenia_cuenta: !!r.ya_tenia_cuenta });
       setEmail("");
       setNombre("");
       setCentroSel([]);
@@ -202,7 +202,18 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser,
 
               {/* La clave temporal se muestra una sola vez: si el correo no
                   salió, es la única forma de entregarla. */}
-              {creada && (
+              {/* La persona ya tenía cuenta de acceso (Supabase es compartido con
+                  otro sistema): su clave no se toca ni se muestra. */}
+              {creada?.ya_tenia_cuenta && (
+                <div className="rounded-xl border border-green-200 bg-green-50 p-4 space-y-1.5">
+                  <p className="text-sm font-bold text-green-800">Acceso dado a {creada.email}</p>
+                  <p className="text-xs text-green-700">
+                    Esa persona ya tenía una cuenta de acceso: entra con su clave de siempre. Si no la recuerda,
+                    que use «Olvidé mi clave» en la pantalla de ingreso; el enlace le llega a su correo.
+                  </p>
+                </div>
+              )}
+              {creada && !creada.ya_tenia_cuenta && (
                 <div className="rounded-xl border border-green-200 bg-green-50 p-4 space-y-3">
                   <p className="text-sm font-bold text-green-800">Cuenta creada para {creada.email}</p>
                   <div className="bg-white rounded-lg border border-green-200 px-3 py-2.5 flex items-center justify-between gap-3">

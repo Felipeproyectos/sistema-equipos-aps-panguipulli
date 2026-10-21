@@ -1,4 +1,14 @@
 import { createClientFromRequest } from '#compat';
+import { prestamoVigente } from '../compartido/prestamoEquipo.js';
+
+// La ambulancia puede estar prestada a otro centro (src/lib/prestamoEquipo.js):
+// la pauta queda con el préstamo de ese momento, para que la revise el centro
+// que la tenía. Si la tabla no existe o falla, la pauta se guarda igual.
+async function prestamoDeHoy(db, equipoId) {
+  const lista = await db.PrestamoVehiculo.filter({ equipo_id: equipoId, estado: 'vigente' }).catch(() => []);
+  const p = prestamoVigente(lista, equipoId);
+  return p ? { id: p.id, centro_origen: p.centro_origen || '', centro_destino: p.centro_destino || '', desde: p.desde || '' } : null;
+}
 
 export default async function (req) {
   if (req.method === 'OPTIONS') {
@@ -23,6 +33,8 @@ export default async function (req) {
     if (!equipo) {
       return Response.json({ error: 'Equipo no encontrado' }, { status: 404, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
+
+    const prestamo = await prestamoDeHoy(base44.asServiceRole.entities, data.equipo_id);
 
     const registro = await base44.asServiceRole.entities.InspeccionPendiente.create({
       tipo_formulario: data.tipo_formulario,
@@ -65,6 +77,7 @@ export default async function (req) {
         checklist: data.checklist || null,
         parches: data.parches || null,
         descripcion: data.descripcion || null,
+        prestamo,
       }),
       estado: 'pendiente',
     });

@@ -63,7 +63,9 @@ EDITADAS_EN_SERVIDOR = [
     "generarAlertasAutomaticas",
     "getEquiposPorCentro",
     "getMonitorData",
+    "getPublicAmbulances",
     "getUsuariosPorCentro",
+    "guardarInspeccionPendiente",
     "subirInspeccionDrive",
 ]
 

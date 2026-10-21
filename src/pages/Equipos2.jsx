@@ -91,9 +91,12 @@ export default function Equipos2() {
     // Un equipo cargado con un CECOSF como centro principal pertenece al CESFAM
     // del que depende: se ubica ahí aunque su ficha todavía diga otra cosa.
     const ubic = resolverUbicacion(e.centro_principal, e.subsede);
-    if (centrosPermitidos && !centrosPermitidos.includes(ubic.centro)) return false;
+    // Una ambulancia prestada cuenta también en el centro que la tiene: ahí
+    // le aplican sus pautas (src/lib/prestamoEquipo.js).
+    const prestadaA = e.prestamo?.centro_destino || "";
+    if (centrosPermitidos && !centrosPermitidos.includes(ubic.centro) && !centrosPermitidos.includes(prestadaA)) return false;
     if (centroSeleccionado) {
-      const enCentro = ubic.centro === centroSeleccionado;
+      const enCentro = ubic.centro === centroSeleccionado || prestadaA === centroSeleccionado;
       const enSubsede = subsedesDelCentro.includes(ubic.subsede);
       if (!enCentro && !enSubsede) return false;
     }

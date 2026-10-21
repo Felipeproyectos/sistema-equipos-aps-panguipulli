@@ -4,7 +4,7 @@ import {
   X, Edit, Trash2, Plus, Info, Wrench, ClipboardCheck, Package, BookOpen, Hammer,
   MapPin, Calendar, User, Upload, AlertTriangle, Activity, Car, Zap, Monitor,
   Hash, Gauge, FileText, Shield, CheckCircle, Clock, ArrowLeft,
-  Loader2, ExternalLink, Printer, ChevronDown, Stethoscope
+  Loader2, ExternalLink, Printer, ChevronDown, Stethoscope, ArrowLeftRight
 } from "lucide-react";
 import { TIPOS_EQUIPO, ESTADOS_EQUIPO, esVehiculo, resolverUbicacion } from "@/lib/centros";
 import { esRolTaller, ROLES, puedeEliminar } from "@/lib/roles";
@@ -22,8 +22,11 @@ import DetallePautaCabina from "@/components/bitacora/DetallePautaCabina";
 import { TIPO_ACTIVIDAD as TIPO_CABINA, TIPO_FORMULARIO as FORMULARIO_CABINA, leerPautaCabina } from "@/lib/pautaCabina";
 import { diaChile } from "@/lib/turnoFlota";
 import TallerTab from "./TallerTab";
+import PrestamoModal from "@/components/flota/PrestamoModal";
+import { esPrestable, prestamoVigente, puedePrestar, puedeDevolver, laTengoPrestada } from "@/lib/prestamoEquipo";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { generarPDFEquipo } from "@/utils/generarPDFEquipo";
+import BadgeCedida from "@/components/BadgeCedida";
 
 const TIPO_ICONS = { dea: Zap, monitor_desfibrilador: Activity, ambulancia: Car, monitor_multiparametros: Monitor, camioneta: Car, furgon: Car, camion_3_4: Car };
 
@@ -31,6 +34,10 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
   const [actividades, setActividades] = useState([]);
   const [deleting, setDeleting] = useState(false);
   const [tab, setTab] = useState("info");
+  // Préstamo a otro centro (src/lib/prestamoEquipo.js). Viene en el equipo
+  // desde getEquiposPorCentro; se vuelve a leer para tenerlo al día.
+  const [prestamo, setPrestamo] = useState(equipo.prestamo || null);
+  const [prestando, setPrestando] = useState(false);
 
   const handleImprimirInforme = async () => {
     let conductorActivo = equipo.conductor_responsable;
@@ -63,10 +70,21 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
   const tipoLabel = TIPOS_EQUIPO.find(t => t.value === equipo.tipo)?.label || equipo.tipo;
   const Icon = TIPO_ICONS[equipo.tipo] || Monitor;
   const esVehiculoFlota = esVehiculo(equipo.tipo);
+  // El centro que la recibió en préstamo la usa y le aplica sus pautas, pero
+  // la ficha la sigue editando el dueño.
+  const tengoPrestada = laTengoPrestada(user, equipo, prestamo);
 
   useEffect(() => {
     base44.entities.Actividad.filter({ equipo_id: equipo.id }, "-created_date", 100).then(setActividades).catch(() => {});
   }, [equipo.id]);
+
+  const cargarPrestamo = () => {
+    if (!esPrestable(equipo)) return;
+    base44.entities.PrestamoVehiculo.filter({ equipo_id: equipo.id, estado: "vigente" }, "-desde", 5)
+      .then(lista => setPrestamo(prestamoVigente(lista, equipo.id)))
+      .catch(() => {});
+  };
+  useEffect(cargarPrestamo, [equipo.id]);
 
   const reloadActividades = () => {
     base44.entities.Actividad.filter({ equipo_id: equipo.id }, "-created_date", 100).then(setActividades).catch(() => {});
@@ -141,12 +159,24 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
                   <span className="text-xs text-blue-300 flex items-center gap-1">
                     <Hash className="w-3 h-3" />{equipo.numero_inventario}
                   </span>
+                  {prestamo && (
+                    <BadgeCedida detalle={tengoPrestada
+                      ? `por ${prestamo.centro_origen || equipo.centro_principal}`
+                      : `a ${prestamo.centro_destino}`} />
+                  )}
                 </div>
                 <h2 className="text-2xl font-bold text-white" style={{ letterSpacing: "-0.03em" }}>
                   {tipoLabel} — {equipo.marca} {equipo.modelo}
                 </h2>
               </div>
               <div className="flex items-center gap-2 ml-4">
+                {(prestamo ? puedeDevolver(user, equipo, prestamo) : puedePrestar(user, equipo)) && (
+                  <button onClick={() => setPrestando(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:bg-white/20"
+                    style={{ border: "1px solid rgba(251,191,36,0.6)", background: "rgba(251,191,36,0.15)" }}>
+                    <ArrowLeftRight className="w-3.5 h-3.5" /> {prestamo ? "Cesión" : "Ceder"}
+                  </button>
+                )}
                 <button onClick={handleImprimirInforme}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:bg-white/20"
                   style={{ border: "1px solid rgba(255,255,255,0.3)" }}>
@@ -156,7 +186,7 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
                     y no hacia nada. Lo usa Flota, donde Movilizacion ve la
                     ficha de la ambulancia pero no la edita — esa es de
                     Calidad. Equipos siempre lo pasa, asi que ahi no cambia. */}
-                {onEdit && (
+                {onEdit && !tengoPrestada && (
                   <button onClick={onEdit}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:bg-white/20"
                     style={{ border: "1px solid rgba(255,255,255,0.3)" }}>
@@ -203,7 +233,7 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
         {/* ── CONTENT ── */}
         <div className="flex-1 overflow-y-auto" style={{ background: "#F8FAFC" }}>
           <div className="p-6">
-            {tab === "info" && <InfoTab equipo={equipo} />}
+            {tab === "info" && <InfoTab equipo={equipo} prestamo={prestamo} />}
             {tab === "mantenimiento" && <MantenimientoTab equipo={equipo} actividades={actividades} user={user} onUpdated={reloadActividades} />}
             {tab === "inspecciones" && <InspeccionesTab equipo={equipo} actividades={actividades} user={user} onUpdated={reloadActividades} />}
             {tab === "parches" && <ParchesTab equipo={equipo} parches={parches} user={user} onUpdated={onActividadCreada} />}
@@ -213,6 +243,16 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
           </div>
         </div>
       </div>
+
+      {prestando && (
+        <PrestamoModal
+          equipo={equipo}
+          prestamoVigente={prestamo}
+          ceder
+          onClose={() => setPrestando(false)}
+          onGuardado={() => { cargarPrestamo(); onActividadCreada && onActividadCreada(); }}
+        />
+      )}
     </div>
   );
 }
@@ -220,7 +260,7 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
 /* ══════════════════════════════════════════════
    INFO TAB
 ══════════════════════════════════════════════ */
-function InfoTab({ equipo }) {
+function InfoTab({ equipo, prestamo }) {
   const hoy = new Date();
   const esVehiculoFlota = esVehiculo(equipo.tipo);
   const ubicacion = resolverUbicacion(equipo.centro_principal, equipo.subsede);
@@ -297,10 +337,20 @@ function InfoTab({ equipo }) {
             style={{ background: "linear-gradient(135deg, #1D4ED8, #2563EB)" }}>
             <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full opacity-20" style={{ background: "white" }} />
             <p className="text-xs text-blue-200 uppercase tracking-widest mb-1">Ubicación Actual</p>
-            <p className="text-white font-bold text-base leading-tight">
-              {ubicacion.centro}
-              {ubicacion.subsede && <span className="block text-blue-200 text-sm font-medium">{ubicacion.subsede}</span>}
-            </p>
+            {prestamo ? (
+              <p className="text-white font-bold text-base leading-tight">
+                {prestamo.centro_destino}
+                <span className="block text-blue-200 text-sm font-medium">
+                  Cedida por {prestamo.centro_origen || ubicacion.centro}
+                  {prestamo.hasta_previsto ? ` hasta el ${prestamo.hasta_previsto.split("-").reverse().join("/")}` : ""}
+                </span>
+              </p>
+            ) : (
+              <p className="text-white font-bold text-base leading-tight">
+                {ubicacion.centro}
+                {ubicacion.subsede && <span className="block text-blue-200 text-sm font-medium">{ubicacion.subsede}</span>}
+              </p>
+            )}
             {equipo.ubicacion_especifica && (
               <p className="text-blue-200 text-xs mt-1.5 flex items-center gap-1">
                 <MapPin className="w-3 h-3" />{equipo.ubicacion_especifica}

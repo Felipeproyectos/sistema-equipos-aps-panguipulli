@@ -28,7 +28,7 @@
     },
     "origen": {
       "type": "string",
-      "description": "De donde vino. Vacio = Salud desde la ficha del equipo; 'pauta_chofer' = falla marcada por el chofer en la pauta de inicio o al entregar el vehiculo"
+      "description": "De donde vino. Vacio = Salud desde la ficha del equipo; 'pauta_chofer' = falla marcada por el chofer en la pauta de inicio o al entregar el vehiculo; 'pauta_inspeccion' = falla de una pauta aprobada en Revision Bitacora (la decide Movilizacion si es vehiculo, Salud si es equipo)"
     },
     "centro": {
       "type": "string"

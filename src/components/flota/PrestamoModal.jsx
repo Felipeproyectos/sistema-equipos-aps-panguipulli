@@ -23,7 +23,9 @@ import { getCentrosEstructura } from "@/lib/centros";
 // que alguien confirme que el vehículo volvió. Darlo por devuelto sin que
 // conste empezaría a cargarle los gastos al centro equivocado.
 
-export default function PrestamoModal({ equipo, prestamoVigente, onClose, onGuardado }) {
+// `ceder`: la misma pantalla con las palabras de Calidad para ambulancias
+// («ceder», «cedida»); Movilización la usa con «prestar».
+export default function PrestamoModal({ equipo, prestamoVigente, onClose, onGuardado, ceder = false }) {
   const hoy = new Date().toISOString().split("T")[0];
   const [centros, setCentros] = useState([]);
   const [destino, setDestino] = useState("");
@@ -104,7 +106,9 @@ export default function PrestamoModal({ equipo, prestamoVigente, onClose, onGuar
           <div>
             <h2 className="font-bold text-slate-900 flex items-center gap-2">
               <ArrowLeftRight className="w-5 h-5 text-amber-700" />
-              {prestamoVigente ? "Vehículo prestado" : "Prestar a otro centro"}
+              {prestamoVigente
+                ? (ceder ? "Ambulancia cedida" : "Vehículo prestado")
+                : (ceder ? "Ceder a otro centro" : "Prestar a otro centro")}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">{etiqueta}</p>
           </div>
@@ -150,7 +154,7 @@ export default function PrestamoModal({ equipo, prestamoVigente, onClose, onGuar
             <>
               <div>
                 <label htmlFor="pres-destino" className="text-xs font-semibold text-slate-600 block mb-1">
-                  ¿A qué centro se presta? *
+                  {ceder ? "¿A qué centro se cede?" : "¿A qué centro se presta?"} *
                 </label>
                 <select id="pres-destino" value={destino} onChange={e => setDestino(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white
@@ -233,7 +237,7 @@ export default function PrestamoModal({ equipo, prestamoVigente, onClose, onGuar
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl
                          text-sm font-semibold text-white bg-amber-700 hover:bg-amber-800 disabled:opacity-60">
               {guardando && <Loader2 className="w-4 h-4 animate-spin" />}
-              {guardando ? "Guardando..." : prestamoVigente ? "Registrar devolución" : "Registrar préstamo"}
+              {guardando ? "Guardando..." : prestamoVigente ? "Registrar devolución" : ceder ? "Registrar cesión" : "Registrar préstamo"}
             </button>
           </div>
         </div>
