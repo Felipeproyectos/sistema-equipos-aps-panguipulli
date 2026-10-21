@@ -21,11 +21,22 @@
 -- Las pautas mismas (con quién las hizo, quién las aprobó y sus fallas) ya
 -- quedaban: se sacan desde Revisión Bitácora por período, en PDF o Excel.
 --
--- Requiere 28 y 29. Es re-ejecutable. Ejecutar una vez en Supabase (SQL
+-- Va después de 28 y 29, pero no falla si se corre sola: trae las dos
+-- funciones que usa. Es re-ejecutable. Ejecutar una vez en Supabase (SQL
 -- Editor → New query → pegar todo → Run).
 -- ═══════════════════════════════════════════════════════════════════
 
 begin;
+
+create or replace function es_del_sistema() returns boolean
+  language sql stable security definer set search_path = public as $$
+  select coalesce(mi_rol(), '') <> '' $$;
+
+create or replace function prestada_a(id_equipo text) returns text
+  language sql stable security definer set search_path = public as $$
+  select centro_destino from prestamo_vehiculo
+   where equipo_id = id_equipo and estado = 'vigente'
+   order by desde desc limit 1 $$;
 
 alter table actividad add column if not exists centro_responsable text;
 alter table actividad add column if not exists prestamo_id text;
