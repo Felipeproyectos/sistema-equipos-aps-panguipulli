@@ -26,6 +26,7 @@ import PrestamoModal from "@/components/flota/PrestamoModal";
 import { esPrestable, prestamoVigente, puedePrestar, puedeDevolver, laTengoPrestada } from "@/lib/prestamoEquipo";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { generarPDFEquipo } from "@/utils/generarPDFEquipo";
+import BadgeCedida from "@/components/BadgeCedida";
 
 const TIPO_ICONS = { dea: Zap, monitor_desfibrilador: Activity, ambulancia: Car, monitor_multiparametros: Monitor, camioneta: Car, furgon: Car, camion_3_4: Car };
 
@@ -159,11 +160,9 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
                     <Hash className="w-3 h-3" />{equipo.numero_inventario}
                   </span>
                   {prestamo && (
-                    <span className="text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1"
-                      style={{ background: "#FEF3C7", color: "#92400E" }}>
-                      <ArrowLeftRight className="w-3 h-3" />
-                      {tengoPrestada ? `Prestada por ${prestamo.centro_origen || equipo.centro_principal}` : `Prestada a ${prestamo.centro_destino}`}
-                    </span>
+                    <BadgeCedida detalle={tengoPrestada
+                      ? `por ${prestamo.centro_origen || equipo.centro_principal}`
+                      : `a ${prestamo.centro_destino}`} />
                   )}
                 </div>
                 <h2 className="text-2xl font-bold text-white" style={{ letterSpacing: "-0.03em" }}>
@@ -175,7 +174,7 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
                   <button onClick={() => setPrestando(true)}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:bg-white/20"
                     style={{ border: "1px solid rgba(251,191,36,0.6)", background: "rgba(251,191,36,0.15)" }}>
-                    <ArrowLeftRight className="w-3.5 h-3.5" /> {prestamo ? "Préstamo" : "Prestar"}
+                    <ArrowLeftRight className="w-3.5 h-3.5" /> {prestamo ? "Cesión" : "Ceder"}
                   </button>
                 )}
                 <button onClick={handleImprimirInforme}
@@ -249,6 +248,7 @@ export default function EquipoDetalleModal({ equipo, parches, onClose, onEdit, o
         <PrestamoModal
           equipo={equipo}
           prestamoVigente={prestamo}
+          ceder
           onClose={() => setPrestando(false)}
           onGuardado={() => { cargarPrestamo(); onActividadCreada && onActividadCreada(); }}
         />
@@ -341,7 +341,7 @@ function InfoTab({ equipo, prestamo }) {
               <p className="text-white font-bold text-base leading-tight">
                 {prestamo.centro_destino}
                 <span className="block text-blue-200 text-sm font-medium">
-                  Prestada por {prestamo.centro_origen || ubicacion.centro}
+                  Cedida por {prestamo.centro_origen || ubicacion.centro}
                   {prestamo.hasta_previsto ? ` hasta el ${prestamo.hasta_previsto.split("-").reverse().join("/")}` : ""}
                 </span>
               </p>

@@ -25,7 +25,7 @@ const ESTADO = { pendiente: "Pendiente", aprobado: "Aprobada", rechazado: "Recha
 const MOMENTO = { inicio: "Inicio de turno", termino: "Término de turno" };
 
 const COLUMNAS = [
-  "Fecha", "Hora de registro", "Centro a cargo", "Centro dueño", "Prestada",
+  "Fecha", "Hora de registro", "Centro a cargo", "Centro dueño", "Cedida",
   "Equipo", "Patente", "Tipo de pauta", "Momento", "Realizada por", "Estado",
   "Revisada por", "Fecha de revisión", "Con fallas", "Fallas", "Observaciones", "Nota del revisor",
 ];

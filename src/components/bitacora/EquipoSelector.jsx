@@ -12,7 +12,7 @@ export default function EquipoSelector({ equipos, value, onChange, placeholder =
   // Si está prestada, se dice dónde está hoy: el centro que la tiene la busca
   // por su nombre para llenarle la pauta.
   const ubicacion = (eq) => {
-    if (eq.prestada_a) return `Prestada a ${eq.prestada_a} (de ${eq.centro_principal || "—"})`;
+    if (eq.prestada_a) return `CEDIDA a ${eq.prestada_a} (de ${eq.centro_principal || "—"})`;
     const partes = [eq.centro_principal, eq.subsede, eq.ubicacion_especifica].filter(Boolean);
     return partes.join(" › ");
   };

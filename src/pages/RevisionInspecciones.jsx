@@ -57,6 +57,7 @@ import { pautaConFallas, tieneChecklistPlano } from "@/lib/fallasPauta";
 import { TIPOS_VEHICULO } from "@/lib/turnoFlota";
 import { prestamoEnFecha } from "@/lib/prestamoEquipo";
 import { descargarPautasExcel } from "@/utils/exportarPautasExcel";
+import BadgeCedida from "@/components/BadgeCedida";
 
 const TIPO_LABEL = {
   inspeccion_semanal: "Pauta Semanal",
@@ -309,6 +310,7 @@ function InspeccionCard({ insp, onActualizar }) {
             {/* Título y estado */}
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <p className="font-bold text-slate-800">{TIPO_LABEL[insp.tipo_formulario] || insp.tipo_formulario}</p>
+              {insp.prestada_por && <BadgeCedida detalle={`por ${insp.prestada_por}`} />}
               <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                 style={{ background: estado.bg, color: estado.color }}>
                 {estado.label}
@@ -355,9 +357,7 @@ function InspeccionCard({ insp, onActualizar }) {
                   {equipo.subsede && ` · ${equipo.subsede}`}
                 </span>
                 {insp.prestada_por && (
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#FEF3C7", color: "#92400E" }}>
-                    Prestada por {insp.prestada_por}
-                  </span>
+                  <span className="text-xs text-amber-800 font-semibold">· cedida por {insp.prestada_por}</span>
                 )}
               </div>
             )}
@@ -709,7 +709,7 @@ export default function RevisionInspecciones() {
           )}
           <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 pb-1.5 cursor-pointer">
             <input type="checkbox" checked={soloPrestadas} onChange={e => setSoloPrestadas(e.target.checked)} />
-            <ArrowLeftRight className="w-4 h-4 text-amber-700" /> Solo ambulancias prestadas
+            <ArrowLeftRight className="w-4 h-4 text-amber-700" /> Solo ambulancias cedidas
           </label>
           <button
             onClick={() => descargarPautasExcel(paraImprimir, { desde, hasta, centro: centroSeleccionado })}

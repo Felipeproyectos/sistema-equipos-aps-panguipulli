@@ -189,7 +189,8 @@ function hoja(insp, indice, total) {
       <td style="padding:2px 0;color:#94a3b8;width:16%">Fecha</td>
       <td style="padding:2px 0;font-weight:600;width:34%">${fechaCL(insp.fecha)}${horaCL(datos.hora_registro) ? ` · ${horaCL(datos.hora_registro)} hrs` : ""}</td>
       <td style="padding:2px 0;color:#94a3b8;width:16%">Centro</td>
-      <td style="padding:2px 0;font-weight:600">${esc(equipo.centro_principal || "—")}${equipo.subsede ? ` · ${esc(equipo.subsede)}` : ""}</td>
+      <td style="padding:2px 0;font-weight:600">${esc(equipo.centro_principal || "—")}${equipo.subsede ? ` · ${esc(equipo.subsede)}` : ""}${
+        insp.prestada_por ? ` · <span style="background:#d97706;color:white;padding:1px 6px;border-radius:8px;font-size:8px;font-weight:800">CEDIDA</span> por ${esc(insp.prestada_por)}` : ""}</td>
     </tr>
     <tr>
       <td style="padding:2px 0;color:#94a3b8">Responsable</td>
