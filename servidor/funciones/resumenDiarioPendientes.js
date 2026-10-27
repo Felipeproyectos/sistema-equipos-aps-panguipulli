@@ -14,7 +14,8 @@ import { CONTADORES, datosParaRol, resumenParaCorreo } from '../compartido/conta
 // A quién le llega: a quien tiene algo pendiente en su menú. Si no hay nada,
 // no se manda nada — un correo diario que dice "todo bien" enseña a no abrirlo.
 // Las alertas solas tampoco lo disparan: ya tienen su propio correo.
-// Tampoco a quien no tiene tareas en el menú (Monitor, choferes, Usuario).
+// Tampoco a quien no tiene tareas en el menú (choferes, Usuario). El Monitor
+// Corporativo sí: recibe lo que los centros le enviaron y no ha tomado.
 //
 // Lo que NO mira: si la cuenta está suspendida. Eso vive en Supabase Auth,
 // que este proyecto comparte con otra aplicación, y acá no se consulta. Quien

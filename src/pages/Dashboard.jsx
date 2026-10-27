@@ -130,7 +130,7 @@ export default function Dashboard() {
   const operativos = equipos.filter(e => e.estado === "operativo");
   const enMantenimiento = equipos.filter(e => e.estado === "mantenimiento");
   const fueraServicio = equipos.filter(e => e.estado === "fuera_de_servicio");
-  const pendientesSolicitudes = solicitudes.filter(s => s.estado === "pendiente");
+  const pendientesSolicitudes = solicitudes.filter(s => (s.estado || "pendiente") === "pendiente" || s.estado === "devuelta");
 
   // Total notificaciones prioritarias
   const totalNotif = alertas.length + bitacorasPendientes.length + vencidos.length;

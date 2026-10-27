@@ -26,7 +26,10 @@ export default async function (req) {
       base44.asServiceRole.entities.Equipo.list('-created_date', 500),
       base44.asServiceRole.entities.Parche.list('-created_date', 2000),
       base44.asServiceRole.entities.Alerta.filter({ estado: 'activa' }, '-created_date', 500),
-      base44.asServiceRole.entities.Solicitud.filter({ estado: 'pendiente' }, '-created_date', 500),
+      // Las abiertas: las que esperan en un centro y las que están en la
+      // bandeja del Monitor (31_solicitudes_monitor.sql).
+      base44.asServiceRole.entities.Solicitud.list('-created_date', 1000)
+        .then((l) => l.filter((s) => !['finalizada', 'rechazada'].includes(s.estado))),
       base44.asServiceRole.entities.InspeccionPendiente.filter({ estado: 'pendiente' }, '-created_date', 500),
       base44.asServiceRole.entities.OrdenTrabajo.list('-created_date', 300),
       base44.asServiceRole.entities.Repuesto.list('-created_date', 500),

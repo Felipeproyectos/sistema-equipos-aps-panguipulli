@@ -4,6 +4,8 @@ import { CheckCircle, Bell, Plus, X, Loader2, Mail, Send, ClipboardList, FileTex
 import { useAuth } from "@/lib/AuthContext";
 import { esAdministrador } from "@/lib/roles";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
+import { Link } from "react-router-dom";
+import { ESTADOS } from "@/lib/solicitudesMonitor";
 
 const NIVEL_CONFIG = {
   critica:    { color: "#dc2626", bg: "#fef2f2", border: "#fca5a5", label: "Crítica" },
@@ -34,10 +36,6 @@ export default function AlertasV2() {
 
   const [seccion, setSeccion] = useState("alertas"); // 'alertas' | 'solicitudes'
   const [solicitudes, setSolicitudes] = useState([]);
-  const [gestionando, setGestionando] = useState(null);
-  const [respuestaAdmin, setRespuestaAdmin] = useState("");
-  const [nuevoEstado, setNuevoEstado] = useState("");
-  const [guardandoSol, setGuardandoSol] = useState(false);
   const [alertaParaSolicitud, setAlertaParaSolicitud] = useState(null);
   const [formSol, setFormSol] = useState({ tipo: "", observaciones: "" });
   const [guardandoSolRapida, setGuardandoSolRapida] = useState(false);
@@ -130,27 +128,6 @@ export default function AlertasV2() {
     }));
   };
 
-  const handleGestionarSolicitud = async () => {
-    if (!gestionando) return;
-    setGuardandoSol(true);
-    try {
-      await base44.entities.Solicitud.update(gestionando.id, { estado: nuevoEstado, respuesta_admin: respuestaAdmin });
-      // Si se finaliza la solicitud, resolver la alerta asociada automáticamente
-      if (nuevoEstado === "finalizada" && gestionando.alerta_id) {
-        await base44.entities.Alerta.update(gestionando.alerta_id, { estado: "resuelta", fecha_resolucion: new Date().toISOString().split("T")[0] });
-        setAlertas(prev => prev.map(a => a.id === gestionando.alerta_id ? { ...a, estado: "resuelta" } : a));
-      }
-      setSolicitudes(prev => prev.map(s => s.id === gestionando.id ? { ...s, estado: nuevoEstado, respuesta_admin: respuestaAdmin } : s));
-      setGestionando(null);
-      setGuardandoSol(false);
-    } catch {
-      // El aviso con el motivo lo da base44Client. Aca solo se suelta el
-      // boton, que sin esto quedaba en "Guardando..." para siempre.
-    } finally {
-      setGuardandoSol(false);
-    }
-  };
-
   const handleCrearSolicitudRapida = async () => {
     if (!alertaParaSolicitud || !formSol.tipo) return;
     setGuardandoSolRapida(true);
@@ -179,11 +156,8 @@ export default function AlertasV2() {
     }
   };
 
-  const ESTADO_SOL = {
-    pendiente:   { label: "Pendiente",   color: "#d97706", bg: "#fffbeb" },
-    en_proceso:  { label: "En Proceso",  color: "#2563eb", bg: "#eff6ff" },
-    finalizada:  { label: "Finalizada",  color: "#16a34a", bg: "#f0fdf4" },
-  };
+  // Los estados del recorrido por el Monitor Corporativo (solicitudesMonitor.js).
+  const ESTADO_SOL = ESTADOS;
 
   // Antes decía `user?.role === "admin"` a secas, así que Base del Sistema, que
   // está por encima, no veía el botón de crear alertas, ni las solicitudes de
@@ -304,7 +278,7 @@ export default function AlertasV2() {
           <div className="space-y-3">
             {!isAdmin && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-700">
-                Mostrando solo tus solicitudes. Los administradores gestionan y responden cada requerimiento.
+                Mostrando solo tus solicitudes. Tu Encargado de Salud las completa y las envía al Monitor Corporativo, que las resuelve.
               </div>
             )}
             {solicitudesVisibles.length === 0 ? (
@@ -327,10 +301,10 @@ export default function AlertasV2() {
                     <p className="text-xs text-slate-500">{sol.centro}</p>
                     {isAdmin && <p className="text-xs text-slate-400">Solicitante: {sol.usuario_nombre || sol.usuario_email}</p>}
                     {sol.observaciones && <p className="text-xs text-slate-400 mt-0.5 truncate">{sol.observaciones}</p>}
-                    {sol.respuesta_admin && <p className="text-xs text-blue-600 mt-1 bg-blue-50 rounded-lg px-2 py-1">↳ Admin: {sol.respuesta_admin}</p>}
+                    {(sol.resolucion || sol.respuesta_admin) && <p className="text-xs text-blue-600 mt-1 bg-blue-50 rounded-lg px-2 py-1">↳ Respuesta: {sol.resolucion || sol.respuesta_admin}</p>}
                   </div>
                   {isAdmin && (
-                    <button onClick={() => { setGestionando(sol); setNuevoEstado(sol.estado); setRespuestaAdmin(sol.respuesta_admin || ""); }} className="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-semibold text-white" style={{ background: "#1565c0" }}>Gestionar</button>
+                    <Link to="/SolicitudesV2" className="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-semibold text-white" style={{ background: "#1565c0" }}>Ver en Solicitudes</Link>
                   )}
                 </div>
               );
@@ -384,44 +358,6 @@ export default function AlertasV2() {
         </div>
       )}
 
-      {/* Modal Gestionar Solicitud (solo admin) */}
-      {gestionando && isAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md">
-            <div className="px-7 pt-7 pb-4 border-b border-slate-100 flex items-center justify-between" style={{ background: "linear-gradient(135deg, #1a2e4a, #1565c0)", borderRadius: "1.5rem 1.5rem 0 0" }}>
-              <h2 className="text-lg font-bold text-white">Gestionar Solicitud</h2>
-              <button onClick={() => setGestionando(null)}><X className="w-5 h-5 text-white/70 hover:text-white" /></button>
-            </div>
-            <div className="px-7 py-5 space-y-4">
-              <div className="bg-slate-50 rounded-xl p-3 text-sm text-slate-700">
-                <p className="font-semibold">{gestionando.tipo?.replace(/_/g, " ")}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{gestionando.centro} · Solicitante: {gestionando.usuario_nombre || gestionando.usuario_email}</p>
-                {gestionando.observaciones && <p className="text-xs text-slate-400 mt-1">{gestionando.observaciones}</p>}
-                {gestionando.alerta_id && <p className="text-xs text-amber-600 mt-1">⚠ Solicitud vinculada a una alerta — al finalizar se resolverá automáticamente</p>}
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-2">Estado</label>
-                <select className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm" value={nuevoEstado} onChange={e => setNuevoEstado(e.target.value)}>
-                  <option value="pendiente">Pendiente</option>
-                  <option value="en_proceso">En Proceso</option>
-                  <option value="finalizada">Finalizada</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-2">Respuesta / Comentario</label>
-                <textarea rows={3} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" value={respuestaAdmin} onChange={e => setRespuestaAdmin(e.target.value)} placeholder="Escribe una respuesta..." />
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => setGestionando(null)} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-slate-600 border border-slate-200">Cancelar</button>
-                <button onClick={handleGestionarSolicitud} disabled={guardandoSol} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#1565c0" }}>
-                  {guardandoSol ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  {guardandoSol ? "Guardando..." : "Guardar"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal Crear Alerta */}
       {showModal && (

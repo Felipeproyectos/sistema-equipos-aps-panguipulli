@@ -37,20 +37,158 @@
       "type": "string",
       "enum": [
         "pendiente",
+        "derivada",
         "en_proceso",
-        "finalizada"
+        "devuelta",
+        "finalizada",
+        "rechazada"
       ],
-      "default": "pendiente"
+      "default": "pendiente",
+      "description": "pendiente (el centro la completa) → derivada (en el Monitor Corporativo) → en_proceso (el Monitor la tomó) → finalizada | rechazada; devuelta = el Monitor pide más información. Las de vehículos usan solo pendiente → en_proceso → finalizada (Movilización). Ver migracion/31_solicitudes_monitor.sql"
     },
     "observaciones": {
       "type": "string"
     },
     "alerta_id": {
       "type": "string",
-      "description": "Alerta que origin\u00f3 esta solicitud"
+      "description": "Alerta que originó esta solicitud"
     },
     "respuesta_admin": {
       "type": "string"
+    },
+    "numero_solicitud": {
+      "type": "string",
+      "description": "Correlativo SOL-AAAA-NNNNN; lo pone la base"
+    },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "mantenimiento",
+        "compra_insumo",
+        "desperfecto_tecnico"
+      ]
+    },
+    "prioridad": {
+      "type": "string",
+      "enum": [
+        "critica",
+        "alta",
+        "media",
+        "baja"
+      ]
+    },
+    "operatividad": {
+      "type": "string",
+      "enum": [
+        "operativo",
+        "operativo_con_restricciones",
+        "fuera_de_servicio"
+      ],
+      "description": "En qué estado queda el equipo"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripción detallada del problema o requerimiento"
+    },
+    "fecha_deteccion": {
+      "type": "string",
+      "format": "date"
+    },
+    "equipo_tipo": {
+      "type": "string",
+      "description": "Copia de la ficha del equipo al enviarla al Monitor"
+    },
+    "equipo_marca": {
+      "type": "string",
+      "description": "Copia de la ficha del equipo al enviarla al Monitor"
+    },
+    "equipo_modelo": {
+      "type": "string",
+      "description": "Copia de la ficha del equipo al enviarla al Monitor"
+    },
+    "equipo_numero_serie": {
+      "type": "string",
+      "description": "Copia de la ficha del equipo al enviarla al Monitor"
+    },
+    "equipo_numero_inventario": {
+      "type": "string",
+      "description": "Copia de la ficha del equipo al enviarla al Monitor"
+    },
+    "subsede": {
+      "type": "string"
+    },
+    "ubicacion_especifica": {
+      "type": "string",
+      "description": "Ubicación exacta del equipo: sala, box, piso"
+    },
+    "solicitante_cargo": {
+      "type": "string"
+    },
+    "solicitante_telefono": {
+      "type": "string"
+    },
+    "insumo_nombre": {
+      "type": "string"
+    },
+    "insumo_cantidad": {
+      "type": "number"
+    },
+    "insumo_especificacion": {
+      "type": "string",
+      "description": "Código, referencia o compatibilidad del insumo"
+    },
+    "derivada_por_email": {
+      "type": "string"
+    },
+    "derivada_por_nombre": {
+      "type": "string"
+    },
+    "fecha_derivacion": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "monitor_email": {
+      "type": "string"
+    },
+    "monitor_nombre": {
+      "type": "string"
+    },
+    "fecha_toma": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "fecha_resolucion": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "resolucion": {
+      "type": "string",
+      "description": "Resolución o motivo escrito por el Monitor Corporativo"
+    },
+    "linea_tiempo": {
+      "type": "array",
+      "description": "Registro cronológico: envío, toma, devolución, resolución",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "evento": {
+            "type": "string"
+          },
+          "usuario_email": {
+            "type": "string"
+          },
+          "usuario_nombre": {
+            "type": "string"
+          },
+          "notas": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "required": [

@@ -1,69 +1,110 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { ClipboardList, Plus, Search, Loader2, X } from "lucide-react";
-import { TIPOS_SOLICITUD, CENTROS_ESTRUCTURA } from "@/lib/centros";
-import NativePicker from "@/components/NativePicker";
+import { ClipboardList, Plus, Search, ChevronDown, Truck, Send } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import { puedeEliminar } from "@/lib/roles";
 import { esSolicitudDeFlota } from "@/lib/panelFlota";
-import { ORIGEN_PAUTA } from "@/lib/fallasPauta";
+import { rotuloOrigenSolicitud } from "@/lib/fallasPauta";
+import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
 import SeguimientoTaller from "@/components/salud/SeguimientoTaller";
+import FichaSolicitud, { EstadoBadge, PrioridadBadge, conDatosDelEquipo } from "@/components/solicitudes/FichaSolicitud";
+import SolicitudFormDetallado from "@/components/solicitudes/SolicitudFormDetallado";
+import { CATEGORIAS, ESTADOS_CERRADOS, ESTADOS_EN_MONITOR, accionesPara, rotulo } from "@/lib/solicitudesMonitor";
 
-const ESTADO_CONFIG = {
-  pendiente: { label: "Pendiente", color: "#d97706", bg: "#fffbeb" },
-  en_proceso: { label: "En Proceso", color: "#2563eb", bg: "#eff6ff" },
-  finalizada: { label: "Finalizada", color: "#16a34a", bg: "#f0fdf4" }
+// Las solicitudes del centro.
+//
+// Las de equipos vitales las resuelve el Monitor Corporativo: acá el Encargado
+// de Salud las completa con todo el detalle y se las envía, y ve en qué va
+// cada una. Si el Monitor la devuelve, vuelve a esta bandeja para corregirla.
+// Las de vehículos siguen yendo a Movilización y al Taller (pestaña Vehículos).
+// El recorrido está en src/lib/solicitudesMonitor.js.
+
+// "Gestiona" (ve todas): Base del Sistema, Administrador, Encargado Salud y
+// Encargado Compras Salud. El Usuario ve y edita solo las suyas.
+const ROLES_VEN_TODAS = ["super_admin", "admin", "encargado_salud", "encargado_compras_salud"];
+
+const PESTANAS = [
+  { clave: "por_enviar", label: "Por enviar", filtro: (s, flota) => !flota && (s.estado || "pendiente") === "pendiente" },
+  { clave: "devueltas", label: "Devueltas", filtro: (s, flota) => !flota && s.estado === "devuelta" },
+  { clave: "en_monitor", label: "En Monitor", filtro: (s, flota) => !flota && ESTADOS_EN_MONITOR.includes(s.estado) },
+  { clave: "cerradas", label: "Cerradas", filtro: (s, flota) => !flota && ESTADOS_CERRADOS.includes(s.estado) },
+  { clave: "vehiculos", label: "Vehículos", filtro: (s, flota) => flota },
+  { clave: "todas", label: "Todas", filtro: () => true },
+];
+
+const ESTADO_FLOTA = {
+  pendiente: { label: "En Movilización", color: "#d97706", bg: "#fffbeb" },
+  en_proceso: { label: "En el taller", color: "#2563eb", bg: "#eff6ff" },
+  finalizada: { label: "Finalizada", color: "#16a34a", bg: "#f0fdf4" },
 };
 
 export default function SolicitudesV2() {
   const { user } = useAuth();
+  const role = getEffectiveNavRole(user?.role);
   const [solicitudes, setSolicitudes] = useState([]);
   const [equipos, setEquipos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [filtroEstado, setFiltroEstado] = useState("todos");
-  const [busqueda, setBusqueda] = useState("");
-  const [editando, setEditando] = useState(null);
   // Las órdenes del taller, para mostrar en qué va lo que se informó de un
   // vehículo (lo resuelven Movilización y el Taller, no esta pantalla).
   const [ordenes, setOrdenes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [formulario, setFormulario] = useState(null);
+  const [pestana, setPestana] = useState(null);
+  const [busqueda, setBusqueda] = useState("");
+  const [abierta, setAbierta] = useState(null);
 
-  useEffect(() => {
-    Promise.all([
-      base44.entities.Solicitud.list("-fecha", 200),
-      base44.entities.Equipo.list("-created_date", 500),
-      base44.entities.OrdenTrabajo.list("-created_date", 500).catch(() => []),
-    ]).then(([sol, eq, ots]) => {
-      setSolicitudes(sol);
-      setEquipos(eq);
-      setOrdenes(ots);
-      setLoading(false);
+  const cargar = useCallback(() => Promise.all([
+    base44.entities.Solicitud.list("-created_date", 500),
+    base44.entities.Equipo.list("-created_date", 500),
+    base44.entities.OrdenTrabajo.list("-created_date", 500).catch(() => []),
+  ]).then(([sol, eq, ots]) => {
+    setSolicitudes(sol);
+    setEquipos(eq);
+    setOrdenes(ots);
+  }).catch(() => {}).finally(() => setLoading(false)), []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const porId = useMemo(() => new Map(equipos.map(e => [e.id, e])), [equipos]);
+  const veTodas = ROLES_VEN_TODAS.includes(role);
+  const visibles = useMemo(
+    () => (veTodas ? solicitudes : solicitudes.filter(s => s.usuario_email === user?.email)),
+    [solicitudes, veTodas, user?.email]);
+  const esFlota = useCallback((s) => esSolicitudDeFlota(s, porId.get(s.equipo_id)), [porId]);
+  const cuenta = (clave) => visibles.filter(s => PESTANAS.find(p => p.clave === clave).filtro(s, esFlota(s))).length;
+
+  // Se abre en lo que espera una acción del centro.
+  const activa = pestana || (cuenta("devueltas") ? "devueltas" : cuenta("por_enviar") ? "por_enviar" : "en_monitor");
+
+  const lista = useMemo(() => {
+    const p = PESTANAS.find(x => x.clave === activa);
+    const q = busqueda.trim().toLowerCase();
+    return visibles.filter(s => {
+      if (!p.filtro(s, esFlota(s))) return false;
+      if (!q) return true;
+      const c = conDatosDelEquipo(s, porId.get(s.equipo_id));
+      return [c.numero_solicitud, c.equipo_marca, c.equipo_modelo, c.equipo_numero_serie, c.equipo_numero_inventario,
+        c.centro, c.ubicacion_especifica, c.usuario_nombre, c.descripcion, c.observaciones, c.insumo_nombre]
+        .some(v => String(v || "").toLowerCase().includes(q));
     });
-  }, []);
+  }, [visibles, activa, busqueda, esFlota, porId]);
 
-  const reload = () => base44.entities.Solicitud.list("-fecha", 200).then(setSolicitudes);
-
-  // Optimistic update helper for status changes
-  const optimisticUpdate = (id, data) => {
-    setSolicitudes(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+  const alGuardar = async () => {
+    setFormulario(null);
+    await cargar();
+    avisarCambioEnPendientes();
   };
 
-  // "Gestiona" (ve todas + puede resolver): Base del Sistema, Administrador,
-  // Encargado Salud y Encargado Compras Salud. El resto (Usuario/Chofer) solo
-  // ve y gestiona sus propias solicitudes.
-  const isAdmin = ["super_admin", "admin", "encargado_salud", "encargado_compras_salud"].includes(user?.role);
-  const solicitudesFiltradas = isAdmin ? solicitudes : solicitudes.filter(s => s.usuario_email === user?.email);
-
-  const filtradas = solicitudesFiltradas.filter(s => {
-    if (filtroEstado !== "todos" && s.estado !== filtroEstado) return false;
-    if (busqueda) {
-      const eq = equipos.find(e => e.id === s.equipo_id);
-      const b = busqueda.toLowerCase();
-      return (eq?.marca || "").toLowerCase().includes(b) || (s.observaciones || "").toLowerCase().includes(b) || (s.usuario_nombre || "").toLowerCase().includes(b);
+  const borrar = async (sol, pregunta) => {
+    if (!confirm(pregunta)) return;
+    try {
+      await base44.entities.Solicitud.delete(sol.id);
+      setSolicitudes(prev => prev.filter(s => s.id !== sol.id));
+      avisarCambioEnPendientes();
+    } catch {
+      // El motivo ya lo mostró base44Client.
     }
-    return true;
-  });
+  };
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
@@ -73,426 +114,154 @@ export default function SolicitudesV2() {
 
   return (
     <div className="min-h-screen" style={{ background: "#e8f4fd" }}>
-      <div className="relative overflow-hidden px-6 lg:px-10 pt-10 pb-8" style={{ background: "linear-gradient(135deg, #0f2d6b 0%, #1565c0 40%, #29b6f6 100%)" }}>
+      <div className="relative overflow-hidden px-4 sm:px-6 lg:px-10 pt-10 pb-8" style={{ background: "linear-gradient(135deg, #0f2d6b 0%, #1565c0 40%, #29b6f6 100%)" }}>
         <div className="relative max-w-5xl mx-auto flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.2)" }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.2)" }}>
               <ClipboardList className="w-6 h-6 text-white" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-cyan-200 text-xs font-semibold uppercase tracking-widest">Gestión</p>
               <h1 className="text-3xl font-bold text-white">Solicitudes</h1>
-              <p className="text-blue-100 text-sm mt-0.5">{solicitudes.filter(s => s.estado === "pendiente").length} pendiente(s)</p>
+              <p className="text-blue-100 text-sm mt-0.5">Las resuelve el Monitor Corporativo de la Corporación Municipal</p>
             </div>
           </div>
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold" style={{ background: "rgba(255,255,255,0.2)", color: "white", border: "1px solid rgba(255,255,255,0.3)" }}>
+          <button onClick={() => setFormulario({ inicial: null })} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold" style={{ background: "rgba(255,255,255,0.2)", color: "white", border: "1px solid rgba(255,255,255,0.3)" }}>
             <Plus className="w-4 h-4" /> Nueva Solicitud
           </button>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 lg:px-10 pt-6 pb-10">
-        {/* Resumen */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {Object.entries(ESTADO_CONFIG).map(([k, v]) => (
-            <div key={k} className="bg-white rounded-2xl p-4 shadow border border-slate-100">
-              <p className="text-2xl font-bold" style={{ color: v.color }}>{solicitudes.filter(s => s.estado === k).length}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{v.label}</p>
-            </div>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-10 pt-6 pb-10">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          {[
+            { clave: "por_enviar", etiqueta: "Por enviar al Monitor", color: "#d97706" },
+            { clave: "devueltas", etiqueta: "Devueltas para corregir", color: "#c2410c" },
+            { clave: "en_monitor", etiqueta: "En el Monitor", color: "#4f46e5" },
+            { clave: "cerradas", etiqueta: "Cerradas", color: "#16a34a" },
+          ].map(k => (
+            <button key={k.clave} type="button" onClick={() => setPestana(k.clave)} className="text-left bg-white rounded-2xl p-4 shadow border border-slate-100">
+              <p className="text-2xl font-bold" style={{ color: k.color }}>{cuenta(k.clave)}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{k.etiqueta}</p>
+            </button>
           ))}
         </div>
 
-        {/* Filtros */}
-        <div className="bg-white rounded-2xl shadow p-4 mb-6 flex flex-wrap gap-3 items-center">
-          <div className="flex-1 min-w-48 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input type="text" placeholder="Buscar..." className="w-full pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {[{ key: "todos", label: "Todas" }, ...Object.entries(ESTADO_CONFIG).map(([k, v]) => ({ key: k, label: v.label }))].map(t => (
-              <button key={t.key} onClick={() => setFiltroEstado(t.key)}
-                className={`px-4 py-2 rounded-xl text-xs font-medium transition-all ${filtroEstado === t.key ? "text-white" : "bg-white text-slate-500 border border-slate-200"}`}
-                style={filtroEstado === t.key ? { background: "#1a2e4a" } : {}}>
-                {t.label}
+        <div className="bg-white rounded-2xl shadow p-4 mb-6 space-y-3">
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            {PESTANAS.map(t => (
+              <button key={t.clave} onClick={() => setPestana(t.clave)} aria-pressed={activa === t.clave}
+                className={`px-4 py-2 rounded-xl text-xs font-medium whitespace-nowrap flex-shrink-0 ${activa === t.clave ? "text-white" : "bg-white text-slate-500 border border-slate-200"}`}
+                style={activa === t.clave ? { background: "#1a2e4a" } : {}}>
+                {t.label} ({cuenta(t.clave)})
               </button>
             ))}
           </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input type="text" placeholder="Buscar por N°, equipo, serie, ubicación o solicitante..." className="w-full pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+          </div>
         </div>
 
-        {/* Lista */}
         <div className="space-y-3">
-          {filtradas.length === 0 ? (
+          {lista.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl shadow text-slate-400">
               <ClipboardList className="w-10 h-10 mx-auto mb-3 opacity-20" />
-              <p>No hay solicitudes</p>
+              <p>No hay solicitudes en esta bandeja</p>
             </div>
-          ) : filtradas.map(sol => {
-            const equipo = equipos.find(e => e.id === sol.equipo_id);
-            const tipoLabel = TIPOS_SOLICITUD.find(t => t.value === sol.tipo)?.label || sol.tipo;
-            const cfg = ESTADO_CONFIG[sol.estado] || ESTADO_CONFIG.pendiente;
+          ) : lista.map(sol => {
+            const equipo = porId.get(sol.equipo_id);
+            const flota = esFlota(sol);
+            const c = conDatosDelEquipo(sol, equipo);
+            const expandida = abierta === sol.id;
+            // Acá solo lo del centro: completar y enviar. Lo del Monitor se hace
+            // en su bandeja (Solicitudes de Centros).
+            const acciones = accionesPara(role, sol, { esFlota: flota }).filter(a => a.clave === "enviar");
+            const propiaPendiente = sol.usuario_email === user?.email && (sol.estado || "pendiente") === "pendiente";
+            const fc = ESTADO_FLOTA[sol.estado] || ESTADO_FLOTA.pendiente;
             return (
-              <div key={sol.id} className="bg-white rounded-2xl shadow border border-slate-100 p-5">
-                <div className="flex items-start justify-between gap-3">
+              <div key={sol.id} className="bg-white rounded-2xl shadow border border-slate-100">
+                <button type="button" onClick={() => setAbierta(expandida ? null : sol.id)} aria-expanded={expandida}
+                  className="w-full text-left p-5 flex items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: cfg.color, background: cfg.bg }}>{cfg.label}</span>
-                      <span className="text-xs text-slate-500">{tipoLabel}</span>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      {sol.numero_solicitud && <span className="text-xs font-bold text-slate-400">{sol.numero_solicitud}</span>}
+                      {flota
+                        ? <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: fc.color, background: fc.bg }}><Truck className="w-3 h-3 inline mr-1" />{fc.label}</span>
+                        : <EstadoBadge estado={sol.estado} />}
+                      <PrioridadBadge prioridad={sol.prioridad} />
+                      <span className="text-xs text-slate-500">{rotulo(CATEGORIAS, sol.categoria) || rotuloOrigenSolicitud(sol)}</span>
                     </div>
                     <p className="font-semibold text-slate-900 text-sm">
-                      {equipo ? `${equipo.marca} ${equipo.modelo}` : "Equipo desconocido"}
-                      {equipo?.numero_inventario && <span className="text-slate-400 font-normal ml-1">· Inv.{equipo.numero_inventario}</span>}
+                      {[c.equipo_marca, c.equipo_modelo].filter(Boolean).join(" ") || "Equipo desconocido"}
+                      {c.equipo_numero_inventario && <span className="text-slate-400 font-normal ml-1">· Inv. {c.equipo_numero_inventario}</span>}
                     </p>
-                    <p className="text-xs text-slate-500">
-                      {equipo?.centro_principal || sol.centro}
-                      {equipo?.subsede && ` · ${equipo.subsede}`}
-                      {equipo?.ubicacion_especifica && ` · ${equipo.ubicacion_especifica}`}
-                      {" · "}{sol.fecha}
-                    </p>
-                    {isAdmin && sol.usuario_nombre && <p className="text-xs text-slate-400">Solicitante: {sol.usuario_nombre}</p>}
-                    {sol.alerta_id && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200 inline-block mt-1">Desde alerta</span>}
-                    {sol.origen === ORIGEN_PAUTA && <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 inline-block mt-1">Falla en una pauta</span>}
-                    {sol.observaciones && <p className="text-xs text-slate-500 mt-1 whitespace-pre-line">{sol.observaciones}</p>}
-                    {sol.respuesta_admin && (
-                      <p className="text-xs text-blue-600 mt-1 bg-blue-50 rounded-lg px-2 py-1">Resp: {sol.respuesta_admin}</p>
-                    )}
-                    {esSolicitudDeFlota(sol, equipo) && (
-                      <SeguimientoTaller solicitud={sol} ot={ordenes.find(o => o.solicitud_id === sol.id) || null} />
+                    <p className="text-xs text-slate-500 truncate">{[c.centro, c.subsede, c.ubicacion_especifica, sol.fecha].filter(Boolean).join(" · ")}</p>
+                    {veTodas && sol.usuario_nombre && <p className="text-xs text-slate-400">Solicita: {sol.usuario_nombre}{sol.solicitante_cargo ? `, ${sol.solicitante_cargo}` : ""}</p>}
+                    {sol.estado === "devuelta" && sol.resolucion && (
+                      <p className="text-xs text-orange-800 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 mt-1 whitespace-pre-line">El Monitor pide: {sol.resolucion}</p>
                     )}
                   </div>
-                  <div className="flex flex-col gap-1.5 flex-shrink-0">
-                    {/* Lo que se informó de un vehículo lo resuelven Movilización y el
-                        Taller: cambiarle el estado desde acá lo sacaría de su bandeja
-                        o lo daría por cerrado sin que el vehículo pasara por el taller. */}
-                    {isAdmin && sol.estado !== "finalizada" && !esSolicitudDeFlota(sol, equipo) && (
-                      <button onClick={() => setEditando(sol)} className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50">
-                        Gestionar
+                  <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 mt-1 transition-transform ${expandida ? "rotate-180" : ""}`} />
+                </button>
+
+                {expandida && (
+                  <div className="px-5 pb-5 space-y-3">
+                    <FichaSolicitud solicitud={sol} equipo={equipo} />
+                    {flota && <SeguimientoTaller solicitud={sol} ot={ordenes.find(o => o.solicitud_id === sol.id) || null} />}
+                  </div>
+                )}
+
+                {(acciones.length > 0 || propiaPendiente || puedeEliminar(role, "solicitud")) && (
+                  <div className="px-5 pb-4 flex flex-wrap gap-2">
+                    {acciones.map(a => (
+                      <button key={a.clave} type="button" onClick={() => setFormulario({ inicial: sol })}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white"
+                        style={{ background: "linear-gradient(135deg, #4F46E5, #312E81)" }}>
+                        <Send className="w-3.5 h-3.5" /> {a.etiqueta}
+                      </button>
+                    ))}
+                    {/* Quien la pidió completa su detalle mientras su Encargado no la envíe. */}
+                    {propiaPendiente && !acciones.length && !flota && (
+                      <button type="button" onClick={() => setFormulario({ inicial: sol })}
+                        className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50">
+                        Editar detalle
                       </button>
                     )}
                     {/* El propio solicitante puede cancelar mientras siga "pendiente" */}
-                    {sol.usuario_email === user?.email && sol.estado === "pendiente" && (
-                      <button
-                        onClick={async () => {
-                          if (!confirm("¿Cancelar esta solicitud?")) return;
-                          await base44.entities.Solicitud.delete(sol.id);
-                          setSolicitudes(prev => prev.filter(s => s.id !== sol.id));
-                        }}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50"
-                      >
+                    {propiaPendiente && (
+                      <button type="button" onClick={() => borrar(sol, "¿Cancelar esta solicitud?")}
+                        className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50">
                         Cancelar
                       </button>
                     )}
-                    {/* Borrar CUALQUIER solicitud, sea de quien sea y este en el
-                        estado que este. La policy `solicitud_delete` ya lo
-                        permitia, pero no habia boton: solo se podia cancelar la
-                        propia y mientras siguiera pendiente. No se duplica en
-                        las que ya ofrecen "Cancelar". */}
-                    {puedeEliminar(getEffectiveNavRole(user?.role), "solicitud")
-                      && !(sol.usuario_email === user?.email && sol.estado === "pendiente") && (
-                      <button
-                        onClick={async () => {
-                          if (!confirm(`¿Eliminar la solicitud de ${sol.usuario_nombre || sol.usuario_email}? No se puede deshacer.`)) return;
-                          await base44.entities.Solicitud.delete(sol.id);
-                          setSolicitudes(prev => prev.filter(s => s.id !== sol.id));
-                        }}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50"
-                      >
+                    {/* Borrar cualquiera (policy `solicitud_delete`). No se duplica
+                        en las que ya ofrecen "Cancelar". */}
+                    {puedeEliminar(role, "solicitud") && !propiaPendiente && (
+                      <button type="button"
+                        onClick={() => borrar(sol, `¿Eliminar la solicitud ${sol.numero_solicitud || ""} de ${sol.usuario_nombre || sol.usuario_email}? No se puede deshacer.`)}
+                        className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50">
                         Eliminar
                       </button>
                     )}
                   </div>
-                </div>
+                )}
               </div>
             );
           })}
         </div>
       </div>
 
-      {showForm && (
-        <SolicitudForm
+      {formulario && (
+        <SolicitudFormDetallado
           equipos={equipos}
           user={user}
-          onClose={() => setShowForm(false)}
-          onOptimistic={(data) => setSolicitudes(prev => [{ id: `temp-${Date.now()}`, ...data }, ...prev])}
-          onSaved={() => { setShowForm(false); reload(); }}
+          role={role}
+          inicial={formulario.inicial}
+          onClose={() => setFormulario(null)}
+          onSaved={alGuardar}
         />
       )}
-      {editando && (
-        <GestionarModal
-          solicitud={editando}
-          onClose={() => setEditando(null)}
-          onOptimistic={(data) => optimisticUpdate(editando.id, data)}
-          onSaved={() => { setEditando(null); reload(); }}
-        />
-      )}
-    </div>
-  );
-}
-
-// Tipos de solicitud según tipo de equipo (basado en insumos y consumibles reales)
-const TIPOS_POR_EQUIPO = {
-  dea: [
-    { value: "cambio_parches_adulto",      label: "Reposición Parches / Electrodos Adulto" },
-    { value: "cambio_parches_pediatrico",   label: "Reposición Parches / Electrodos Pediátrico" },
-    { value: "reemplazo_bateria",           label: "Reemplazo de Batería" },
-    { value: "mantenimiento_preventivo",    label: "Mantenimiento Preventivo" },
-    { value: "revision_tecnica",            label: "Revisión Técnica" },
-    { value: "limpieza_desinfeccion",        label: "Limpieza y Desinfección" },
-    { value: "mantenimiento_correctivo",    label: "Reparación / Mantenimiento Correctivo" },
-    { value: "otros",                       label: "Otros" },
-  ],
-  monitor_desfibrilador: [
-    { value: "cambio_electrodos_adulto",    label: "Reposición Electrodos Adulto" },
-    { value: "cambio_electrodos_pediatrico",label: "Reposición Electrodos Pediátrico" },
-    { value: "reemplazo_bateria",           label: "Reemplazo de Batería" },
-    { value: "reposicion_papel",            label: "Reposición Papel de Registro" },
-    { value: "cables_ecg",                  label: "Reposición Cables ECG" },
-    { value: "calibracion",                 label: "Calibración de Parámetros" },
-    { value: "mantenimiento_preventivo",    label: "Mantenimiento Preventivo" },
-    { value: "revision_tecnica",            label: "Revisión Técnica" },
-    { value: "mantenimiento_correctivo",    label: "Reparación / Mantenimiento Correctivo" },
-    { value: "compra_repuestos",            label: "Compra de Repuestos / Accesorios" },
-    { value: "otros",                       label: "Otros" },
-  ],
-  monitor_multiparametros: [
-    { value: "sensor_spo2",                 label: "Reposición Sensor SpO2 (saturación)" },
-    { value: "manguito_presion",            label: "Reposición Manguito NIBP (presión)" },
-    { value: "cables_ecg",                  label: "Reposición Cables ECG / Electrodos" },
-    { value: "sensor_temperatura",          label: "Reposición Sensor de Temperatura" },
-    { value: "calibracion",                 label: "Calibración de Parámetros" },
-    { value: "reemplazo_bateria",           label: "Reemplazo de Batería" },
-    { value: "mantenimiento_preventivo",    label: "Mantenimiento Preventivo" },
-    { value: "revision_tecnica",            label: "Revisión Técnica" },
-    { value: "mantenimiento_correctivo",    label: "Reparación / Mantenimiento Correctivo" },
-    { value: "compra_repuestos",            label: "Compra de Repuestos / Accesorios" },
-    { value: "otros",                       label: "Otros" },
-  ],
-  ambulancia: [
-    { value: "cambio_aceite",               label: "Cambio de Aceite y Filtros" },
-    { value: "bateria_vehiculo",             label: "Reemplazo Batería Vehículo" },
-    { value: "neumaticos",                   label: "Cambio / Revisión Neumáticos" },
-    { value: "luces",                        label: "Revisión / Cambio de Luces" },
-    { value: "equipamiento_interno",         label: "Equipamiento Interno (camilla, balón O₂, etc.)" },
-    { value: "mantenimiento_general",        label: "Mantenimiento General" },
-    { value: "revision_tecnica",             label: "Revisión Técnica Vehicular" },
-    { value: "mantenimiento_correctivo",     label: "Reparación / Mantenimiento Correctivo" },
-    { value: "otros",                        label: "Otros" },
-  ],
-  default: [
-    { value: "mantenimiento_preventivo",    label: "Mantenimiento Preventivo" },
-    { value: "mantenimiento_correctivo",    label: "Mantenimiento Correctivo" },
-    { value: "revision_tecnica",            label: "Revisión Técnica" },
-    { value: "compra_repuestos",            label: "Compra de Repuestos" },
-    { value: "otros",                       label: "Otros" },
-  ]
-};
-
-const TIPO_EQUIPO_LABEL = {
-  dea: "DEA",
-  monitor_desfibrilador: "Monitor Desfibrilador",
-  ambulancia: "Ambulancia",
-  monitor_multiparametros: "Monitor Multiparámetros"
-};
-
-function SolicitudForm({ equipos, user, onClose, onSaved, onOptimistic }) {
-  const centroDefault = user?.centro_principal || user?.centro_asignado || "";
-  const isAdmin = ["super_admin", "admin", "encargado_salud", "encargado_compras_salud"].includes(user?.role);
-
-  // Equipos filtrados según centro del usuario
-  const equiposFiltrados = centroDefault && !isAdmin
-    ? equipos.filter(eq => eq.centro_principal === centroDefault)
-    : equipos;
-
-  const [form, setForm] = useState({
-    equipo_id: "",
-    tipo: "",
-    fecha: new Date().toISOString().split("T")[0],
-    observaciones: "",
-    centro: centroDefault
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const equipoSeleccionado = equiposFiltrados.find(e => e.id === form.equipo_id);
-  const tipoEquipo = equipoSeleccionado?.tipo || null;
-  const tiposDisponibles = tipoEquipo ? (TIPOS_POR_EQUIPO[tipoEquipo] || TIPOS_POR_EQUIPO.default) : [];
-
-  // Cuando cambia el equipo, resetear tipo
-  const handleEquipoChange = (equipoId) => {
-    const eq = equiposFiltrados.find(e => e.id === equipoId);
-    const tipos = eq ? (TIPOS_POR_EQUIPO[eq.tipo] || TIPOS_POR_EQUIPO.default) : [];
-    set("equipo_id", equipoId);
-    setForm(f => ({ ...f, equipo_id: equipoId, tipo: tipos[0]?.value || "", centro: eq?.centro_principal || f.centro }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    const payload = {
-      ...form, estado: "pendiente",
-      usuario_email: user?.email || "",
-      usuario_nombre: user?.full_name || user?.email || ""
-    };
-    // A proposito no se espera al guardado: se cierra el formulario y la
-    // solicitud aparece de inmediato en la lista, para que no se sienta lenta.
-    onOptimistic?.(payload);
-    onSaved();
-    // El guardado real va detras. Si falla, base44Client muestra el motivo, y
-    // este onSaved() vuelve a leer de la base: asi la fila provisoria
-    // desaparece en vez de quedarse mostrando una solicitud que no existe.
-    // Antes se tragaba el error con un .catch vacio y la persona se iba
-    // convencida de haberla enviado.
-    base44.entities.Solicitud.create(payload)
-      .catch(() => {})
-      .finally(() => onSaved());
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="px-7 pt-7 pb-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">Nueva Solicitud</h2>
-          <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="px-7 py-5 space-y-4">
-
-          {/* Centro - prellenado y bloqueado para usuarios normales */}
-          <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1">Centro</label>
-            {isAdmin ? (
-              <NativePicker
-                value={form.centro}
-                onChange={v => set("centro", v)}
-                placeholder="Seleccionar centro..."
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"
-                options={[{ value: "", label: "Seleccionar..." }, ...CENTROS_ESTRUCTURA.map(c => ({ value: c.nombre, label: c.nombre }))]}
-              />
-            ) : (
-              <div className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-slate-50 text-slate-700 flex items-center gap-2">
-                <span className="text-slate-400">🏥</span>
-                {centroDefault || <span className="text-slate-400">Sin centro asignado</span>}
-              </div>
-            )}
-          </div>
-
-          {/* Equipo - filtrado por centro */}
-          <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1">Equipo *</label>
-            <NativePicker
-              value={form.equipo_id}
-              onChange={handleEquipoChange}
-              placeholder="Seleccionar equipo..."
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"
-              options={[
-                { value: "", label: "Seleccionar equipo..." },
-                ...equiposFiltrados.map(eq => ({
-                  value: eq.id,
-                  label: `[${TIPO_EQUIPO_LABEL[eq.tipo] || eq.tipo}] ${eq.marca} ${eq.modelo} · Inv.${eq.numero_inventario}${eq.subsede ? ` · ${eq.subsede}` : ""}${eq.ubicacion_especifica ? ` (${eq.ubicacion_especifica})` : ""}`
-                }))
-              ]}
-            />
-            {!form.equipo_id && centroDefault && equiposFiltrados.length === 0 && (
-              <p className="text-xs text-amber-600 mt-1">No hay equipos registrados para este centro</p>
-            )}
-          </div>
-
-          {/* Tipo - dinámico según tipo de equipo */}
-          <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1">
-              Tipo de Solicitud *
-              {tipoEquipo && <span className="ml-1 text-blue-500 font-normal">({TIPO_EQUIPO_LABEL[tipoEquipo]})</span>}
-            </label>
-            {!form.equipo_id ? (
-              <div className="w-full border border-dashed border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-400 bg-slate-50">
-                Primero selecciona un equipo
-              </div>
-            ) : (
-              <NativePicker
-                value={form.tipo}
-                onChange={v => set("tipo", v)}
-                placeholder="Seleccionar tipo..."
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"
-                options={tiposDisponibles}
-              />
-            )}
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1">Fecha *</label>
-            <input type="date" required className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" value={form.fecha} onChange={e => set("fecha", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1">Observaciones {form.tipo === "otros" ? "*" : ""}</label>
-            <textarea required={form.tipo === "otros"} rows={3} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" placeholder="Describe el problema o requerimiento..." value={form.observaciones} onChange={e => set("observaciones", e.target.value)} />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-slate-600 border border-slate-200">Cancelar</button>
-            <button type="submit" disabled={saving || !form.equipo_id || !form.tipo} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "linear-gradient(135deg, #1565c0, #0288d1)" }}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              {saving ? "Guardando..." : "Crear Solicitud"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function GestionarModal({ solicitud, onClose, onSaved, onOptimistic }) {
-  const [estado, setEstado] = useState(solicitud.estado);
-  const [respuesta, setRespuesta] = useState(solicitud.respuesta_admin || "");
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = () => {
-    setSaving(true);
-    const data = { estado, respuesta_admin: respuesta };
-    // Optimistic close
-    onOptimistic?.(data);
-    onSaved();
-    // El guardado real va detras, igual que al crear. Si falla, base44Client
-    // muestra el motivo y el onSaved() del final vuelve a leer de la base, para
-    // que la fila no quede mostrando un estado que no se guardo.
-    base44.entities.Solicitud.update(solicitud.id, data).then(() => {
-      if (estado === "finalizada" && solicitud.alerta_id) {
-        base44.entities.Alerta.update(solicitud.alerta_id, { estado: "resuelta", fecha_resolucion: new Date().toISOString().split("T")[0] }).catch(() => {});
-      }
-    }).catch(() => {}).finally(() => onSaved());
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md">
-        <div className="px-7 pt-7 pb-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">Gestionar Solicitud</h2>
-          <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
-        </div>
-        <div className="px-7 py-5 space-y-4">
-          <div className="bg-slate-50 rounded-xl p-3">
-            <p className="text-xs font-semibold text-slate-500">Solicitante</p>
-            <p className="text-sm font-medium text-slate-800 mt-0.5">{solicitud.usuario_nombre || solicitud.usuario_email}</p>
-            {solicitud.alerta_id && <p className="text-xs text-amber-600 mt-1">⚠ Vinculada a alerta — al finalizar se resolverá automáticamente</p>}
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1">Estado</label>
-            <NativePicker
-              value={estado}
-              onChange={setEstado}
-              placeholder="Seleccionar estado..."
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"
-              options={Object.entries(ESTADO_CONFIG).map(([k, v]) => ({ value: k, label: v.label }))}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1">Respuesta / Comentario</label>
-            <textarea rows={3} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" value={respuesta} onChange={e => setRespuesta(e.target.value)} />
-          </div>
-          <div className="flex gap-3">
-            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-slate-600 border border-slate-200">Cancelar</button>
-            <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#1565c0" }}>
-              {saving ? "Guardando..." : "Guardar"}
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

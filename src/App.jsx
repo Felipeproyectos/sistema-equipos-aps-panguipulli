@@ -32,6 +32,7 @@ import OrdenesTrabajo from './pages/OrdenesTrabajo';
 import SolicitudRepuestos from './pages/SolicitudRepuestos';
 import ComprasTablero from './pages/ComprasTablero';
 import ComprasSaludTablero from './pages/ComprasSaludTablero';
+import SolicitudesMonitor from './pages/SolicitudesMonitor';
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
@@ -134,6 +135,7 @@ const AuthenticatedApp = () => {
       <Route path="/SolicitudRepuestos" element={<LayoutWrapper currentPageName="SolicitudRepuestos"><PageWrapper><SolicitudRepuestos /></PageWrapper></LayoutWrapper>} />
       <Route path="/ComprasTablero" element={<LayoutWrapper currentPageName="ComprasTablero"><PageWrapper><ComprasTablero /></PageWrapper></LayoutWrapper>} />
       <Route path="/ComprasSaludTablero" element={<LayoutWrapper currentPageName="ComprasSaludTablero"><PageWrapper><ComprasSaludTablero /></PageWrapper></LayoutWrapper>} />
+      <Route path="/SolicitudesMonitor" element={<LayoutWrapper currentPageName="SolicitudesMonitor"><PageWrapper><SolicitudesMonitor /></PageWrapper></LayoutWrapper>} />
       {/* Las pantallas viejas de Base44, reemplazadas por las V2. Quien tenga
           guardado el enlace llega a la que se usa hoy, no a una copia sin
           mantener. */}

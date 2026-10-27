@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import {
   Monitor, AlertTriangle, ClipboardList, Wrench, CheckCircle2, ShieldCheck, RefreshCw,
   Car, Search, Hash, MapPin, Eye, Truck, HeartPulse, Briefcase, ChevronDown, MessageCircle,
-  ShoppingCart, Circle,
+  ShoppingCart, Circle, Inbox,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { parseISO, format } from "date-fns";
@@ -224,7 +224,7 @@ export default function MonitorCorporativo() {
           </div>
           <div className="min-w-0">
             <h1 className="text-2xl lg:text-3xl font-bold text-white leading-tight">Monitor Corporativo</h1>
-            <p className="text-indigo-100 text-xs lg:text-sm mt-0.5 first-letter:uppercase">{hoyTexto} · Solo lectura</p>
+            <p className="text-indigo-100 text-xs lg:text-sm mt-0.5 first-letter:uppercase">{hoyTexto} · Supervisión de las cuatro áreas</p>
           </div>
         </div>
       </div>
@@ -329,10 +329,21 @@ export default function MonitorCorporativo() {
 
           {area === "gestion" && (
             <>
+              {paginasAlcanzables.has("SolicitudesMonitor") && (
+                <Link to="/SolicitudesMonitor"
+                  className="flex items-center gap-3 bg-white rounded-2xl p-4 border-2 border-indigo-100 hover:border-indigo-300 transition-colors" style={sombra}>
+                  <Inbox className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-800">Solicitudes de los centros</p>
+                    <p className="text-xs text-slate-500">Mantenimiento, insumos y desperfectos que envían los Encargados de Salud para que los resuelvas.</p>
+                  </div>
+                  <span className="text-sm font-bold text-indigo-700 flex-shrink-0">{solicitudes.filter(s => s.estado === "derivada").length} por atender</span>
+                </Link>
+              )}
               <div className="bg-white rounded-2xl p-5" style={sombra}>
                 <h3 className="text-sm font-bold text-slate-700 mb-3">Pedidos de Movilización al Taller</h3>
                 <CoordinacionTaller resumen={r.coordinacion} verDetalle={verDetalleOT}
-                  porRevisar={solicitudes.filter(s => esSolicitudDeFlota(s, equipos.find(e => e.id === s.equipo_id))).length} />
+                  porRevisar={solicitudes.filter(s => (s.estado || "pendiente") === "pendiente" && esSolicitudDeFlota(s, equipos.find(e => e.id === s.equipo_id))).length} />
               </div>
               <Desplegable titulo={`Compras de repuestos e insumos (${compras.length})`} icono={ShoppingCart}>
                 {compras.length === 0 ? (

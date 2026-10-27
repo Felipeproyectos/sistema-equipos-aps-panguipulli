@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Monitor, Bell, ClipboardList, FileText,
-  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart, Route, Truck, IdCard, CalendarDays, NotebookPen, KeyRound
+  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart, Route, Truck, IdCard, CalendarDays, NotebookPen, KeyRound, Inbox
 } from "lucide-react";
 import { ROLES } from "@/lib/roles";
 
@@ -93,6 +93,11 @@ export const NAV_ITEMS = [
   { label: "Monitor Corporativo", page: "MonitorCorporativo", path: "/MonitorCorporativo", icon: BarChart3,
     roles: [ROLES.SUPER_ADMIN, ROLES.MONITOR_CORPORATIVO] },
 
+  // La bandeja de lo que envían los Encargados de Salud: el Monitor las
+  // resuelve (src/lib/solicitudesMonitor.js).
+  { label: "Solicitudes de Centros", page: "SolicitudesMonitor", path: "/SolicitudesMonitor", icon: Inbox,
+    roles: [ROLES.SUPER_ADMIN, ROLES.MONITOR_CORPORATIVO] },
+
   { label: "Configuración", page: "Configuracion", path: "/Configuracion", icon: Settings,
     roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
 
@@ -111,7 +116,7 @@ const ROLE_ORDER = {
   [ROLES.ENCARGADO_COMPRAS_SALUD]: ["ComprasSaludTablero"],
   // Su pantalla principal es el Monitor; en el orden general quedaba despues
   // de Reportes, y ese orden decide tambien a donde se lo manda de vuelta.
-  [ROLES.MONITOR_CORPORATIVO]: ["MonitorCorporativo"],
+  [ROLES.MONITOR_CORPORATIVO]: ["MonitorCorporativo", "SolicitudesMonitor"],
   // En el orden en que se usa: lo de hoy, programar, la flota, los choferes,
   // la bitácora, y al final la bandeja del taller.
   [ROLES.ENCARGADO_MOVILIZACION]: ["PanelFlota", "Calendario", "Flota", "Choferes", "BitacoraFlota", "Movilizacion"],

@@ -33,7 +33,7 @@ export const COLUMNAS_NO_TEXTO = {
   proveedor: new Set(["activo", "created_date", "is_sample", "updated_date"]),
   repuesto: new Set(["activo", "created_date", "fecha_factura", "fecha_orden_compra", "is_sample", "precio_unitario", "stock_actual", "stock_minimo", "ultimo_reposicion", "updated_date"]),
   repuesto_critico: new Set(["created_date", "is_sample", "stock_unidades", "updated_date", "vida_util_pct"]),
-  solicitud: new Set(["created_date", "fecha", "is_sample", "updated_date"]),
+  solicitud: new Set(["created_date", "fecha", "fecha_derivacion", "fecha_deteccion", "fecha_resolucion", "fecha_toma", "insumo_cantidad", "is_sample", "linea_tiempo", "updated_date"]),
   solicitud_repuesto: new Set(["cantidad", "created_date", "fecha_aprobacion", "fecha_compra", "fecha_recepcion_bodega", "fecha_solicitud", "is_sample", "linea_tiempo", "precio_total_compra", "updated_date"]),
   solicitud_repuesto_salud: new Set(["cantidad", "created_date", "fecha_aprobacion", "fecha_compra", "fecha_recepcion_bodega", "fecha_solicitud", "is_sample", "linea_tiempo", "precio_total_compra", "updated_date"]),
   solicitud_stock: new Set(["cantidad", "created_date", "fecha_solicitud", "is_sample", "updated_date"]),

@@ -84,8 +84,15 @@ export function areaGestion({ solicitudes = [], comprasTaller = [], comprasSalud
   const hace = (f) => (f ? diasEntre(f, dia) : 0);
   const fechaAprob = (s) => s.fecha_aprobacion || s.updated_date || s.created_date;
 
+  // Las de equipos vitales pasan por el Monitor (solicitudesMonitor.js): el
+  // centro las envía (derivada) y el Monitor las toma (en_proceso).
   const pendientesSalud = solicitudes.filter(s => (s.estado || "pendiente") === "pendiente");
   const viejas = pendientesSalud.filter(s => hace(s.created_date || s.fecha) > 7);
+  const porAtender = solicitudes.filter(s => s.estado === "derivada");
+  const sinTomar = porAtender.filter(s => hace(s.fecha_derivacion || s.created_date) > 3);
+  const urgentes = solicitudes.filter(s => ["derivada", "en_proceso"].includes(s.estado)
+    && (s.prioridad === "critica" || s.operatividad === "fuera_de_servicio"));
+  const rotuloSol = (s) => [s.numero_solicitud, [s.equipo_marca, s.equipo_modelo].filter(Boolean).join(" "), s.centro].filter(Boolean).join(" · ");
   const porComprar = [...comprasTaller, ...comprasSalud].filter(s => s.estado === "aprobada");
   const comprasDemoradas = porComprar.filter(s => hace(fechaAprob(s)) > 7);
   const enCamino = [...comprasTaller, ...comprasSalud].filter(s => s.estado === "comprada");
@@ -102,8 +109,10 @@ export function areaGestion({ solicitudes = [], comprasTaller = [], comprasSalud
         || rotuloOT(a.ot),
     });
   }
+  if (urgentes.length) atencion.push({ tono: "rojo", titulo: `${plural(urgentes.length, "solicitud crítica o con el equipo fuera de servicio", "solicitudes críticas o con el equipo fuera de servicio")} sin resolver`, detalle: nombres(urgentes, rotuloSol) });
+  if (sinTomar.length) atencion.push({ tono: "ambar", titulo: `${plural(sinTomar.length, "solicitud de un centro lleva", "solicitudes de los centros llevan")} más de 3 días sin tomar`, detalle: nombres(sinTomar, rotuloSol) });
   if (comprasDemoradas.length) atencion.push({ tono: "rojo", titulo: `${plural(comprasDemoradas.length, "compra aprobada lleva", "compras aprobadas llevan")} más de 7 días sin hacerse`, detalle: nombres(comprasDemoradas, s => s.repuesto_nombre) });
-  if (viejas.length) atencion.push({ tono: "ambar", titulo: `${plural(viejas.length, "solicitud de Salud lleva", "solicitudes de Salud llevan")} más de una semana sin respuesta`, detalle: "" });
+  if (viejas.length) atencion.push({ tono: "ambar", titulo: `${plural(viejas.length, "solicitud lleva", "solicitudes llevan")} más de una semana en un centro sin enviarse`, detalle: "" });
   if (sinLlegar.length) atencion.push({ tono: "ambar", titulo: `${plural(sinLlegar.length, "compra no llega", "compras no llegan")} a bodega después de 14 días`, detalle: nombres(sinLlegar, s => s.repuesto_nombre) });
   if (porComprar.length && !comprasDemoradas.length) atencion.push({ tono: "gris", titulo: `${plural(porComprar.length, "compra aprobada", "compras aprobadas")} en curso`, detalle: nombres(porComprar, s => s.repuesto_nombre) });
 
@@ -114,7 +123,7 @@ export function areaGestion({ solicitudes = [], comprasTaller = [], comprasSalud
     atencion,
     coordinacion: coord,
     indicadores: [
-      { valor: pendientesSalud.length, etiqueta: "solicitudes de Salud pendientes", contexto: viejas.length ? `${viejas.length} de hace más de 7 días` : "" },
+      { valor: porAtender.length, etiqueta: "solicitudes de los centros por atender", contexto: `${pendientesSalud.length} sin enviar en los centros`, malo: urgentes.length > 0 || sinTomar.length > 0 },
       { valor: porComprar.length, etiqueta: "compras por hacer", contexto: `${enCamino.length} en camino`, malo: comprasDemoradas.length > 0 },
       { valor: coord.porAgendar.length + coord.reagendar.length + coord.esperanMovilizacion.length, etiqueta: "pedidos al taller sin fecha acordada" },
       { valor: dias === null ? "—" : `${String(dias).replace(".", ",")} d`, etiqueta: "demora del taller en dar fecha" },
@@ -242,6 +251,17 @@ export function _selfCheck() {
   debe(g.estado.tono === "rojo", "un pedido detenido o una compra demorada es rojo");
   debe(g.atencion[0].titulo.startsWith("1 pedido al taller detenido"), "lo más grave primero");
   debe(g.indicadores[1].valor === 1 && g.indicadores[1].contexto === "1 en camino", "compras por hacer y en camino");
+  const gm = areaGestion({
+    hoy, ahora: new Date(`${hoy}T12:00:00Z`),
+    solicitudes: [
+      { estado: "derivada", prioridad: "media", fecha_derivacion: "2026-09-20T12:00:00Z", numero_solicitud: "SOL-1" },
+      { estado: "en_proceso", operatividad: "fuera_de_servicio", numero_solicitud: "SOL-2" },
+      { estado: "pendiente", created_date: `${hoy}T10:00:00Z` },
+    ],
+  });
+  debe(gm.estado.tono === "rojo" && gm.atencion[0].detalle === "SOL-2", "un equipo fuera de servicio sin resolver es rojo");
+  debe(gm.atencion.some(a => a.titulo.startsWith("1 solicitud de un centro lleva más de 3 días")), "más de 3 días sin tomar");
+  debe(gm.indicadores[0].valor === 1 && gm.indicadores[0].contexto === "1 sin enviar en los centros", "por atender y sin enviar");
 
   // Movilización
   const lic = (v) => ({ clave: !v ? "sin_datos" : v < hoy ? "vencida" : "vigente" });

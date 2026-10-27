@@ -45,7 +45,9 @@ const METODOS_ESCRITURA = new Set([
 // la pantalla por URL — el guardado reventaba recien en la base. Se bloquea
 // aqui, en el mismo punto que la simulacion de rol, para que valga en todas
 // las pantallas y no haya que acordarse en cada una.
-const ENTIDADES_QUE_EL_MONITOR_SI_ESCRIBE = new Set(['Comentario']);
+// Solicitud: el Monitor responde las que le envían los centros; la base solo le
+// deja cambiar su respuesta (migracion/31_solicitudes_monitor.sql).
+const ENTIDADES_QUE_EL_MONITOR_SI_ESCRIBE = new Set(['Comentario', 'Solicitud']);
 let rolActual = null;
 let usuarioActual = null;
 export function fijarRolActual(rol) { rolActual = rol; }
