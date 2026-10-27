@@ -45,6 +45,11 @@ const ETIQUETA_TIPO = {
   revision_tecnica: "Revisión técnica",
   compra_repuestos: "Compra de repuestos",
   cambio_parches: "Cambio de parches",
+  cambio_aceite: "Cambio de aceite y filtros",
+  mantenimiento_general: "Mantenimiento general",
+  neumaticos: "Neumáticos",
+  luces: "Luces",
+  bateria_vehiculo: "Batería del vehículo",
   otros: "Otros",
 };
 

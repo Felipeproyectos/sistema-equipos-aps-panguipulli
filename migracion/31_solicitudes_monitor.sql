@@ -23,7 +23,10 @@
 --   rechazada  → no procede, con el motivo
 --
 -- Las de vehículos (ambulancias y flota) siguen igual: las resuelven
--- Movilización y el Taller, y no pueden entrar a este recorrido.
+-- Movilización y el Taller, y no pueden entrar a este recorrido. EXCEPTO la
+-- cabina sanitaria de la ambulancia (ambito = 'cabina': equipos médicos,
+-- oxígeno, camilla, insumos clínicos), que es 100% de Calidad y sí va al
+-- Monitor. El vehículo mismo (ambito 'vehiculo' o vacío) sigue en Movilización.
 --
 -- Qué hace
 -- ────────
@@ -75,6 +78,7 @@ alter table solicitud add column if not exists fecha_toma timestamptz;
 alter table solicitud add column if not exists fecha_resolucion timestamptz;
 alter table solicitud add column if not exists resolucion text;
 alter table solicitud add column if not exists linea_tiempo jsonb default '[]'::jsonb;
+alter table solicitud add column if not exists ambito text;
 
 -- Valores permitidos. NOT VALID: rige para lo que se escriba desde ahora, sin
 -- revisar las filas viejas (que no tienen estos campos).
@@ -90,6 +94,9 @@ alter table solicitud add constraint solicitud_prioridad_valida check (prioridad
 alter table solicitud drop constraint if exists solicitud_operatividad_valida;
 alter table solicitud add constraint solicitud_operatividad_valida check (operatividad is null
   or operatividad in ('operativo', 'operativo_con_restricciones', 'fuera_de_servicio')) not valid;
+alter table solicitud drop constraint if exists solicitud_ambito_valido;
+alter table solicitud add constraint solicitud_ambito_valido check (ambito is null
+  or ambito in ('cabina', 'vehiculo')) not valid;
 alter table solicitud drop constraint if exists solicitud_insumo_cantidad_valida;
 alter table solicitud add constraint solicitud_insumo_cantidad_valida check (insumo_cantidad is null
   or (insumo_cantidad > 0 and insumo_cantidad <= 100000)) not valid;
@@ -111,11 +118,14 @@ create or replace function mi_nombre() returns text
   select coalesce(nullif(full_name, ''), email) from usuario
    where lower(email) = lower(auth.jwt() ->> 'email') limit 1 $$;
 
--- La misma regla que esSolicitudDeFlota (src/lib/panelFlota.js): si apunta a
--- un equipo decide el equipo; si no, el tipo de lo que se pide.
-create or replace function es_solicitud_de_flota(id_equipo text, tipo_solicitud text) returns boolean
+-- La misma regla que esSolicitudDeFlota (src/lib/panelFlota.js): la cabina
+-- sanitaria nunca es de flota; si apunta a un equipo decide el equipo; si no,
+-- el tipo de lo que se pide.
+drop function if exists es_solicitud_de_flota(text, text);
+create or replace function es_solicitud_de_flota(id_equipo text, tipo_solicitud text, ambito_solicitud text) returns boolean
   language sql stable security definer set search_path = public as $$
   select case
+    when ambito_solicitud = 'cabina' then false
     when coalesce(id_equipo, '') <> '' and exists (select 1 from equipo where id = id_equipo)
       then exists (select 1 from equipo where id = id_equipo
                     and tipo in ('ambulancia', 'camioneta', 'furgon', 'camion_3_4'))
@@ -154,8 +164,13 @@ begin
 
   viejo := case when tg_op = 'UPDATE' then coalesce(old.estado, 'pendiente') else null end;
 
+  -- La cabina sanitaria es solo de ambulancias.
+  if new.ambito = 'cabina' and not exists (select 1 from equipo where id = new.equipo_id and tipo = 'ambulancia') then
+    raise exception 'La cabina sanitaria es solo de las ambulancias.';
+  end if;
+
   -- Vehículos: siguen con Movilización y el Taller, como siempre.
-  if es_solicitud_de_flota(new.equipo_id, new.tipo) then
+  if es_solicitud_de_flota(new.equipo_id, new.tipo, new.ambito) then
     if nuevo in ('derivada', 'devuelta', 'rechazada') then
       raise exception 'Las solicitudes de vehículos las resuelven Movilización y el Taller, no el Monitor Corporativo.';
     end if;
@@ -332,7 +347,7 @@ commit;
 
 -- ── Verificación ────────────────────────────────────────────────────
 -- Las filas deben coincidir.
-select 'columnas nuevas de solicitud' as que, count(*)::text as hay, '27' as esperado
+select 'columnas nuevas de solicitud' as que, count(*)::text as hay, '28' as esperado
   from information_schema.columns
   where table_schema = 'public' and table_name = 'solicitud'
     and column_name in ('numero_solicitud', 'categoria', 'prioridad', 'operatividad', 'descripcion',
@@ -340,7 +355,7 @@ select 'columnas nuevas de solicitud' as que, count(*)::text as hay, '27' as esp
       'equipo_numero_inventario', 'subsede', 'ubicacion_especifica', 'solicitante_cargo',
       'solicitante_telefono', 'insumo_nombre', 'insumo_cantidad', 'insumo_especificacion',
       'derivada_por_email', 'derivada_por_nombre', 'fecha_derivacion', 'monitor_email',
-      'monitor_nombre', 'fecha_toma', 'fecha_resolucion', 'resolucion', 'linea_tiempo')
+      'monitor_nombre', 'fecha_toma', 'fecha_resolucion', 'resolucion', 'linea_tiempo', 'ambito')
 union all select 'disparadores de solicitud', count(*)::text, '3'
   from pg_trigger where tgname in ('solicitud_flujo', 'solicitud_resuelve_alerta', 'solicitud_avisa_monitor')
 union all select 'policy de lectura con el Monitor', count(*)::text, '1'

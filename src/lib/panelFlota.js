@@ -15,8 +15,11 @@ export const TIPOS_DE_FLOTA = ["mantenimiento_correctivo", "mantenimiento_preven
 const TIPOS_VEHICULO = ["ambulancia", "camioneta", "furgon", "camion_3_4"];
 
 /** ¿Esta solicitud de Salud le toca a Movilización? Si apunta a un equipo,
- *  decide el equipo; si no, el tipo de lo que se pide. */
+ *  decide el equipo; si no, el tipo de lo que se pide. Lo de la cabina
+ *  sanitaria de una ambulancia (ambito "cabina") es de Calidad, no de
+ *  Movilización: equipos médicos, oxígeno, camilla, insumos. */
 export function esSolicitudDeFlota(solicitud, equipo) {
+  if (solicitud?.ambito === "cabina") return false;
   if (equipo) return TIPOS_VEHICULO.includes(equipo.tipo);
   return TIPOS_DE_FLOTA.includes(solicitud?.tipo);
 }
@@ -137,6 +140,8 @@ export function _selfCheck() {
   debe(r.salidasDelMes.length === 2, "dos salidas en septiembre");
   debe(r.porRevisar.map(s => s.id).join() === "s1,s3", `por revisar: vehiculo y tipo de flota sin equipo, hubo ${r.porRevisar.map(s => s.id)}`);
   debe(!esSolicitudDeFlota({ tipo: "mantenimiento_correctivo" }, { tipo: "dea" }), "el mantenimiento de un DEA no es de flota");
+  debe(!esSolicitudDeFlota({ ambito: "cabina" }, { tipo: "ambulancia" }), "la cabina de la ambulancia es de Calidad");
+  debe(esSolicitudDeFlota({ ambito: "vehiculo" }, { tipo: "ambulancia" }), "el vehículo de la ambulancia es de Movilización");
 
   const p = pasosDeLaPuestaEnMarcha(r);
   debe(p.every(x => x.hecho), "con esto cargado, los cuatro pasos estan hechos");

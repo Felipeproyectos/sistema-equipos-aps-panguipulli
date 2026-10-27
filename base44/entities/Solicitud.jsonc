@@ -189,6 +189,14 @@
           }
         }
       }
+    },
+    "ambito": {
+      "type": "string",
+      "enum": [
+        "cabina",
+        "vehiculo"
+      ],
+      "description": "Solo ambulancias: 'cabina' = cabina sanitaria (Calidad → Monitor Corporativo); 'vehiculo' o vacío = el vehículo (Movilización)"
     }
   },
   "required": [

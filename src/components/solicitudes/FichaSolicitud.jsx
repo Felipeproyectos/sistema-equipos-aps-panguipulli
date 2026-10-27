@@ -101,6 +101,8 @@ export default function FichaSolicitud({ solicitud, equipo, mostrarLinea = true 
         <Dato etiqueta="Marca y modelo" valor={[s.equipo_marca, s.equipo_modelo].filter(Boolean).join(" ")} fuerte />
         <Dato etiqueta="N° de serie" valor={s.equipo_numero_serie} />
         <Dato etiqueta="N° de inventario" valor={s.equipo_numero_inventario} />
+        <Dato etiqueta="Patente" valor={equipo?.patente} />
+        <Dato etiqueta="Parte" valor={s.ambito === "cabina" ? "Cabina sanitaria (Calidad)" : s.ambito === "vehiculo" ? "Vehículo (Movilización)" : ""} fuerte />
         <Dato etiqueta="Estado del equipo" valor={op?.label} />
       </Bloque>
 

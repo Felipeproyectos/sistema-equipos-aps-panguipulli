@@ -205,6 +205,7 @@ export default function SolicitudesMonitor() {
                       </div>
                       <p className="font-semibold text-slate-900 text-sm">
                         {[c.equipo_marca, c.equipo_modelo].filter(Boolean).join(" ") || "Equipo"}
+                        {s.ambito === "cabina" && <span className="text-teal-700 font-semibold"> · Cabina sanitaria{eq?.patente ? ` (${eq.patente})` : ""}</span>}
                         {c.equipo_numero_serie && <span className="text-slate-400 font-normal"> · S/N {c.equipo_numero_serie}</span>}
                         {s.insumo_nombre && <span className="text-slate-500 font-normal"> · {s.insumo_nombre} × {s.insumo_cantidad || 1}</span>}
                       </p>

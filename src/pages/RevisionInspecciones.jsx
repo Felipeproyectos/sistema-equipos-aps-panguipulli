@@ -269,18 +269,20 @@ function InspeccionCard({ insp, onActualizar }) {
         nota,
       });
       const data = res.data || res;
-      if (accion === "aprobar" && esCabina) {
+      const creadas = data?.solicitudes_creadas?.length ? data.solicitudes_creadas
+        : data?.solicitud_creada ? [data.solicitud_creada] : [];
+      if (accion === "aprobar" && esCabina && !creadas.length) {
         toast({ title: "Pauta de Cabina aprobada", description: "Quedó en el historial de la ambulancia." });
-      } else if (accion === "aprobar" && data?.solicitud_creada) {
-        // Las fallas no van directo al taller: las decide Movilización (vehículos)
-        // o Salud (equipos). Ver src/lib/fallasPauta.js.
-        const aQuien = data.solicitud_creada.area === "movilizacion"
-          ? "Movilización (Solicitudes al Taller)" : "Salud (Solicitudes)";
+      } else if (accion === "aprobar" && creadas.length) {
+        // Las fallas no van directo al taller: las decide Movilización (el
+        // vehículo) o Salud (equipos y cabina sanitaria, que después envía al
+        // Monitor Corporativo). Ver src/lib/fallasPauta.js.
+        const aQuien = (c) => (c.area === "movilizacion" ? "Movilización (Solicitudes al Taller)" : "Calidad (Solicitudes)");
         toast({
-          title: "Pauta aprobada con fallas",
-          description: data.solicitud_creada.nueva
-            ? `Se envió una solicitud a ${aQuien}, que decide si va al taller.`
-            : `Se sumó a la solicitud que ${aQuien} ya tenía abierta para este equipo.`,
+          title: esCabina ? "Pauta de Cabina aprobada con avisos" : "Pauta aprobada con fallas",
+          description: creadas.map(c => (c.nueva
+            ? `Se abrió una solicitud en ${aQuien(c)}.`
+            : `Se sumó a la solicitud que ${aQuien(c)} ya tenía abierta.`)).join(" "),
         });
       } else if (accion === "aprobar") {
         toast({ title: "Inspección aprobada", description: "Sin fallas." });

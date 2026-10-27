@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { X, Loader2, Send, Save, Wrench, ShoppingCart, AlertOctagon, Info, Truck } from "lucide-react";
+import { X, Loader2, Send, Save, Wrench, ShoppingCart, AlertOctagon, Info, Truck, HeartPulse } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import NativePicker from "@/components/NativePicker";
 import { CENTROS_ESTRUCTURA, TIPOS_EQUIPO, esVehiculo } from "@/lib/centros";
@@ -19,7 +19,9 @@ import {
 //
 // El Encargado de Salud la envía al Monitor. El Usuario la deja pendiente, y
 // su Encargado la revisa y la envía. Las de vehículos no van al Monitor: van a
-// Movilización, como siempre.
+// Movilización, como siempre. La ambulancia se parte en dos: lo de la CABINA
+// SANITARIA es 100% de Calidad (va al Monitor) y lo del VEHÍCULO va a
+// Movilización; quien la llena elige cuál es.
 
 // El detalle de cada tipo de equipo, agrupado por el tipo de solicitud.
 const SUBTIPOS = {
@@ -27,24 +29,34 @@ const SUBTIPOS = {
     dea: [["cambio_parches_adulto", "Parches / electrodos adulto"], ["cambio_parches_pediatrico", "Parches / electrodos pediátrico"], ["reemplazo_bateria", "Batería"]],
     monitor_desfibrilador: [["cambio_electrodos_adulto", "Electrodos adulto"], ["cambio_electrodos_pediatrico", "Electrodos pediátrico"], ["reemplazo_bateria", "Batería"], ["reposicion_papel", "Papel de registro"], ["cables_ecg", "Cables ECG"]],
     monitor_multiparametros: [["sensor_spo2", "Sensor SpO2"], ["manguito_presion", "Manguito NIBP"], ["cables_ecg", "Cables ECG / electrodos"], ["sensor_temperatura", "Sensor de temperatura"], ["reemplazo_bateria", "Batería"]],
+    ambulancia_cabina: [["insumos_cabina", "Insumos clínicos de la cabina"], ["recarga_oxigeno", "Recarga de oxígeno"], ["material_caducado", "Reposición de material caducado"]],
+    vehiculo: [["compra_repuestos", "Repuesto del vehículo"]],
     default: [["compra_repuestos", "Repuesto o accesorio"]],
     comunes: [["compra_repuestos", "Otro repuesto o accesorio"]],
   },
   mantenimiento: {
     default: [["mantenimiento_preventivo", "Mantenimiento preventivo"], ["calibracion", "Calibración"], ["revision_tecnica", "Revisión técnica / certificación"]],
     dea: [["mantenimiento_preventivo", "Mantenimiento preventivo"], ["revision_tecnica", "Revisión técnica / certificación"], ["limpieza_desinfeccion", "Limpieza y desinfección"]],
+    ambulancia_cabina: [["mantencion_equipamiento_cabina", "Equipamiento de cabina (camilla, oxígeno, aspiración)"], ["limpieza_desinfeccion", "Limpieza y desinfección de la cabina"]],
+    vehiculo: [["cambio_aceite", "Cambio de aceite y filtros"], ["mantenimiento_general", "Mantenimiento general"], ["neumaticos", "Neumáticos"], ["luces", "Luces"], ["revision_tecnica", "Revisión técnica vehicular"]],
     comunes: [],
   },
   desperfecto_tecnico: {
+    ambulancia_cabina: [["falla_equipamiento_cabina", "Falla de equipamiento de cabina (camilla, oxígeno, aspiración, monitor)"]],
+    vehiculo: [["mantenimiento_correctivo", "Reparación del vehículo"], ["bateria_vehiculo", "Batería del vehículo"]],
     default: [["mantenimiento_correctivo", "Reparación"]],
     comunes: [["otros", "Otro"]],
   },
 };
 
-function subtiposPara(categoria, tipoEquipo) {
+// La clave de SUBTIPOS: la cabina de la ambulancia y los vehículos tienen la suya.
+const claveSubtipo = (tipoEquipo, ambito) => (tipoEquipo === "ambulancia" && ambito === "cabina" ? "ambulancia_cabina"
+  : esVehiculo(tipoEquipo) ? "vehiculo" : tipoEquipo);
+
+function subtiposPara(categoria, tipoEquipo, ambito) {
   const g = SUBTIPOS[categoria];
   if (!g) return [];
-  const base = g[tipoEquipo] || g.default || [];
+  const base = g[claveSubtipo(tipoEquipo, ambito)] || g.default || [];
   const vistos = new Set();
   return [...base, ...(g.comunes || [])]
     .filter(([v]) => (vistos.has(v) ? false : vistos.add(v)))
@@ -90,6 +102,7 @@ export default function SolicitudFormDetallado({ equipos, user, role, inicial = 
       insumo_nombre: inicial?.insumo_nombre || "",
       insumo_cantidad: inicial?.insumo_cantidad ?? "",
       insumo_especificacion: inicial?.insumo_especificacion || "",
+      ambito: inicial?.ambito || "",
     };
   });
   const [guardando, setGuardando] = useState(null);
@@ -97,8 +110,9 @@ export default function SolicitudFormDetallado({ equipos, user, role, inicial = 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const equipo = equipos.find(e => e.id === form.equipo_id) || null;
-  const esFlota = equipo ? esVehiculo(equipo.tipo) : false;
-  const subtipos = subtiposPara(form.categoria, equipo?.tipo);
+  const esAmbulancia = equipo?.tipo === "ambulancia";
+  const esFlota = equipo ? esVehiculo(equipo.tipo) && !(esAmbulancia && form.ambito === "cabina") : false;
+  const subtipos = subtiposPara(form.categoria, equipo?.tipo, form.ambito);
 
   const elegirEquipo = (id) => {
     const eq = equipos.find(e => e.id === id);
@@ -108,12 +122,17 @@ export default function SolicitudFormDetallado({ equipos, user, role, inicial = 
       centro: eq?.centro_principal || f.centro,
       subsede: eq?.subsede || "",
       ubicacion_especifica: eq?.ubicacion_especifica || "",
-      tipo: subtiposPara(f.categoria, eq?.tipo)[0]?.value || "",
+      ambito: eq?.tipo === "ambulancia" ? f.ambito : "",
+      tipo: subtiposPara(f.categoria, eq?.tipo, eq?.tipo === "ambulancia" ? f.ambito : "")[0]?.value || "",
     }));
   };
 
   const elegirCategoria = (c) => {
-    setForm(f => ({ ...f, categoria: c, tipo: subtiposPara(c, equipo?.tipo)[0]?.value || "" }));
+    setForm(f => ({ ...f, categoria: c, tipo: subtiposPara(c, equipo?.tipo, f.ambito)[0]?.value || "" }));
+  };
+
+  const elegirAmbito = (a) => {
+    setForm(f => ({ ...f, ambito: a, tipo: subtiposPara(f.categoria, equipo?.tipo, a)[0]?.value || "" }));
   };
 
   const payload = (estado) => {
@@ -129,6 +148,10 @@ export default function SolicitudFormDetallado({ equipos, user, role, inicial = 
       prioridad: form.prioridad || null,
       operatividad: form.operatividad || null,
       descripcion: form.descripcion.trim(),
+      // Movilización y el Taller leen `observaciones`: la descripción va
+      // también ahí cuando la solicitud no traía texto propio.
+      ...(!inicial?.observaciones ? { observaciones: form.descripcion.trim() } : {}),
+      ambito: esAmbulancia ? (form.ambito || null) : null,
       fecha_deteccion: form.fecha_deteccion || null,
       centro: form.centro,
       subsede: form.subsede,
@@ -149,7 +172,7 @@ export default function SolicitudFormDetallado({ equipos, user, role, inicial = 
   const guardar = async (estado) => {
     setError("");
     const datos = payload(estado);
-    const faltan = estado === "derivada"
+    const faltan = esAmbulancia && !form.ambito ? ["si es de la cabina sanitaria o del vehículo"] : estado === "derivada"
       ? faltantesParaEnviar(datos)
       : [
         !datos.equipo_id && "el equipo",
@@ -263,10 +286,32 @@ export default function SolicitudFormDetallado({ equipos, user, role, inicial = 
               </div>
             )}
 
-            {esFlota && (
+            {esAmbulancia && (
+              <div>
+                <label className={etiqueta}>¿Qué parte de la ambulancia? *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    { value: "cabina", titulo: "Cabina sanitaria", ayuda: "Equipos médicos, oxígeno, camilla, aspiración, insumos clínicos. La resuelve Calidad con el Monitor Corporativo.", Icono: HeartPulse },
+                    { value: "vehiculo", titulo: "Vehículo", ayuda: "Motor, luces, neumáticos, carrocería, documentos. La resuelve Movilización con el Taller.", Icono: Truck },
+                  ].map(o => {
+                    const activo = form.ambito === o.value;
+                    return (
+                      <button key={o.value} type="button" onClick={() => elegirAmbito(o.value)} aria-pressed={activo}
+                        className="text-left rounded-xl border-2 px-3 py-2.5"
+                        style={{ borderColor: activo ? "#1565c0" : "#e2e8f0", background: activo ? "#eff6ff" : "white" }}>
+                        <span className="flex items-center gap-2 text-sm font-bold text-slate-800"><o.Icono className="w-4 h-4" style={{ color: activo ? "#1565c0" : "#94a3b8" }} />{o.titulo}</span>
+                        <span className="block text-[11px] text-slate-500 mt-0.5 leading-snug">{o.ayuda}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {esFlota && (!esAmbulancia || form.ambito === "vehiculo") && (
               <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                 <Truck className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                Es un vehículo: la solicitud va a Movilización, que la deriva al Taller. No pasa por el Monitor Corporativo.
+                Es del vehículo: la solicitud va a Movilización, que la deriva al Taller. No pasa por el Monitor Corporativo.
               </p>
             )}
 

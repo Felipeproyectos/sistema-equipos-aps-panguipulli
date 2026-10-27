@@ -22,6 +22,12 @@
 // Taller» si es un vehículo (la deriva al taller o la cierra), Salud en
 // «Solicitudes» si es un equipo. Si el equipo ya tiene una solicitud de pauta
 // sin revisar, la falla nueva se suma a esa en vez de abrir otra.
+//
+// La ambulancia se parte en dos: la CABINA SANITARIA (equipos médicos,
+// oxígeno, camilla, botiquín, limpieza y desechos clínicos) es 100% de
+// Calidad, y va al Encargado de Salud y de ahí al Monitor Corporativo; el
+// VEHÍCULO (motor, luces, neumáticos, carrocería, documentos) es de
+// Movilización. Una misma pauta puede abrir una solicitud de cada lado.
 
 export const ORIGEN_PAUTA = "pauta_inspeccion";
 
@@ -37,6 +43,26 @@ const NOMBRE_PAUTA = {
 /** Quién decide qué se hace con las fallas de este equipo. */
 export const areaQueDecide = (equipo) => (TIPOS_VEHICULO.includes(equipo?.tipo) ? "movilizacion" : "salud");
 
+/** solicitud.ambito de lo que es de la cabina sanitaria de una ambulancia. */
+export const AMBITO_CABINA = "cabina";
+export const AMBITO_VEHICULO = "vehiculo";
+
+// Lo de la cabina, venga de la pauta diaria (por bloque) o de la semanal (por
+// ítem: ahí "Camilla" y "Oxígeno" van mezclados con la baliza y los espejos).
+const BLOQUES_CABINA = new Set(["equipo_medico", "saneamiento"]);
+const ITEMS_CABINA = /camilla|ox[ií]geno|botiqu[ií]n|primeros auxilios|\bDEA\b|desfibril|monitor|aspirad|insumo|desecho/i;
+
+/** ¿Esta falla es de la cabina sanitaria (Calidad) y no del vehículo? */
+export const esFallaDeCabina = (f) => BLOQUES_CABINA.has(f?.bloque) || ITEMS_CABINA.test(String(f?.item || ""));
+
+/** Las fallas de la pauta separadas: { cabina: [...], vehiculo: [...] }. */
+export function separarFallas(fallas = []) {
+  return {
+    cabina: fallas.filter(esFallaDeCabina),
+    vehiculo: fallas.filter(f => !esFallaDeCabina(f)),
+  };
+}
+
 /** De dónde vino una solicitud, en palabras de quien la recibe. */
 export function rotuloOrigenSolicitud(s) {
   if (s?.origen === "pauta_chofer") return "Informado por el chofer";
@@ -50,8 +76,8 @@ const fechaCorta = (f) => {
 };
 
 /** El texto de la solicitud que abre una pauta aprobada con fallas. */
-export function textoSolicitudDePauta({ insp, datos, revisor }) {
-  const fallas = fallasDeInspeccion(datos);
+export function textoSolicitudDePauta({ insp, datos, revisor, fallas: soloEstas }) {
+  const fallas = soloEstas || fallasDeInspeccion(datos);
   const nombre = NOMBRE_PAUTA[insp?.tipo_formulario] || "pauta";
   const momento = datos?.momento === "inicio" ? " (inicio de turno)" : datos?.momento === "termino" ? " (término de turno)" : "";
   const extra = [datos?.descripcion, datos?.problemasDetectados].map(t => String(t || "").trim()).filter(Boolean);
@@ -151,6 +177,18 @@ export function _selfCheck() {
   debe(textoSolicitudDePauta({ insp: { tipo_formulario: "inspeccion_semanal", fecha: "2026-10-13", observaciones: "Fallas: algo" }, datos: {} })
     .includes("Fallas: algo"), "pauta sin ítems: va su texto");
   debe(rotuloOrigenSolicitud({ origen: ORIGEN_PAUTA }) === "Falla en una pauta" && rotuloOrigenSolicitud({}) === "Pedido por Salud", "rótulo del origen");
+
+  const diaria = { exterior: { "Revisar luces": { estado: "incorrecto" } },
+    equipo_medico: { "Comprobar funcionamiento de sistemas de oxígeno": { estado: "incorrecto", obs: "manómetro en rojo" } },
+    accesorios_diaria: { "Botiquín": { estado: "incorrecto" }, "Extintor": { estado: "incorrecto" } },
+    saneamiento: { "Vaciar contenedores de basura y desechos médicos": { estado: "incorrecto" } } };
+  const sd = separarFallas(fallasDeInspeccion(diaria));
+  debe(sd.cabina.length === 3 && sd.vehiculo.map(f => f.item).join() === "Revisar luces,Extintor",
+    `diaria: oxígeno, botiquín y desechos a Calidad; luces y extintor a Movilización (${sd.vehiculo.map(f => f.item)})`);
+  const ss = separarFallas(fallasDeInspeccion({ accesorios: { Camilla: { estado: "malo" }, Oxígeno: { estado: "malo" }, Baliza: { estado: "malo" } } }));
+  debe(ss.cabina.map(f => f.item).join() === "Camilla,Oxígeno" && ss.vehiculo.map(f => f.item).join() === "Baliza", "semanal: camilla y oxígeno son de la cabina");
+  debe(textoSolicitudDePauta({ insp: { tipo_formulario: "inspeccion_diaria", fecha: "2026-10-13" }, datos: diaria, fallas: sd.cabina })
+    .split("\n").filter(l => l.startsWith("- ")).length === 3, "el texto lleva solo las fallas que se le pasan");
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("fallasPauta: autotest ok");
