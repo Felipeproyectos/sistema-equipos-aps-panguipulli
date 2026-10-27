@@ -199,6 +199,38 @@ export function fichaEnTexto(s) {
   ].filter(Boolean).join("\n");
 }
 
+// ── Informe para imprimir o guardar en PDF ─────────────────────────────
+export const GRUPOS_INFORME = [
+  { clave: "por_atender", label: "Por atender", estados: ["derivada"] },
+  { clave: "en_gestion", label: "En gestión", estados: ["en_proceso"] },
+  { clave: "devueltas", label: "Devueltas al centro", estados: ["devuelta"] },
+  { clave: "cerradas", label: "Cerradas", estados: ESTADOS_CERRADOS },
+];
+
+const diaDe = (f) => String(f || "").slice(0, 10);
+
+/**
+ * Lo que entra al informe según los filtros: { centro ("todos" o el nombre),
+ * grupos (claves de GRUPOS_INFORME), categoria ("todas" o una), soloUrgentes,
+ * desde, hasta (por el día en que se envió al Monitor) }. Sale ordenado por
+ * centro y, dentro de cada uno, por urgencia.
+ */
+export function filtrarParaInforme(lista, f = {}, ahora = Date.now()) {
+  const estados = new Set(GRUPOS_INFORME.filter(g => (f.grupos || []).includes(g.clave)).flatMap(g => g.estados));
+  const elegidas = lista.filter(s => {
+    if (!estados.has(estadoDe(s))) return false;
+    if (f.centro && f.centro !== "todos" && s.centro !== f.centro) return false;
+    if (f.categoria && f.categoria !== "todas" && s.categoria !== f.categoria) return false;
+    if (f.soloUrgentes && !(s.prioridad === "critica" || s.operatividad === "fuera_de_servicio")) return false;
+    const dia = diaDe(s.fecha_derivacion || s.created_date || s.fecha);
+    if (f.desde && dia < f.desde) return false;
+    if (f.hasta && dia > f.hasta) return false;
+    return true;
+  });
+  return ordenarBandeja(elegidas, ahora)
+    .sort((a, b) => String(a.centro || "").localeCompare(String(b.centro || ""), "es"));
+}
+
 export function _selfCheck() {
   const fallos = [];
   const debe = (c, q) => { if (!c) fallos.push(q); };
@@ -242,6 +274,22 @@ export function _selfCheck() {
 
   debe(fotoDelEquipo({ tipo: "dea", marca: "Zoll", modelo: "AED Plus", numero_serie: "X1", numero_inventario: "77" }).equipo_modelo === "AED Plus", "foto del equipo");
   debe(fichaEnTexto({ ...completa, numero_solicitud: "SOL-2026-00001" }).includes("Ubicación exacta: Box 3, primer piso"), "ficha en texto");
+
+  const paraInforme = [
+    { id: "1", estado: "derivada", centro: "CESFAM Panguipulli", prioridad: "baja", fecha_derivacion: "2026-10-20T10:00:00Z" },
+    { id: "2", estado: "derivada", centro: "CESFAM Coñaripe", prioridad: "critica", fecha_derivacion: "2026-10-25T10:00:00Z" },
+    { id: "3", estado: "finalizada", centro: "CESFAM Panguipulli", fecha_derivacion: "2026-09-01T10:00:00Z" },
+    { id: "4", estado: "pendiente", centro: "CESFAM Panguipulli" },
+    { id: "5", estado: "en_proceso", centro: "CESFAM Panguipulli", operatividad: "fuera_de_servicio", categoria: "desperfecto_tecnico", fecha_derivacion: "2026-10-26T10:00:00Z" },
+  ];
+  const abiertas = ["por_atender", "en_gestion", "devueltas"];
+  debe(filtrarParaInforme(paraInforme, { grupos: abiertas }, ahora).map(s => s.id).join() === "2,5,1",
+    "informe: las abiertas, por centro y urgencia; nunca las que no se enviaron");
+  debe(filtrarParaInforme(paraInforme, { grupos: abiertas, centro: "CESFAM Panguipulli" }, ahora).map(s => s.id).join() === "5,1", "informe por centro");
+  debe(filtrarParaInforme(paraInforme, { grupos: ["cerradas"] }, ahora).map(s => s.id).join() === "3", "informe de cerradas");
+  debe(filtrarParaInforme(paraInforme, { grupos: abiertas, soloUrgentes: true }, ahora).map(s => s.id).join() === "2,5", "solo urgentes");
+  debe(filtrarParaInforme(paraInforme, { grupos: abiertas, desde: "2026-10-25", hasta: "2026-10-25" }, ahora).map(s => s.id).join() === "2", "período");
+  debe(filtrarParaInforme(paraInforme, { grupos: abiertas, categoria: "desperfecto_tecnico" }, ahora).map(s => s.id).join() === "5", "por tipo");
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("solicitudesMonitor: autotest ok");
