@@ -23,6 +23,7 @@ const R = {
   ENCARGADO_COMPRAS_TALLER: "encargado_compras_taller",
   MECANICO: "mecanico",
   ENCARGADO_MOVILIZACION: "encargado_movilizacion",
+  MONITOR_CORPORATIVO: "monitor_corporativo",
 };
 
 // Qué pantalla tiene contador, para qué roles, y qué datos necesita. El hook
@@ -41,7 +42,9 @@ export const CONTADORES = {
   ComprasSaludTablero: { roles: [R.SUPER_ADMIN, R.ENCARGADO_COMPRAS_SALUD], datos: ["repuestosSalud"],
     etiqueta: "Tablero de Compras Salud", frase: "compras aprobadas por hacer" },
   SolicitudesV2: { roles: [R.SUPER_ADMIN, R.ADMIN, R.ENCARGADO_SALUD, R.ENCARGADO_COMPRAS_SALUD], datos: ["solicitudes", "equipos"],
-    etiqueta: "Solicitudes", frase: "solicitudes pendientes" },
+    etiqueta: "Solicitudes", frase: "solicitudes por completar y enviar al Monitor Corporativo, o que el Monitor devolvió" },
+  SolicitudesMonitor: { roles: [R.SUPER_ADMIN, R.MONITOR_CORPORATIVO], datos: ["solicitudes", "equipos"],
+    etiqueta: "Solicitudes de Centros", frase: "solicitudes de los centros sin tomar" },
   RevisionInspecciones: { roles: [R.SUPER_ADMIN, R.ENCARGADO_SALUD], datos: ["inspecciones"],
     etiqueta: "Revisión Bitácora", frase: "bitácoras por revisar" },
   // Las alertas ya tienen su propio correo (enviarAlertasCESFAM), y casi
@@ -93,8 +96,11 @@ export function contarPendientes(role, email, d = {}) {
     AprobacionRepuestos: () => repuestos.filter(s => s.estado === "pendiente" && s.solicitante_email !== email).length,
     ComprasTablero: () => repuestos.filter(s => s.estado === "aprobada").length,
     ComprasSaludTablero: () => repuestosSalud.filter(s => s.estado === "aprobada").length,
-    // Las de vehículos no: esas las resuelve Movilización.
-    SolicitudesV2: () => solicitudes.filter(s => pendiente(s) && !deFlota(s)).length,
+    // Las de vehículos no: esas las resuelve Movilización. Las que el
+    // Monitor devolvió vuelven a ser tarea del centro.
+    SolicitudesV2: () => solicitudes.filter(s => (pendiente(s) || s.estado === "devuelta") && !deFlota(s)).length,
+    // Lo que los centros enviaron y el Monitor no ha tomado.
+    SolicitudesMonitor: () => solicitudes.filter(s => s.estado === "derivada" && !deFlota(s)).length,
     RevisionInspecciones: () => inspecciones.filter(i => (i.estado || "pendiente") === "pendiente").length,
     AlertasV2: () => alertas.filter(a => a.estado === "activa").length,
   };
@@ -134,6 +140,9 @@ export function _selfCheck() {
     { id: "s2", equipo_id: "m1", estado: "pendiente" },                   // Salud
     { id: "s3", equipo_id: "v1", estado: "en_proceso" },                  // derivada, terminada abajo
     { id: "s4", equipo_id: "v1", estado: "pendiente" },                   // ya tiene orden: no se cuenta
+    { id: "s5", equipo_id: "m1", estado: "derivada" },                    // en la bandeja del Monitor
+    { id: "s6", equipo_id: "m1", estado: "devuelta" },                    // vuelve al centro
+    { id: "s7", equipo_id: "m1", estado: "en_proceso" },                  // la tiene el Monitor
   ];
   const ordenes = [
     { id: "o1", origen: "movilizacion", solicitud_id: "s3", estado: "completada" },
@@ -164,12 +173,14 @@ export function _selfCheck() {
     solicitudes, equipos, inspecciones: [{ estado: "pendiente" }, { estado: "aprobado" }],
     alertas: [{ estado: "activa" }, { estado: "resuelta" }],
   });
-  debe(salud.SolicitudesV2 === 1, `Salud no cuenta las de vehículos, dio ${salud.SolicitudesV2}`);
+  debe(salud.SolicitudesV2 === 2, `Salud cuenta su pendiente y la devuelta, no las de vehículos, dio ${salud.SolicitudesV2}`);
+  debe(!("SolicitudesMonitor" in salud), "Salud no ve la bandeja del Monitor");
   debe(salud.RevisionInspecciones === 1 && salud.AlertasV2 === 1, "bitácoras y alertas pendientes");
   debe(!("Movilizacion" in salud), "Salud no ve el contador de Movilización");
 
-  debe(Object.keys(contarPendientes("monitor_corporativo", "", { solicitudes, ordenes })).length === 0,
-    "el Monitor no tiene tareas");
+  const monitor = contarPendientes("monitor_corporativo", "", { solicitudes, ordenes, equipos });
+  debe(monitor.SolicitudesMonitor === 1 && Object.keys(monitor).length === 1,
+    `el Monitor cuenta solo lo enviado sin tomar, dio ${JSON.stringify(monitor)}`);
   debe(contarPendientes("jefe_taller", "", {}).Taller === undefined, "sin nada pendiente no hay número");
   debe(datosParaRol("mecanico").join() === "ordenes", "el mecánico solo pide órdenes");
   debe(rotuloContador(12) === "9+" && rotuloContador(3) === "3", "rótulo corto");
@@ -181,7 +192,8 @@ export function _selfCheck() {
     `el correo lista lo pendiente en orden del menú, dio ${correo.map(l => l.pagina)}`);
   debe(resumenParaCorreo("encargado_salud", "", { alertas: [{ estado: "activa" }] }).length === 0,
     "solo alertas no manda correo");
-  debe(resumenParaCorreo("monitor_corporativo", "", { solicitudes, ordenes }).length === 0, "el Monitor no recibe resumen");
+  debe(resumenParaCorreo("monitor_corporativo", "", { solicitudes, ordenes, equipos }).map(l => l.pagina).join() === "SolicitudesMonitor",
+    "el Monitor recibe el resumen de su bandeja");
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("contadoresMenu: autotest ok");

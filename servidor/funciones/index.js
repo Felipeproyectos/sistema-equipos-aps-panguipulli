@@ -14,6 +14,7 @@ import getMonitorData from './getMonitorData.js';
 import getPublicAmbulances from './getPublicAmbulances.js';
 import getUsuariosPorCentro from './getUsuariosPorCentro.js';
 import guardarInspeccionPendiente from './guardarInspeccionPendiente.js';
+import notificarSolicitudMonitor from './notificarSolicitudMonitor.js';
 import notificarSolicitudRepuesto from './notificarSolicitudRepuesto.js';
 import registrarConsumoDirecto from './registrarConsumoDirecto.js';
 import registrarHistorial from './registrarHistorial.js';
@@ -39,6 +40,7 @@ export const handlers = {
   getPublicAmbulances,
   getUsuariosPorCentro,
   guardarInspeccionPendiente,
+  notificarSolicitudMonitor,
   notificarSolicitudRepuesto,
   registrarConsumoDirecto,
   registrarHistorial,

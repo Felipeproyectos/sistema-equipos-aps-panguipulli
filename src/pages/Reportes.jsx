@@ -7,6 +7,7 @@ import ReporteTaller from "@/components/reportes/ReporteTaller";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/AuthContext";
 import { esc, abrirInformeHtml } from "@/lib/informeHtml";
+import { ESTADOS, CATEGORIAS, PRIORIDADES, rotulo } from "@/lib/solicitudesMonitor";
 
 export default function Reportes() {
   const { user } = useAuth();
@@ -54,8 +55,12 @@ export default function Reportes() {
     mantenimiento_requerido: "Mantenimiento Requerido",
     equipo_fuera_servicio: "Equipo Fuera de Servicio"
   };
-  const ESTADO_SOL_LABELS = { pendiente: "Pendiente", en_proceso: "En Proceso", finalizada: "Finalizada" };
-  const ESTADO_SOL_COLORS = { pendiente: "#d97706", en_proceso: "#2563eb", finalizada: "#16a34a" };
+  // Los estados del recorrido por el Monitor Corporativo (solicitudesMonitor.js).
+  const ESTADO_SOL_LABELS = Object.fromEntries(Object.entries(ESTADOS).map(([k, v]) => [k, v.corto]));
+  const ESTADO_SOL_COLORS = Object.fromEntries(Object.entries(ESTADOS).map(([k, v]) => [k, v.color]));
+  const enCentro = (s) => (s.estado || "pendiente") === "pendiente" || s.estado === "devuelta";
+  const enGestion = (s) => s.estado === "derivada" || s.estado === "en_proceso";
+  const cerrada = (s) => s.estado === "finalizada" || s.estado === "rechazada";
   const TIPO_SOL_LABELS = {
     compra_repuestos: "Compra Repuestos",
     cambio_parches: "Cambio Parches",
@@ -141,26 +146,26 @@ export default function Reportes() {
   const generarPDFSolicitudes = () => {
     setGenerandoSolicitudes(true);
 
-    const pendientes = solicitudesFiltradas.filter(s => s.estado === "pendiente");
-    const enProceso = solicitudesFiltradas.filter(s => s.estado === "en_proceso");
-    const finalizadas = solicitudesFiltradas.filter(s => s.estado === "finalizada");
+    const pendientes = solicitudesFiltradas.filter(enCentro);
+    const enProceso = solicitudesFiltradas.filter(enGestion);
+    const finalizadas = solicitudesFiltradas.filter(cerrada);
 
     const filas = solicitudesFiltradas
       .sort((a,b) => {
-        const ord = { pendiente: 0, en_proceso: 1, finalizada: 2 };
-        return (ord[a.estado]||3) - (ord[b.estado]||3);
+        const ord = { devuelta: 0, pendiente: 1, derivada: 2, en_proceso: 3, finalizada: 4, rechazada: 5 };
+        return (ord[a.estado] ?? 6) - (ord[b.estado] ?? 6);
       })
       .map(sol => {
         const eq = equipos.find(e => e.id === sol.equipo_id);
         const color = ESTADO_SOL_COLORS[sol.estado] || "#64748b";
         return `<tr>
-          <td>${esc(sol.fecha||"—")}</td>
-          <td>${esc(TIPO_SOL_LABELS[sol.tipo]||sol.tipo)}</td>
-          <td>${eq ? esc(`${eq.marca} ${eq.modelo}`) : "—"}</td>
-          <td>${esc(sol.centro||"—")}</td>
-          <td>${esc(sol.usuario_nombre||"—")}</td>
+          <td>${esc(sol.fecha||"—")}${sol.numero_solicitud ? `<br/><span style="color:#64748b">${esc(sol.numero_solicitud)}</span>` : ""}</td>
+          <td>${esc(rotulo(CATEGORIAS, sol.categoria) || TIPO_SOL_LABELS[sol.tipo] || sol.tipo)}${sol.prioridad ? `<br/><span style="color:#64748b">Prioridad ${esc(rotulo(PRIORIDADES, sol.prioridad))}</span>` : ""}</td>
+          <td>${esc([sol.equipo_marca || eq?.marca, sol.equipo_modelo || eq?.modelo].filter(Boolean).join(" ") || "—")}${(sol.equipo_numero_serie || eq?.numero_serie) ? `<br/><span style="color:#64748b">S/N ${esc(sol.equipo_numero_serie || eq?.numero_serie)}</span>` : ""}</td>
+          <td>${esc(sol.centro||"—")}${(sol.ubicacion_especifica || eq?.ubicacion_especifica) ? `<br/><span style="color:#64748b">${esc(sol.ubicacion_especifica || eq?.ubicacion_especifica)}</span>` : ""}</td>
+          <td>${esc(sol.usuario_nombre||"—")}${sol.solicitante_cargo ? `<br/><span style="color:#64748b">${esc(sol.solicitante_cargo)}</span>` : ""}</td>
           <td><span style="background:${color}18;color:${color};padding:2px 7px;border-radius:4px;font-size:8.5px;font-weight:700">${esc(ESTADO_SOL_LABELS[sol.estado]||sol.estado)}</span></td>
-          <td style="word-break:break-word">${esc(sol.observaciones||"—")}</td>
+          <td style="word-break:break-word">${esc(sol.descripcion||sol.observaciones||"—")}${sol.resolucion ? `<br/><strong>Monitor:</strong> ${esc(sol.resolucion)}` : ""}</td>
         </tr>`;
       }).join("");
 
@@ -196,13 +201,13 @@ export default function Reportes() {
     <div class="header-right">Corporación Municipal de Panguipulli<br/>Departamento de Informática<br/>Generado: ${format(hoy,"dd/MM/yyyy")} a las ${format(hoy,"HH:mm")} hrs</div>
   </div>
   <div class="summary-bar">
-    <div class="sum-card" style="background:#fef9c3;border-color:#fde047"><div class="n" style="color:#ca8a04">${pendientes.length}</div><div class="l">Pendientes</div></div>
-    <div class="sum-card" style="background:#eff6ff;border-color:#bfdbfe"><div class="n" style="color:#2563eb">${enProceso.length}</div><div class="l">En Proceso</div></div>
-    <div class="sum-card" style="background:#dcfce7;border-color:#86efac"><div class="n" style="color:#16a34a">${finalizadas.length}</div><div class="l">Finalizadas</div></div>
+    <div class="sum-card" style="background:#fef9c3;border-color:#fde047"><div class="n" style="color:#ca8a04">${pendientes.length}</div><div class="l">En los centros</div></div>
+    <div class="sum-card" style="background:#eff6ff;border-color:#bfdbfe"><div class="n" style="color:#2563eb">${enProceso.length}</div><div class="l">En el Monitor</div></div>
+    <div class="sum-card" style="background:#dcfce7;border-color:#86efac"><div class="n" style="color:#16a34a">${finalizadas.length}</div><div class="l">Cerradas</div></div>
   </div>
   ${solicitudesFiltradas.length === 0
     ? '<p style="text-align:center;color:#94a3b8;padding:20px">Sin solicitudes registradas</p>'
-    : `<table><thead><tr><th style="width:9%">Fecha</th><th style="width:16%">Tipo</th><th style="width:15%">Equipo</th><th style="width:15%">Centro</th><th style="width:13%">Solicitante</th><th style="width:10%">Estado</th><th style="width:22%">Observaciones</th></tr></thead><tbody>${filas}</tbody></table>`
+    : `<table><thead><tr><th style="width:9%">Fecha</th><th style="width:16%">Tipo</th><th style="width:15%">Equipo</th><th style="width:15%">Centro / ubicación</th><th style="width:13%">Solicitante</th><th style="width:10%">Estado</th><th style="width:22%">Descripción</th></tr></thead><tbody>${filas}</tbody></table>`
   }
   <div class="footer-bar"><strong>Corporación Municipal de Panguipulli</strong> &nbsp;–&nbsp; Informe elaborado por departamento de informática<br/><span style="font-size:8px">Documento generado automáticamente el ${format(hoy,"dd/MM/yyyy")} a las ${format(hoy,"HH:mm")} hrs &nbsp;|&nbsp; Sistema de Gestión de Equipos Médicos</span></div>
 </div>
@@ -314,9 +319,9 @@ export default function Reportes() {
           </div>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: "Pendientes", n: solicitudesFiltradas.filter(s=>s.estado==="pendiente").length, color: "#ca8a04", bg: "#fef9c3" },
-              { label: "En Proceso", n: solicitudesFiltradas.filter(s=>s.estado==="en_proceso").length, color: "#2563eb", bg: "#eff6ff" },
-              { label: "Finalizadas", n: solicitudesFiltradas.filter(s=>s.estado==="finalizada").length, color: "#16a34a", bg: "#dcfce7" }
+              { label: "En los centros", n: solicitudesFiltradas.filter(enCentro).length, color: "#ca8a04", bg: "#fef9c3" },
+              { label: "En el Monitor", n: solicitudesFiltradas.filter(enGestion).length, color: "#2563eb", bg: "#eff6ff" },
+              { label: "Cerradas", n: solicitudesFiltradas.filter(cerrada).length, color: "#16a34a", bg: "#dcfce7" }
             ].map(s => (
               <div key={s.label} className="rounded-xl p-3 text-center" style={{ background: s.bg }}>
                 <p className="text-xl font-bold" style={{ color: s.color }}>{s.n}</p>

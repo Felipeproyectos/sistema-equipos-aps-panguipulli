@@ -66,7 +66,8 @@ app.post('/webhooks/:nombre', async (c) => {
 // secreto: registrarHistorial escribiría en Auditoría lo que cualquiera le
 // mandara (con la llave de servicio), y notificarSolicitudRepuesto mandaría
 // correos con un texto inventado. Acá no existen: solo por /webhooks.
-const SOLO_WEBHOOK = new Set(['registrarHistorial', 'notificarSolicitudRepuesto']);
+// notificarSolicitudMonitor, lo mismo: avisa al Monitor y a los centros.
+const SOLO_WEBHOOK = new Set(['registrarHistorial', 'notificarSolicitudRepuesto', 'notificarSolicitudMonitor']);
 
 app.all('/functions/:nombre', async (c) => {
   const nombre = c.req.param('nombre');

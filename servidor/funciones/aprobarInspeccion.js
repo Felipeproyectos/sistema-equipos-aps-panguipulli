@@ -1,5 +1,8 @@
 import { createClientFromRequest } from '#compat';
-import { pautaConFallas, textoSolicitudDePauta, areaQueDecide, ORIGEN_PAUTA } from '../compartido/fallasPauta.js';
+import {
+  pautaConFallas, textoSolicitudDePauta, areaQueDecide, ORIGEN_PAUTA,
+  fallasDeInspeccion, separarFallas, AMBITO_CABINA, AMBITO_VEHICULO,
+} from '../compartido/fallasPauta.js';
 
 export default async function (req) {
   try {
@@ -13,6 +16,7 @@ export default async function (req) {
     // final la usa desde fuera de ese bloque, y por el scope de `let` toda
     // aprobacion terminaba en 500 aunque el trabajo se hubiera hecho.
     let solicitudCreada = null;
+    const solicitudesCreadas = [];
     if (!inspeccion_id || !accion) return Response.json({ error: 'Faltan parámetros' }, { status: 400 });
 
     const inspeccion = await base44.asServiceRole.entities.InspeccionPendiente.get(inspeccion_id);
@@ -124,33 +128,70 @@ export default async function (req) {
       // Si la pauta aprobada trae fallas, se abre una SOLICITUD para quien
       // decide qué se hace (src/lib/fallasPauta.js): Movilización si es un
       // vehículo («Solicitudes al Taller»: la deriva al taller o la cierra),
-      // Salud si es un equipo («Solicitudes»). Antes se abría una OT directo
-      // en la fila del taller, sin que nadie la evaluara. Si el equipo ya tiene
-      // una solicitud de pauta sin revisar, la falla nueva se suma a esa.
-      if (hasFallas) {
+      // Salud si es un equipo («Solicitudes», y de ahí al Monitor
+      // Corporativo). Antes se abría una OT directo en la fila del taller, sin
+      // que nadie la evaluara. Si el equipo ya tiene una solicitud de pauta
+      // sin revisar del mismo lado, la falla nueva se suma a esa.
+      //
+      // En una ambulancia la pauta se parte: lo de la cabina sanitaria
+      // (equipos médicos, oxígeno, camilla, botiquín, desechos clínicos) es de
+      // Calidad y lo del vehículo es de Movilización. La Pauta de Cabina con
+      // material caducado o por reponer también abre una solicitud a Calidad.
+      if (hasFallas || avisosCabina) {
         const db = base44.asServiceRole.entities;
         const actual = await db.Equipo.get(inspeccion.equipo_id).catch(() => null);
         const equipo = { ...(datos.equipo || {}), ...(actual || {}) };
-        const area = areaQueDecide(equipo);
-        const texto = textoSolicitudDePauta({ insp: inspeccion, datos, revisor: user.full_name || user.email });
+        const esAmbulancia = equipo.tipo === 'ambulancia';
+        const revisor = user.full_name || user.email;
         const abiertas = await db.Solicitud.filter({ equipo_id: inspeccion.equipo_id, estado: 'pendiente' }).catch(() => []);
-        const abierta = abiertas.find(x => x.origen === ORIGEN_PAUTA);
-        if (abierta) {
-          await db.Solicitud.update(abierta.id, { observaciones: [abierta.observaciones, texto].filter(Boolean).join('\n\n') });
-          solicitudCreada = { id: abierta.id, nueva: false, area };
-        } else {
-          const nueva = await db.Solicitud.create({
-            equipo_id: inspeccion.equipo_id,
-            tipo: 'mantenimiento_correctivo',
-            fecha: inspeccion.fecha || new Date().toISOString().slice(0, 10),
-            usuario_email: user.email || '',
-            usuario_nombre: inspeccion.conductor || user.full_name || user.email || '',
-            centro: equipo.centro_principal || '',
-            estado: 'pendiente',
-            origen: ORIGEN_PAUTA,
-            observaciones: texto,
+
+        const grupos = [];
+        if (esCabina) {
+          grupos.push({
+            area: 'salud', ambito: AMBITO_CABINA, categoria: 'compra_insumo',
+            texto: [`Pauta de Cabina del ${String(inspeccion.fecha || '').slice(0, 10)}${inspeccion.conductor ? `, hecha por ${inspeccion.conductor}` : ''}:`,
+              resumenCabina, revisor ? `Aprobada por ${revisor}.` : ''].filter(Boolean).join('\n'),
           });
-          solicitudCreada = { id: nueva?.id, nueva: true, area };
+        } else if (esAmbulancia) {
+          const { cabina, vehiculo } = separarFallas(fallasDeInspeccion(datos));
+          if (cabina.length) {
+            grupos.push({ area: 'salud', ambito: AMBITO_CABINA, categoria: 'desperfecto_tecnico',
+              texto: textoSolicitudDePauta({ insp: inspeccion, datos, revisor, fallas: cabina }) });
+          }
+          // Lo que no es de la cabina, o una pauta vieja sin ítems: al vehículo.
+          if (vehiculo.length || !cabina.length) {
+            grupos.push({ area: 'movilizacion', ambito: AMBITO_VEHICULO,
+              texto: textoSolicitudDePauta({ insp: inspeccion, datos, revisor, ...(vehiculo.length ? { fallas: vehiculo } : {}) }) });
+          }
+        } else {
+          grupos.push({ area: areaQueDecide(equipo), texto: textoSolicitudDePauta({ insp: inspeccion, datos, revisor }) });
+        }
+
+        for (const g of grupos) {
+          const mismoLado = (x) => (g.ambito === AMBITO_CABINA ? x.ambito === AMBITO_CABINA : x.ambito !== AMBITO_CABINA);
+          const abierta = abiertas.find(x => x.origen === ORIGEN_PAUTA && mismoLado(x));
+          let creada;
+          if (abierta) {
+            await db.Solicitud.update(abierta.id, { observaciones: [abierta.observaciones, g.texto].filter(Boolean).join('\n\n') });
+            creada = { id: abierta.id, nueva: false, area: g.area };
+          } else {
+            const nueva = await db.Solicitud.create({
+              equipo_id: inspeccion.equipo_id,
+              tipo: g.ambito === AMBITO_CABINA && g.categoria === 'compra_insumo' ? 'insumos_cabina' : 'mantenimiento_correctivo',
+              fecha: inspeccion.fecha || new Date().toISOString().slice(0, 10),
+              usuario_email: user.email || '',
+              usuario_nombre: inspeccion.conductor || user.full_name || user.email || '',
+              centro: equipo.centro_principal || '',
+              estado: 'pendiente',
+              origen: ORIGEN_PAUTA,
+              observaciones: g.texto,
+              ...(g.ambito ? { ambito: g.ambito } : {}),
+              ...(g.categoria ? { categoria: g.categoria } : {}),
+            });
+            creada = { id: nueva?.id, nueva: true, area: g.area };
+          }
+          solicitudesCreadas.push(creada);
+          if (!solicitudCreada) solicitudCreada = creada;
         }
       }
 
@@ -197,7 +238,7 @@ export default async function (req) {
       });
     }
 
-    return Response.json({ ok: true, solicitud_creada: solicitudCreada });
+    return Response.json({ ok: true, solicitud_creada: solicitudCreada, solicitudes_creadas: solicitudesCreadas });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
