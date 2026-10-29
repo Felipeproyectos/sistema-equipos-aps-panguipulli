@@ -72,12 +72,12 @@ export function esRolFlota(role) {
 }
 
 // ── El área que le corresponde a cada rol ──────────────────────────────────
-// `usuario.area` la elige la persona en su primer ingreso (CompletarPerfil) y
-// la pantalla de Usuarios la usa ANTES que el rol para decidir en qué pestaña
-// mostrarla. Si alguien eligió mal, o después se le cambió el rol, queda en la
-// pestaña equivocada: un chofer con area 'salud' aparece en Salud y nadie lo
-// encuentra en Taller. Esta es la regla de cuál corresponde; manda el rol,
-// porque el rol lo asigna quien administra y es lo que decide los permisos.
+// `usuario.area` la elige la persona en su primer ingreso (CompletarPerfil).
+// La pantalla de Usuarios ya no la usa para ordenar: clasifica por rol
+// (src/lib/organizacionUsuarios.js). Igual se mantiene alineada con el rol,
+// porque el servidor (getUsuariosPorCentro) todavía la mira para decidir qué
+// cuentas le llegan a cada perfil. Esta es la regla de cuál corresponde; manda
+// el rol, porque el rol lo asigna quien administra y decide los permisos.
 //
 // "ambas" es para los perfiles que ven todo. "admin" es el valor heredado de
 // Base44 para lo mismo y se acepta como equivalente.

@@ -22,7 +22,7 @@ function getCentroPrincipal(u) {
   return u.centro_principal || u.centro_asignado || (Array.isArray(u.centros_asignados) ? u.centros_asignados[0] : "") || "";
 }
 
-export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
+export default function UsuarioCard({ usuario, currentUser, onUpdated, pendientes = [] }) {
   const [expandido, setExpandido] = useState(false);
   const [editando, setEditando] = useState(false);
   const [rol, setRol] = useState(usuario.role || ROLES.USER);
@@ -138,6 +138,14 @@ export default function UsuarioCard({ usuario, currentUser, onUpdated }) {
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-800 truncate">{usuario.full_name || "Sin nombre"}</p>
             <p className="text-xs text-slate-400 truncate">{usuario.email}</p>
+            {(centroActual || pendientes.length > 0) && (
+              <div className="flex flex-wrap items-center gap-1 mt-1">
+                {centroActual && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{centroActual}</span>}
+                {pendientes.map(p => (
+                  <span key={p} className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">{p}</span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
