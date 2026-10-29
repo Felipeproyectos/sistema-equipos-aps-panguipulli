@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Fuel, Receipt, Plus, Upload, FileSpreadsheet, Printer, AlertTriangle, CalendarClock, Gauge, Wallet,
-  Paperclip, Pencil, Ban, Search, Loader2, X, Eye, EyeOff,
+  Fuel, Receipt, Plus, Upload, FileSpreadsheet, Printer, AlertTriangle, CalendarClock, Wallet,
+  Paperclip, Pencil, Ban, Search, Loader2, X, Eye, EyeOff, LayoutDashboard, Truck,
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
@@ -9,11 +9,13 @@ import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import { mensajeDeError } from "@/lib/mensajesDeError";
 import {
   TIPOS_COMBUSTIBLE, TIPOS_PAGO, DOCUMENTOS, MEDIOS_PAGO, puedeRegistrar, rotulo, rotuloPago, rotuloVehiculo,
-  esVehiculo, filtrar, vigentes, rendimiento, avisosDeCargas, vencimientos, pagosPendientes, totales, pesos, litrosTexto,
+  esVehiculo, filtrar, vigentes, avisosDeCargas, vencimientos, pagosPendientes, totales, panel, pesos, litrosTexto,
 } from "@/lib/unidadControl";
 import { exportarExcel, informeGastos } from "@/utils/planillaUnidadControl";
 import RegistroFormModal from "@/components/unidadControl/RegistroFormModal";
 import ImportarPlanilla from "@/components/unidadControl/ImportarPlanilla";
+import PanelControl, { Caja, Leyenda } from "@/components/unidadControl/PanelControl";
+import FlotaFichas, { FichaVehiculo } from "@/components/unidadControl/FlotaFichas";
 import { useToast } from "@/components/ui/use-toast";
 
 // Unidad de Control: cargas de combustible y pagos de cada vehículo.
@@ -21,10 +23,12 @@ import { useToast } from "@/components/ui/use-toast";
 // La Unidad registra, corrige y anula (nunca borra). Administración,
 // Movilización y el Monitor Corporativo ven lo mismo, sin poder modificarlo.
 // Las reglas viven en src/lib/unidadControl.js y la base las hace cumplir
-// (migracion/32_unidad_control.sql).
+// (migracion/32_unidad_control.sql). Las salidas y kilómetros del panel salen
+// de la bitácora de la flota (lectura: migracion/33_unidad_control_salidas.sql).
 
 const PESTANAS = [
-  { clave: "resumen", label: "Resumen", icono: Gauge },
+  { clave: "panel", label: "Panel", icono: LayoutDashboard },
+  { clave: "vehiculos", label: "Vehículos", icono: Truck },
   { clave: "combustible", label: "Combustible", icono: Fuel },
   { clave: "pagos", label: "Pagos y gastos", icono: Receipt },
   { clave: "vencimientos", label: "Vencimientos", icono: CalendarClock },
@@ -49,9 +53,11 @@ export default function UnidadControl() {
   const [cargas, setCargas] = useState([]);
   const [pagos, setPagos] = useState([]);
   const [equipos, setEquipos] = useState([]);
+  const [salidas, setSalidas] = useState([]);
+  const [ficha, setFicha] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState("");
-  const [pestana, setPestana] = useState("resumen");
+  const [pestana, setPestana] = useState("panel");
   const [f, setF] = useState({ desde: inicioMes(), hasta: "", equipo: "todos", centro: "todos" });
   const [busqueda, setBusqueda] = useState("");
   const [verAnulados, setVerAnulados] = useState(false);
@@ -63,12 +69,14 @@ export default function UnidadControl() {
   const cargar = useCallback(async () => {
     setErrorCarga("");
     try {
-      const [c, p, e] = await Promise.all([
+      const [c, p, e, s] = await Promise.all([
         base44.entities.CargaCombustible.list("-fecha", 5000),
         base44.entities.PagoVehiculo.list("-created_date", 5000),
         base44.entities.Equipo.list("-updated_date", 1000),
+        // Sin la migración 33 la bitácora no deja leer: el panel sigue, sin salidas.
+        base44.entities.BitacoraFlota.list("-fecha", 5000).catch(() => []),
       ]);
-      setCargas(c); setPagos(p); setEquipos(e);
+      setCargas(c); setPagos(p); setEquipos(e); setSalidas(s);
     } catch (e) {
       setErrorCarga(mensajeDeError(e, "cargar los registros"));
     } finally {
@@ -87,14 +95,16 @@ export default function UnidadControl() {
     r.chofer_nombre, r.observaciones, r.descripcion, r.categoria_otro, r.centro_costo, ...extra].some(v => String(v || "").toLowerCase().includes(q));
   const cargasF = useMemo(() => filtrar(cargas, { ...f, campoFecha: "fecha" }).filter(c => coincide(c)), [cargas, f, q]); // eslint-disable-line react-hooks/exhaustive-deps
   const pagosF = useMemo(() => filtrar(pagos, { ...f, campoFecha: "fecha_pago" }).filter(p => coincide(p, [rotuloPago(p)])), [pagos, f, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Las salidas no traen centro que paga: se usa el centro del vehículo.
+  const salidasF = useMemo(() => filtrar(salidas.map(s => ({ ...s, centro_costo: s.centro_costo || porId.get(s.equipo_id)?.centro_principal || "" })), { ...f, campoFecha: "fecha" })
+    .filter(s => !q || [s.equipo_label, rotuloVehiculo(porId.get(s.equipo_id)), s.chofer_nombre, s.destino, s.motivo, s.centro_costo].some(v => String(v || "").toLowerCase().includes(q))),
+  [salidas, f, q, porId]);
   const visibles = (lista) => (verAnulados ? lista : vigentes(lista));
 
   const t = useMemo(() => totales(cargasF, pagosF, equipos), [cargasF, pagosF, equipos]);
-  const rend = useMemo(() => rendimiento(f.equipo !== "todos" ? cargas.filter(c => c.equipo_id === f.equipo) : []), [cargas, f.equipo]);
-  const rendFlota = useMemo(() => {
-    const prom = vehiculos.map(v => rendimiento(cargas.filter(c => c.equipo_id === v.id)).promedio).filter(x => x !== null);
-    return prom.length ? prom.reduce((a, b) => a + b, 0) / prom.length : null;
-  }, [vehiculos, cargas]);
+  const datosPanel = useMemo(() => panel({ cargas: cargasF, pagos: pagosF, salidas: salidasF, equipos }), [cargasF, pagosF, salidasF, equipos]);
+  const periodoPorId = useMemo(() => new Map(datosPanel.vehiculos.map(v => [v.equipo_id, v])), [datosPanel]);
+  const vencTodos = useMemo(() => vencimientos(pagos, vehiculos), [pagos, vehiculos]);
   const avisos = useMemo(() => avisosDeCargas(cargas, equipos), [cargas, equipos]);
   const avisosPorCarga = useMemo(() => {
     const m = new Map();
@@ -102,7 +112,7 @@ export default function UnidadControl() {
     return m;
   }, [avisos]);
   const avisosEnPeriodo = useMemo(() => avisos.filter(a => a.tono === "rojo" || cargasF.some(c => c.id === a.id)), [avisos, cargasF]);
-  const venc = useMemo(() => vencimientos(pagos, f.centro === "todos" ? vehiculos : vehiculos.filter(v => v.centro_principal === f.centro)), [pagos, vehiculos, f.centro]);
+  const venc = useMemo(() => (f.centro === "todos" ? vencTodos : vencTodos.filter(v => v.centro === f.centro)), [vencTodos, f.centro]);
   const pendientes = useMemo(() => pagosPendientes(pagos), [pagos]);
   const vencAtencion = venc.filter(v => v.estado === "vencido" || v.estado === "por_vencer");
 
@@ -214,57 +224,48 @@ export default function UnidadControl() {
           })}
         </div>
 
-        {pestana === "resumen" && (
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {[
-                { v: pesos(t.combustible), e: "en combustible", c: `${litrosTexto(t.litros)} · ${vigentes(cargasF).length} cargas` },
-                { v: pesos(t.pagos), e: "en pagos y gastos", c: `${vigentes(pagosF).filter(p => p.estado_pago !== "pendiente").length} pagos hechos` },
-                { v: pesos(t.total), e: "gasto total del período", c: filtrosTexto.split(" · ")[0] },
-                { v: f.equipo !== "todos" ? (rend.promedio ? `${rend.promedio.toFixed(1).replace(".", ",")} km/L` : "—") : (rendFlota ? `${rendFlota.toFixed(1).replace(".", ",")} km/L` : "—"),
-                  e: f.equipo !== "todos" ? "rendimiento del vehículo" : "rendimiento promedio de la flota", c: "según el kilometraje de cada carga" },
-              ].map((k, i) => (
-                <div key={i} className="bg-white rounded-2xl p-4" style={sombra}>
-                  <p className="text-xl lg:text-2xl font-bold text-slate-800">{k.v}</p>
-                  <p className="text-xs text-slate-600 font-medium">{k.e}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{k.c}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid lg:grid-cols-2 gap-4">
-              <Panel titulo="Requiere atención" icono={AlertTriangle}>
-                {vencAtencion.length === 0 && pendientes.length === 0 && avisosEnPeriodo.length === 0 ? (
-                  <p className="text-sm text-green-700">Nada pendiente: documentos vigentes, sin pagos pendientes ni cargas por revisar.</p>
-                ) : (
-                  <ul className="space-y-2 text-sm">
-                    {vencAtencion.slice(0, 6).map((v, i) => (
-                      <li key={`v${i}`} className="flex items-start gap-2"><Punto color={ESTADO_VENC[v.estado].color} />
-                        <span><strong>{rotulo(TIPOS_PAGO, v.tipo)}</strong> de {v.vehiculo}: {v.estado === "vencido" ? `venció hace ${-v.dias} días` : `vence en ${v.dias} días`} ({fecha(v.hasta)})</span></li>
-                    ))}
-                    {pendientes.slice(0, 4).map(p => (
-                      <li key={p.id} className="flex items-start gap-2"><Punto color={p._vencido ? "#dc2626" : "#d97706"} />
-                        <span><strong>{rotuloPago(p)}</strong> pendiente de {rotuloVehiculo(porId.get(p.equipo_id)) || p.equipo_label}: {pesos(p.monto)}, {p._vencido ? "venció" : "vence"} el {fecha(p.vence_pago)}</span></li>
-                    ))}
-                    {[...new Set(avisosEnPeriodo.map(a => a.id))].slice(0, 5).map(id => {
-                      const c = cargas.find(x => x.id === id);
-                      const de = avisosEnPeriodo.filter(a => a.id === id);
-                      return (
-                        <li key={`a${id}`} className="flex items-start gap-2"><Punto color={de.some(a => a.tono === "rojo") ? "#dc2626" : "#d97706"} />
-                          <span>Carga del {fecha(c?.fecha)} de {rotuloVehiculo(porId.get(c?.equipo_id))}: {de.map(a => a.motivo.charAt(0).toLowerCase() + a.motivo.slice(1)).join("; ")}</span></li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </Panel>
-              <Panel titulo="Gasto por centro que paga" icono={Wallet}>
-                <Barras filas={t.porCentro} />
-              </Panel>
-            </div>
-            <Panel titulo="Gasto por vehículo" icono={Fuel}>
-              <Barras filas={t.porVehiculo} conLitros />
-            </Panel>
+        {pestana === "panel" && (
+          <PanelControl datos={datosPanel} onAbrir={setFicha}>
+            <Caja titulo="Gasto por centro que paga" icono={Wallet}>
+              <Barras filas={t.porCentro} />
+            </Caja>
+          </PanelControl>
+        )}
+        {pestana === "panel" && (
+          <div className="grid lg:grid-cols-2 gap-4">
+      <Caja titulo="Requiere atención" icono={AlertTriangle}>
+            {vencAtencion.length === 0 && pendientes.length === 0 && avisosEnPeriodo.length === 0 ? (
+              <p className="text-sm text-green-700">Nada pendiente: documentos vigentes, sin pagos pendientes ni cargas por revisar.</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {vencAtencion.slice(0, 6).map((v, i) => (
+                  <li key={`v${i}`} className="flex items-start gap-2"><Punto color={ESTADO_VENC[v.estado].color} />
+                    <span><strong>{rotulo(TIPOS_PAGO, v.tipo)}</strong> de {v.vehiculo}: {v.estado === "vencido" ? `venció hace ${-v.dias} días` : `vence en ${v.dias} días`} ({fecha(v.hasta)})</span></li>
+                ))}
+                {pendientes.slice(0, 4).map(p => (
+                  <li key={p.id} className="flex items-start gap-2"><Punto color={p._vencido ? "#dc2626" : "#d97706"} />
+                    <span><strong>{rotuloPago(p)}</strong> pendiente de {rotuloVehiculo(porId.get(p.equipo_id)) || p.equipo_label}: {pesos(p.monto)}, {p._vencido ? "venció" : "vence"} el {fecha(p.vence_pago)}</span></li>
+                ))}
+                {[...new Set(avisosEnPeriodo.map(a => a.id))].slice(0, 5).map(id => {
+                  const c = cargas.find(x => x.id === id);
+                  const de = avisosEnPeriodo.filter(a => a.id === id);
+                  return (
+                    <li key={`a${id}`} className="flex items-start gap-2"><Punto color={de.some(a => a.tono === "rojo") ? "#dc2626" : "#d97706"} />
+                      <span>Carga del {fecha(c?.fecha)} de {rotuloVehiculo(porId.get(c?.equipo_id))}: {de.map(a => a.motivo.charAt(0).toLowerCase() + a.motivo.slice(1)).join("; ")}</span></li>
+                  );
+                })}
+              </ul>
+            )}
+      </Caja>
+            <Caja titulo="Gasto por tipo" icono={Receipt}>
+              <Barras filas={t.porTipo} />
+            </Caja>
           </div>
+        )}
+
+        {pestana === "vehiculos" && (
+          <FlotaFichas vehiculos={vehiculos} periodo={periodoPorId} venc={vencTodos} cargas={cargas} salidas={salidas}
+            quien={user?.full_name || user?.email || ""} onAbrir={setFicha} />
         )}
 
         {(pestana === "combustible" || pestana === "pagos") && (
@@ -331,11 +332,15 @@ export default function UnidadControl() {
                 </tbody>
               </table>
             </div>
-            <p className="text-[11px] text-slate-400 px-4 py-2">Sale del último pago de permiso de circulación, revisión técnica o SOAP registrado para cada vehículo. "Por vencer" = 30 días o menos.</p>
+            <p className="text-[11px] text-slate-400 px-4 py-2">Sale del último pago de permiso de circulación, revisión técnica o SOAP registrado para cada vehículo; sin pago, de la fecha que trae su ficha. "Por vencer" = 30 días o menos.</p>
           </div>
         )}
       </div>
 
+      {ficha && porId.get(ficha) && (
+        <FichaVehiculo equipo={porId.get(ficha)} cargas={cargas} pagos={pagos} salidas={salidas} venc={vencTodos}
+          periodo={periodoPorId.get(ficha)} onClose={() => setFicha(null)} />
+      )}
       {formulario && (
         <RegistroFormModal tipo={formulario.tipo} inicial={formulario.inicial} vehiculos={vehiculos} cargas={cargas}
           onClose={() => setFormulario(null)} onSaved={alGuardar} />
@@ -348,15 +353,6 @@ export default function UnidadControl() {
 
 function Punto({ color }) {
   return <span className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: color }} />;
-}
-
-function Panel({ titulo, icono: Icono, children }) {
-  return (
-    <div className="bg-white rounded-2xl p-5" style={sombra}>
-      <h3 className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3"><Icono className="w-4 h-4 text-teal-700" /> {titulo}</h3>
-      {children}
-    </div>
-  );
 }
 
 function Barras({ filas, conLitros = false }) {
@@ -376,10 +372,7 @@ function Barras({ filas, conLitros = false }) {
           </div>
         </li>
       ))}
-      <li className="flex gap-3 text-[11px] text-slate-500 pt-1">
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: "#0f766e" }} /> Combustible</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: "#5eead4" }} /> Pagos</span>
-      </li>
+      <Leyenda />
     </ul>
   );
 }

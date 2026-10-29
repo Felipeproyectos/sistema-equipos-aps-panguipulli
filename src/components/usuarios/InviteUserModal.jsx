@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { getCentrosEstructura } from "@/lib/centros";
 import { X, Loader2, Copy, Check, UserPlus } from "lucide-react";
 import { ROLES, rolesQuePuedeCrear, roleLabel, esRolSalud } from "@/lib/roles";
+import { AREAS, QUE_HACE } from "@/lib/organizacionUsuarios";
 
 // `rolesPermitidos` acota lo que ofrece el formulario según desde dónde se
 // abre: "Nuevo chofer" en Choferes crea solo choferes, aunque quien lo abra
@@ -147,11 +148,17 @@ export default function InviteUserModal({ open, onClose, onInvited, currentUser,
                   onChange={e => setRole(e.target.value)}
                   className="mt-1 w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
                 >
-                  {rolesDisponibles.map(r => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
+                  {/* Agrupados por área, igual que la lista de Usuarios */}
+                  {AREAS.filter(a => a.roles.some(r => rolesDisponibles.some(d => d.value === r))).map(a => (
+                    <optgroup key={a.clave} label={a.titulo}>
+                      {rolesDisponibles.filter(r => a.roles.includes(r.value)).map(r => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
                 )}
+                {QUE_HACE[role] && <p className="text-[11px] text-slate-500 mt-1 leading-snug">{QUE_HACE[role]}</p>}
               </div>
 
               {/* Centro fijo (Encargado Salud invitando Usuario/Chofer) */}

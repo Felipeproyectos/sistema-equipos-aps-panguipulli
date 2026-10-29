@@ -1,7 +1,7 @@
 import { escaparDatos, abrirInformeHtml } from "../lib/informeHtml.js";
 import {
   COLUMNAS_CARGA, COLUMNAS_PAGO, ENCABEZADO_EXPORT_CARGA, ENCABEZADO_EXPORT_PAGO,
-  filaExportCarga, filaExportPago, totales, pesos, litrosTexto, vencimientos, rotulo, TIPOS_PAGO,
+  filaExportCarga, filaExportPago, totales, pesos, litrosTexto, vencimientos, rotulo, TIPOS_PAGO, numeroTexto,
 } from "../lib/unidadControl.js";
 
 // Planillas de la Unidad de Control: exportar a Excel, descargar la plantilla
@@ -184,6 +184,63 @@ export function informeGastos({ cargas = [], pagos = [], equipos = [], filtrosTe
   ${venc.map(v => `<tr><td>${v.vehiculo}</td><td>${v.centro}</td><td>${rotulo(TIPOS_PAGO, v.tipo)}</td><td>${v.hasta ? v.hasta.split("-").reverse().join("/") : "—"}</td><td style="color:${ESTADO[v.estado][1]};font-weight:700">${ESTADO[v.estado][0]}${v.dias !== null ? ` (${v.dias < 0 ? `hace ${-v.dias}` : `en ${v.dias}`} días)` : ""}</td></tr>`).join("") || `<tr><td colspan="5" class="vacio">Todo vigente</td></tr>`}
   </tbody></table>
   <div class="pie"><strong>Corporación Municipal de Panguipulli</strong> · Sistema de Gestión de Equipamiento Crítico · No incluye registros anulados ni pagos pendientes en los totales.</div>
+</div><button class="boton no-print" onclick="window.print()">Imprimir / Guardar PDF</button></body></html>`;
+  return abrirInformeHtml(html);
+}
+
+/**
+ * Las fichas de los vehículos en una hoja imprimible: datos, documentos,
+ * último km y lo gastado en el período. `periodo` es Map(id → fila del panel),
+ * `km` es Map(id → { km, fecha }).
+ */
+export function informeFichas({ vehiculos = [], periodo = new Map(), venc = [], km = new Map(), quien = "" }) {
+  const TIPO = { ambulancia: "Ambulancia", camioneta: "Camioneta", furgon: "Furgón", camion_3_4: "Camión 3/4" };
+  const ESTADO = { vencido: ["Vencido", "#dc2626"], por_vencer: ["Por vencer", "#d97706"], sin_registro: ["Sin registro", "#64748b"], vigente: ["Vigente", "#16a34a"] };
+  const fechaTexto = (f) => (f ? String(f).slice(0, 10).split("-").reverse().join("/") : "—");
+  const filas = vehiculos.map(v => {
+    const p = periodo.get(v.id) || {};
+    const uk = km.get(v.id);
+    return escaparDatos({
+      patente: v.patente || "Sin patente", vehiculo: [v.marca, v.modelo].filter(Boolean).join(" "), tipo: TIPO[v.tipo] || v.tipo || "",
+      centro: [v.centro_principal, v.subsede].filter(Boolean).join(" · "), conductor: v.conductor_responsable || "",
+      inventario: v.numero_inventario || "",
+      km: uk ? `${numeroTexto(uk.km)} km (${fechaTexto(uk.fecha)})` : "—",
+      docs: venc.filter(d => d.equipo_id === v.id).map(d => ({ tipo: rotulo(TIPOS_PAGO, d.tipo), estado: d.estado, hasta: fechaTexto(d.hasta) })),
+      litros: litrosTexto(p.litros || 0), total: pesos(p.total || 0), salidas: String(p.salidas || 0), kmPeriodo: p.km ? `${numeroTexto(p.km)} km` : "—",
+    });
+  });
+  const q = escaparDatos(quien);
+  const generado = new Date().toLocaleString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>Fichas de vehículos</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  @media print { .no-print{display:none!important;} body{background:white!important;padding:0!important;} }
+  * { box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#f1f5f9; margin:0; padding:16px; color:#1e293b; font-size:9.5px; }
+  .page { background:white; max-width:190mm; margin:0 auto; padding:14px; }
+  .cab { background:linear-gradient(135deg,#0f766e,#134e4a); border-radius:10px; padding:12px 16px; display:flex; justify-content:space-between; color:white; margin-bottom:10px; }
+  .cab h1 { margin:0; font-size:16px; } .cab .der { text-align:right; font-size:9px; opacity:.9; line-height:1.6; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .ficha { border:1px solid #e2e8f0; border-radius:8px; padding:8px; page-break-inside:avoid; }
+  .ficha h2 { margin:0; font-size:13px; color:#134e4a; } .ficha .sub { color:#64748b; margin-bottom:4px; }
+  .ficha table { width:100%; border-collapse:collapse; } .ficha td { padding:1.5px 0; } .ficha td:last-child { text-align:right; font-weight:600; }
+  .docs span { display:inline-block; font-size:8px; font-weight:700; margin:3px 4px 0 0; }
+  .pie { text-align:center; font-size:8px; color:#94a3b8; border-top:1px solid #e2e8f0; margin-top:12px; padding-top:6px; }
+  .boton { position:fixed; bottom:20px; right:20px; background:#0f766e; color:white; border:none; border-radius:10px; padding:12px 22px; font-size:13px; font-weight:700; cursor:pointer; }
+</style></head><body><div class="page">
+  <div class="cab"><div><h1>Fichas de vehículos</h1><div>${filas.length} vehículos</div></div>
+    <div class="der">Corporación Municipal de Panguipulli<br/>Unidad de Control<br/>Generado ${generado}${q ? ` por ${q}` : ""}</div></div>
+  <div class="grid">
+  ${filas.map(f => `<div class="ficha"><h2>${f.patente}</h2><div class="sub">${f.vehiculo} · ${f.tipo}</div><table>
+    <tr><td>Centro</td><td>${f.centro || "—"}</td></tr>
+    ${f.conductor ? `<tr><td>Conductor</td><td>${f.conductor}</td></tr>` : ""}
+    ${f.inventario ? `<tr><td>Inventario</td><td>${f.inventario}</td></tr>` : ""}
+    <tr><td>Último km</td><td>${f.km}</td></tr>
+    <tr><td>Período: gasto</td><td>${f.total}</td></tr>
+    <tr><td>Período: litros · salidas · km</td><td>${f.litros} · ${f.salidas} · ${f.kmPeriodo}</td></tr>
+  </table><div class="docs">${f.docs.map(d => `<span style="color:${(ESTADO[d.estado] || ESTADO.sin_registro)[1]}">${d.tipo}: ${(ESTADO[d.estado] || ESTADO.sin_registro)[0]}${d.hasta !== "—" ? ` ${d.hasta}` : ""}</span>`).join("")}</div></div>`).join("")}
+  </div>
+  <div class="pie"><strong>Corporación Municipal de Panguipulli</strong> · Sistema de Gestión de Equipamiento Crítico</div>
 </div><button class="boton no-print" onclick="window.print()">Imprimir / Guardar PDF</button></body></html>`;
   return abrirInformeHtml(html);
 }
