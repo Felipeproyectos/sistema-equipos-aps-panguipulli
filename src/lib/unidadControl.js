@@ -152,8 +152,10 @@ export function avisosDeCargas(cargas = [], equipos = []) {
 /**
  * El estado de cada vigencia (permiso, revisión técnica, SOAP) de cada
  * vehículo, según el último pago registrado. Ordenado de lo más urgente a lo
- * menos: vencido, por vencer (30 días), sin registro, vigente.
+ * menos: vencido, por vencer (30 días), sin registro, vigente. Sin pago
+ * registrado se usa la fecha que trae la ficha del vehículo, si la tiene.
  */
+const CAMPO_FICHA = { revision_tecnica: "fecha_vencimiento_revision_tecnica", permiso_circulacion: "fecha_vencimiento_permiso_circulacion" };
 export function vencimientos(pagos = [], equipos = [], hoy = new Date().toISOString().slice(0, 10)) {
   const out = [];
   const lista = vigentes(pagos);
@@ -161,10 +163,12 @@ export function vencimientos(pagos = [], equipos = [], hoy = new Date().toISOStr
     for (const tipo of VIGENCIAS) {
       const ultimo = lista.filter(p => p.equipo_id === e.id && p.tipo === tipo && p.vigencia_hasta)
         .sort((a, b) => dia(b.vigencia_hasta).localeCompare(dia(a.vigencia_hasta)))[0];
-      const hasta = ultimo ? dia(ultimo.vigencia_hasta) : "";
+      const deFicha = !ultimo && CAMPO_FICHA[tipo] ? dia(e[CAMPO_FICHA[tipo]]) : "";
+      const hasta = ultimo ? dia(ultimo.vigencia_hasta) : deFicha;
       const dias = hasta ? diasEntre(hoy, hasta) : null;
       const estado = !hasta ? "sin_registro" : dias < 0 ? "vencido" : dias <= DIAS_AVISO ? "por_vencer" : "vigente";
-      out.push({ equipo_id: e.id, vehiculo: rotuloVehiculo(e), centro: e.centro_principal || "", tipo, hasta, dias, estado });
+      out.push({ equipo_id: e.id, vehiculo: rotuloVehiculo(e), centro: e.centro_principal || "", tipo, hasta, dias, estado,
+        fuente: ultimo ? "pago" : deFicha ? "ficha" : "" });
     }
   }
   const peso = { vencido: 0, por_vencer: 1, sin_registro: 2, vigente: 3 };
@@ -217,6 +221,146 @@ export function totales(cargas = [], pagos = [], equipos = []) {
     porVehiculo: de("vehiculo"), porCentro: de("centro"), porMes: de("mes"), porTipo: de("tipo"),
   };
 }
+
+// ── Panel: kilómetros, salidas y rankings ─────────────────────────────────
+// Los kilómetros recorridos salen de la bitácora de salidas (km de regreso
+// menos km de salida) cuando la hay; si no, de la diferencia de odómetro
+// entre la primera y la última carga del período. Se descartan los tramos
+// imposibles (más de 3.000 km en una salida, odómetro que retrocede): los
+// escribe una persona y un dígito de más arruina cualquier promedio.
+
+const KM_MAX_SALIDA = 3000;
+const KM_MAX_PERIODO = 60000;
+
+/** km de una salida, o null si no se puede saber o no es creíble. */
+export function kmDeSalida(s) {
+  const a = numero(s?.km_salida), b = numero(s?.km_regreso);
+  if (a === null || b === null || b < a || b - a > KM_MAX_SALIDA) return null;
+  return b - a;
+}
+
+/** El último kilometraje conocido de cada vehículo: Map(equipo_id → { km, fecha }). */
+export function ultimoKm(cargas = [], salidas = []) {
+  const m = new Map();
+  const ver = (id, km, fecha) => {
+    if (!id || km === null || km < 1 || km > 2000000) return;
+    const act = m.get(id);
+    if (!act || dia(fecha) > act.fecha || (dia(fecha) === act.fecha && km > act.km)) m.set(id, { km, fecha: dia(fecha) });
+  };
+  vigentes(cargas).forEach(c => ver(c.equipo_id, numero(c.km), c.fecha));
+  salidas.forEach(s => ver(s.equipo_id, numero(s.km_regreso) ?? numero(s.km_salida), s.fecha));
+  return m;
+}
+
+/** km recorridos en el período por vehículo: Map(equipo_id → { km, fuente }). */
+export function kmRecorridos(cargas = [], salidas = []) {
+  const out = new Map();
+  const porBitacora = new Map();
+  salidas.forEach(s => {
+    const km = kmDeSalida(s);
+    if (km !== null) porBitacora.set(s.equipo_id, (porBitacora.get(s.equipo_id) || 0) + km);
+  });
+  const porVehiculo = new Map();
+  vigentes(cargas).filter(c => numero(c.km) !== null).forEach(c => porVehiculo.set(c.equipo_id, [...(porVehiculo.get(c.equipo_id) || []), c]));
+  const ids = new Set([...porBitacora.keys(), ...porVehiculo.keys()]);
+  for (const id of ids) {
+    if (porBitacora.get(id) > 0) { out.set(id, { km: porBitacora.get(id), fuente: "bitácora" }); continue; }
+    const lista = (porVehiculo.get(id) || []).sort(ordenCarga);
+    if (lista.length >= 2) {
+      const delta = numero(lista.at(-1).km) - numero(lista[0].km);
+      if (delta > 0 && delta <= KM_MAX_PERIODO) out.set(id, { km: delta, fuente: "odómetro" });
+    }
+  }
+  return out;
+}
+
+/**
+ * Todo lo del panel para el período filtrado. `cargas`, `pagos` y `salidas`
+ * ya vienen filtrados; `equipos` es la flota completa.
+ */
+export function panel({ cargas = [], pagos = [], salidas = [], equipos = [] } = {}) {
+  const c = vigentes(cargas);
+  const pHechos = vigentes(pagos).filter(p => (p.estado_pago || "pagado") === "pagado");
+  const km = kmRecorridos(c, salidas);
+  const porId = new Map(equipos.map(e => [e.id, e]));
+  const fila = (id) => ({ equipo_id: id, vehiculo: rotuloVehiculo(porId.get(id)) || "Sin vehículo", tipo: porId.get(id)?.tipo || "",
+    centro: porId.get(id)?.centro_principal || "", litros: 0, combustible: 0, pagos: 0, total: 0, cargas: 0, salidas: 0, km: 0, fuenteKm: "" });
+  const veh = new Map();
+  const de = (id) => veh.get(id) || veh.set(id, fila(id)).get(id);
+  c.forEach(x => { const f = de(x.equipo_id); f.litros += Number(x.litros) || 0; f.combustible += Number(x.monto) || 0; f.cargas += 1; });
+  pHechos.forEach(x => { de(x.equipo_id).pagos += Number(x.monto) || 0; });
+  salidas.forEach(s => { de(s.equipo_id).salidas += 1; });
+  for (const [id, k] of km) { const f = de(id); f.km = k.km; f.fuenteKm = k.fuente; }
+  // El rendimiento sale del odómetro entre cargas (rendimiento()), no de los
+  // km de la bitácora: la bitácora y las cargas pueden cubrir días distintos.
+  const vehiculos = [...veh.values()].map(f => ({
+    ...f,
+    total: f.combustible + f.pagos,
+    rendimiento: rendimiento(c.filter(x => x.equipo_id === f.equipo_id)).promedio,
+    costoKm: f.km > 0 ? (f.combustible + f.pagos) / f.km : null,
+  }));
+
+  const sum = (lista, k) => lista.reduce((s, x) => s + (Number(x[k]) || 0), 0);
+  const kmTotal = sum(vehiculos, "km");
+  const conRend = vehiculos.filter(v => v.rendimiento !== null && v.litros > 0);
+  const litrosConRend = sum(conRend, "litros");
+  const combustible = sum(c, "monto"), litros = sum(c, "litros"), pagosTotal = sum(pHechos, "monto");
+
+  const meses = new Map();
+  const mes = (f) => dia(f).slice(0, 7);
+  const deMes = (m) => meses.get(m) || meses.set(m, { mes: m, combustible: 0, pagos: 0, litros: 0, km: 0, salidas: 0 }).get(m);
+  c.forEach(x => { const m = deMes(mes(x.fecha)); m.combustible += Number(x.monto) || 0; m.litros += Number(x.litros) || 0; });
+  pHechos.forEach(x => { deMes(mes(x.fecha_pago)).pagos += Number(x.monto) || 0; });
+  salidas.forEach(s => { const m = deMes(mes(s.fecha)); m.salidas += 1; m.km += kmDeSalida(s) || 0; });
+
+  const conductores = new Map();
+  const deC = (n) => { const k = String(n || "").trim(); if (!k) return null; return conductores.get(k.toLowerCase()) || conductores.set(k.toLowerCase(), { nombre: k, litros: 0, monto: 0, cargas: 0, salidas: 0, km: 0 }).get(k.toLowerCase()); };
+  c.forEach(x => { const f = deC(x.chofer_nombre); if (f) { f.litros += Number(x.litros) || 0; f.monto += Number(x.monto) || 0; f.cargas += 1; } });
+  salidas.forEach(s => { const f = deC(s.chofer_nombre); if (f) { f.salidas += 1; f.km += kmDeSalida(s) || 0; } });
+
+  const destinos = new Map();
+  salidas.forEach(s => { const d = String(s.destino || "").trim(); if (d) destinos.set(d, (destinos.get(d) || 0) + 1); });
+
+  const combustibles = new Map();
+  c.forEach(x => { const k = rotulo(TIPOS_COMBUSTIBLE, x.tipo_combustible) || "Sin dato"; const f = combustibles.get(k) || { clave: k, litros: 0, monto: 0 }; f.litros += Number(x.litros) || 0; f.monto += Number(x.monto) || 0; combustibles.set(k, f); });
+
+  return {
+    kpis: {
+      total: combustible + pagosTotal, combustible, pagos: pagosTotal, litros, km: kmTotal,
+      costoKm: kmTotal > 0 ? (combustible + pagosTotal) / kmTotal : null,
+      rendimiento: litrosConRend > 0 ? conRend.reduce((s, v) => s + v.rendimiento * v.litros, 0) / litrosConRend : null,
+      precioLitro: litros > 0 ? combustible / litros : null,
+      cargas: c.length, salidas: salidas.length, vehiculosActivos: vehiculos.filter(v => v.cargas || v.salidas).length,
+    },
+    vehiculos,
+    meses: [...meses.values()].sort((a, b) => a.mes.localeCompare(b.mes)),
+    conductores: [...conductores.values()].sort((a, b) => b.litros - a.litros || b.salidas - a.salidas),
+    destinos: [...destinos.entries()].map(([destino, n]) => ({ destino, n })).sort((a, b) => b.n - a.n),
+    combustibles: [...combustibles.values()].sort((a, b) => b.litros - a.litros),
+  };
+}
+
+/** Ordena la tabla de vehículos del panel. */
+export const ORDENES_VEHICULO = [
+  { clave: "total", label: "Gasto total", desc: true },
+  { clave: "litros", label: "Litros", desc: true },
+  { clave: "km", label: "Kilómetros", desc: true },
+  { clave: "salidas", label: "Salidas", desc: true },
+  { clave: "costoKm", label: "Costo por km", desc: true },
+  { clave: "rendimiento", label: "Peor rendimiento", desc: false },
+];
+export function ordenarVehiculos(lista, clave = "total") {
+  const o = ORDENES_VEHICULO.find(x => x.clave === clave) || ORDENES_VEHICULO[0];
+  return [...lista].sort((a, b) => {
+    const x = a[o.clave], y = b[o.clave];
+    if (x === null || x === undefined) return 1;
+    if (y === null || y === undefined) return -1;
+    return o.desc ? y - x : x - y;
+  });
+}
+
+/** "1.234,5" con los decimales pedidos. */
+export const numeroTexto = (n, dec = 0) => (n === null || n === undefined ? "—" : Number(n).toLocaleString("es-CL", { minimumFractionDigits: dec, maximumFractionDigits: dec }));
 
 // ── Planillas ───────────────────────────────────────────────────────────
 // Las columnas de la plantilla, en el orden en que se descarga. `aliases`
@@ -480,6 +624,29 @@ export function _selfCheck() {
   ], equipos, "pago");
   debe(pp.registros.length === 1 && pp.registros[0].tipo === "permiso_circulacion" && pp.registros[0].vigencia_hasta === "2027-03-31", "planilla de pagos");
   debe(pp.errores.length === 1 && /vence/.test(pp.errores[0].motivo), "pendiente sin vencimiento");
+
+  const vf = vencimientos([], [{ id: "f1", tipo: "furgon", patente: "AB12", fecha_vencimiento_revision_tecnica: "2026-11-05" }], "2026-10-27");
+  debe(vf.find(x => x.tipo === "revision_tecnica").estado === "por_vencer" && vf.find(x => x.tipo === "revision_tecnica").fuente === "ficha"
+    && vf.find(x => x.tipo === "soap").estado === "sin_registro", "sin pago, la fecha de la ficha");
+  // Panel
+  const salidas = [
+    { equipo_id: "v1", fecha: "2026-10-02", km_salida: 10000, km_regreso: 10120, chofer_nombre: "Juan", destino: "Liquiñe" },
+    { equipo_id: "v1", fecha: "2026-10-03", km_salida: 10120, km_regreso: 99999, chofer_nombre: "Juan", destino: "Liquiñe" },
+    { equipo_id: "v2", fecha: "2026-10-04", km_salida: null, km_regreso: null, chofer_nombre: "Ana", destino: "Valdivia" },
+  ];
+  debe(kmDeSalida(salidas[0]) === 120 && kmDeSalida(salidas[1]) === null && kmDeSalida(salidas[2]) === null, "km por salida, sin los imposibles");
+  const kr = kmRecorridos(cargas, salidas);
+  debe(kr.get("v1").km === 120 && kr.get("v1").fuente === "bitácora", "la bitácora manda sobre el odómetro");
+  debe(kmRecorridos(cargas, []).get("v1").km === 1100 && kmRecorridos(cargas, []).get("v1").fuente === "odómetro", "sin bitácora, el odómetro");
+  const uk = ultimoKm(cargas, salidas);
+  debe(uk.get("v1").km === 11100 && uk.get("v1").fecha === "2026-10-10", "último km conocido (la anulada no cuenta)");
+  const pn = panel({ cargas, pagos, salidas, equipos });
+  debe(pn.kpis.combustible === 280000 && pn.kpis.pagos === 189000 && pn.kpis.km === 120 && pn.kpis.salidas === 3, "kpis del panel");
+  debe(pn.vehiculos.find(v => v.equipo_id === "v1").salidas === 2 && pn.vehiculos.find(v => v.equipo_id === "v2").salidas === 1, "salidas por vehículo");
+  debe(pn.conductores.find(x => x.nombre === "Juan").km === 120 && pn.destinos[0].destino === "Liquiñe" && pn.destinos[0].n === 2, "conductores y destinos");
+  debe(pn.meses.map(m => m.mes).join() === "2025-10,2026-03,2026-10" && pn.meses.at(-1).salidas === 3, "por mes");
+  debe(ordenarVehiculos(pn.vehiculos, "total")[0].equipo_id === "v1" && ordenarVehiculos(pn.vehiculos, "rendimiento").at(-1).rendimiento === null, "orden de la tabla");
+  debe(numeroTexto(1234.5, 1) === "1.234,5", "número a la chilena");
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("unidadControl: autotest ok");
