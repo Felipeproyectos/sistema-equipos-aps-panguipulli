@@ -32,6 +32,8 @@ export default async function (req) {
       InvitacionPendiente: "Invitación",
       SolicitudRepuesto: "Solicitud de Repuesto",
       SolicitudRepuestoSalud: "Solicitud de Insumo Médico",
+      CargaCombustible: "Carga de Combustible",
+      PagoVehiculo: "Pago de Vehículo",
     };
 
     const ACCIONES = { create: "crear", update: "editar", delete: "eliminar" };

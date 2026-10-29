@@ -14,6 +14,9 @@ export const ROLES = {
   MONITOR_CORPORATIVO: "monitor_corporativo",
   ENCARGADO_MOVILIZACION: "encargado_movilizacion",
   CHOFER: "chofer",
+  // Registra las cargas de combustible y los pagos de cada vehículo
+  // (migracion/32_unidad_control.sql). Solo la crea Base del Sistema.
+  UNIDAD_CONTROL: "unidad_control",
   JEFE_TALLER: "jefe_taller",
   ENCARGADO_COMPRAS_TALLER: "encargado_compras_taller",
   MECANICO: "mecanico",
@@ -31,6 +34,7 @@ export const ROLE_LABELS = {
   [ROLES.MONITOR_CORPORATIVO]: "Monitor Corporativo",
   [ROLES.ENCARGADO_MOVILIZACION]: "Encargado de Movilización",
   [ROLES.CHOFER]: "Chofer",
+  [ROLES.UNIDAD_CONTROL]: "Unidad de Control",
   [ROLES.JEFE_TALLER]: "Jefe de Taller",
   [ROLES.ENCARGADO_COMPRAS_TALLER]: "Encargado Compras Taller",
   [ROLES.MECANICO]: "Mecánico",
@@ -51,7 +55,7 @@ export const TALLER_ROLES = [ROLES.JEFE_TALLER, ROLES.ENCARGADO_COMPRAS_TALLER, 
 // dentro de TALLER_ROLES a proposito: ese grupo abre pantallas de mecánico
 // (repuestos de un equipo, tablero del taller, reportes de taller) que no le
 // corresponden. Comparte con el Taller el "área" a la que pertenece, y nada más.
-export const FLOTA_ROLES = [...TALLER_ROLES, ROLES.ENCARGADO_MOVILIZACION, ROLES.CHOFER];
+export const FLOTA_ROLES = [...TALLER_ROLES, ROLES.ENCARGADO_MOVILIZACION, ROLES.CHOFER, ROLES.UNIDAD_CONTROL];
 
 export function esEncargadoMovilizacion(role) {
   return role === ROLES.ENCARGADO_MOVILIZACION;
@@ -133,6 +137,7 @@ export const QUIEN_CREA_A_QUIEN = {
   [ROLES.MECANICO]: [],
   [ROLES.USER]: [],
   [ROLES.CHOFER]: [],
+  [ROLES.UNIDAD_CONTROL]: [],
 };
 
 // Roles que puede asignar/crear un usuario dado (para poblar selects de invitación)

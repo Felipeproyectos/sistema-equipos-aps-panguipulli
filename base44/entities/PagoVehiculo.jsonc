@@ -1,0 +1,139 @@
+{
+  "name": "PagoVehiculo",
+  "type": "object",
+  "description": "Pago o gasto de un vehículo (Unidad de Control). Reglas en migracion/32_unidad_control.sql",
+  "properties": {
+    "equipo_id": {
+      "type": "string"
+    },
+    "equipo_label": {
+      "type": "string"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "permiso_circulacion",
+        "revision_tecnica",
+        "soap",
+        "seguro",
+        "peaje_tag",
+        "multa",
+        "reparacion_externa",
+        "neumaticos",
+        "lavado",
+        "estacionamiento",
+        "otro"
+      ]
+    },
+    "categoria_otro": {
+      "type": "string"
+    },
+    "descripcion": {
+      "type": "string"
+    },
+    "fecha_pago": {
+      "type": "string",
+      "format": "date"
+    },
+    "monto": {
+      "type": "number"
+    },
+    "estado_pago": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "pagado"
+      ]
+    },
+    "vence_pago": {
+      "type": "string",
+      "format": "date"
+    },
+    "proveedor": {
+      "type": "string"
+    },
+    "rut_proveedor": {
+      "type": "string"
+    },
+    "documento_tipo": {
+      "type": "string",
+      "enum": [
+        "boleta",
+        "factura",
+        "guia",
+        "vale",
+        "otro"
+      ]
+    },
+    "documento_numero": {
+      "type": "string"
+    },
+    "medio_pago": {
+      "type": "string",
+      "enum": [
+        "tarjeta_combustible",
+        "efectivo",
+        "transferencia",
+        "credito",
+        "otro"
+      ]
+    },
+    "vigencia_desde": {
+      "type": "string",
+      "format": "date"
+    },
+    "vigencia_hasta": {
+      "type": "string",
+      "format": "date"
+    },
+    "centro_costo": {
+      "type": "string",
+      "description": "Lo calcula la base: el centro dueño o el del préstamo de ese día"
+    },
+    "prestamo_id": {
+      "type": "string"
+    },
+    "comprobante_url": {
+      "type": "string"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "origen": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "planilla"
+      ]
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "vigente",
+        "anulado"
+      ],
+      "description": "No se borra: se anula con motivo"
+    },
+    "motivo_anulacion": {
+      "type": "string"
+    },
+    "anulado_por": {
+      "type": "string"
+    },
+    "fecha_anulacion": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "registrado_por_email": {
+      "type": "string"
+    },
+    "registrado_por_nombre": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "equipo_id",
+    "tipo",
+    "monto"
+  ]
+}
