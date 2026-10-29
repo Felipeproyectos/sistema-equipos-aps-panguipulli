@@ -28,7 +28,7 @@ import { createClientFromRequest } from '#compat';
 // que crea cuentas es justo donde eso importa.
 const ROLES_VALIDOS = [
   'super_admin', 'admin', 'encargado_salud', 'encargado_compras_salud',
-  'monitor_corporativo', 'encargado_movilizacion', 'chofer',
+  'monitor_corporativo', 'encargado_movilizacion', 'chofer', 'unidad_control',
   'jefe_taller', 'encargado_compras_taller', 'mecanico', 'user',
 ];
 
@@ -46,6 +46,7 @@ const QUIEN_CREA_A_QUIEN = {
   mecanico: [],
   user: [],
   chofer: [],
+  unidad_control: [],
 };
 
 // Quién puede ver el diagnóstico y reparar cuentas: administrar el acceso de

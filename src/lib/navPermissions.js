@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Monitor, Bell, ClipboardList, FileText,
-  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart, Route, Truck, IdCard, CalendarDays, NotebookPen, KeyRound, Inbox
+  Settings, Wrench, Building2, Package, ScrollText, BarChart3, Users, ClipboardCheck, ShoppingCart, Heart, Route, Truck, IdCard, CalendarDays, NotebookPen, KeyRound, Inbox, Wallet
 } from "lucide-react";
 import { ROLES } from "@/lib/roles";
 
@@ -34,6 +34,11 @@ export const NAV_ITEMS = [
   // La bitacora de operacion de la flota. Es otra que la de Calidad (la del
   // enlace publico, que revisa el Encargado de Salud en "Revision Bitacora"):
   // miden cosas distintas y las miran personas distintas.
+  // Cargas de combustible y pagos de cada vehículo. La Unidad de Control
+  // registra; Movilización y el Monitor solo miran (32_unidad_control.sql).
+  { label: "Combustible y pagos", page: "UnidadControl", path: "/UnidadControl", icon: Wallet,
+    roles: [ROLES.SUPER_ADMIN, ROLES.UNIDAD_CONTROL, ROLES.ENCARGADO_MOVILIZACION, ROLES.MONITOR_CORPORATIVO] },
+
   { label: "Bitácora", page: "BitacoraFlota", path: "/BitacoraFlota", icon: NotebookPen,
     roles: [ROLES.SUPER_ADMIN, ROLES.ENCARGADO_MOVILIZACION] },
 
@@ -123,6 +128,7 @@ const ROLE_ORDER = {
   // "Mi turno" primero: es lo que hace todos los dias, y si la licencia no
   // esta vigente lo dice ahi mismo y lo lleva a "Mi licencia".
   [ROLES.CHOFER]: ["MiTurno", "MiBitacora", "MiLicencia"],
+  [ROLES.UNIDAD_CONTROL]: ["UnidadControl"],
 };
 
 export function getNavItemsForRole(role) {

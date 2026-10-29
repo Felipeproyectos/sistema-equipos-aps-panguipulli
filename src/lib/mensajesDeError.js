@@ -61,6 +61,7 @@ const NOMBRES = {
   Equipo: "el equipo", Parche: "el parche", OrdenTrabajo: "la orden de trabajo",
   Solicitud: "la solicitud", SolicitudRepuesto: "la solicitud de repuesto",
   SolicitudRepuestoSalud: "la solicitud de insumo", SolicitudStock: "la solicitud de stock",
+  CargaCombustible: "la carga de combustible", PagoVehiculo: "el pago del vehículo",
   Alerta: "la alerta", Actividad: "la actividad", Comentario: "el comentario",
   Repuesto: "el repuesto", Proveedor: "el proveedor", Centro: "el centro",
   User: "la ficha del usuario", OrdenDeCompra: "la orden de compra",

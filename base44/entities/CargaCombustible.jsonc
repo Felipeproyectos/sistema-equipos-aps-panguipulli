@@ -1,0 +1,130 @@
+{
+  "name": "CargaCombustible",
+  "type": "object",
+  "description": "Carga de combustible de un vehículo (Unidad de Control). Reglas en migracion/32_unidad_control.sql",
+  "properties": {
+    "equipo_id": {
+      "type": "string"
+    },
+    "equipo_label": {
+      "type": "string"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "hora": {
+      "type": "string"
+    },
+    "km": {
+      "type": "number"
+    },
+    "litros": {
+      "type": "number"
+    },
+    "estanque_lleno": {
+      "type": "boolean"
+    },
+    "tipo_combustible": {
+      "type": "string",
+      "enum": [
+        "diesel",
+        "gasolina_93",
+        "gasolina_95",
+        "gasolina_97",
+        "otro"
+      ]
+    },
+    "precio_litro": {
+      "type": "number"
+    },
+    "monto": {
+      "type": "number"
+    },
+    "estacion": {
+      "type": "string"
+    },
+    "comuna": {
+      "type": "string"
+    },
+    "documento_tipo": {
+      "type": "string",
+      "enum": [
+        "boleta",
+        "factura",
+        "guia",
+        "vale",
+        "otro"
+      ]
+    },
+    "documento_numero": {
+      "type": "string"
+    },
+    "medio_pago": {
+      "type": "string",
+      "enum": [
+        "tarjeta_combustible",
+        "efectivo",
+        "transferencia",
+        "credito",
+        "otro"
+      ]
+    },
+    "tarjeta": {
+      "type": "string"
+    },
+    "chofer_nombre": {
+      "type": "string"
+    },
+    "centro_costo": {
+      "type": "string",
+      "description": "Lo calcula la base: el centro dueño o el del préstamo de ese día"
+    },
+    "prestamo_id": {
+      "type": "string"
+    },
+    "comprobante_url": {
+      "type": "string"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "origen": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "planilla"
+      ]
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "vigente",
+        "anulado"
+      ],
+      "description": "No se borra: se anula con motivo"
+    },
+    "motivo_anulacion": {
+      "type": "string"
+    },
+    "anulado_por": {
+      "type": "string"
+    },
+    "fecha_anulacion": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "registrado_por_email": {
+      "type": "string"
+    },
+    "registrado_por_nombre": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "equipo_id",
+    "fecha",
+    "litros",
+    "monto"
+  ]
+}
