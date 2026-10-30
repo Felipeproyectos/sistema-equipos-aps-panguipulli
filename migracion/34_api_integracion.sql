@@ -215,6 +215,8 @@ end $$;
 drop trigger if exists lectura_odometro_reglas on lectura_odometro;
 create trigger lectura_odometro_reglas before insert or update on lectura_odometro
   for each row execute function lectura_odometro_reglas();
+-- Solo como disparador: que no se pueda llamar por /rest/v1/rpc.
+revoke execute on function lectura_odometro_reglas() from public, anon, authenticated;
 
 -- La ven quienes ven los gastos de la flota (32_*.sql) y el Taller, que
 -- programa mantenciones por kilometraje. Nadie la escribe con sesión: solo
@@ -227,9 +229,9 @@ drop policy if exists lectura_odometro_delete on lectura_odometro;
 create policy lectura_odometro_delete on lectura_odometro for delete to authenticated
   using (mi_rol() = 'super_admin');
 -- Los permisos se dan explícitos, sin contar con los que Supabase pone por
--- defecto: authenticated solo lee (y la policy de arriba decide qué filas).
+-- defecto: authenticated lee y borra, y las policies de arriba deciden quién y qué filas.
 revoke all on lectura_odometro from anon, authenticated;
-grant select on lectura_odometro to authenticated;
+grant select, delete on lectura_odometro to authenticated;
 
 -- La más reciente de cada vehículo. security_invoker: aplica la policy de
 -- arriba a quien la consulta.
