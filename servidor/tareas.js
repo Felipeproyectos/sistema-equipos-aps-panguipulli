@@ -20,9 +20,30 @@ const TAREAS = [
   // A cada persona, lo que la espera en el sistema. Días hábiles, antes de que
   // empiece el turno. Se apaga con RESUMEN_DIARIO=off.
   { nombre: 'resumenDiarioPendientes', horario: '0 8 * * 1-5', descripcion: 'resumen de pendientes por correo' },
+  // El registro de llamadas de la API de integración (api_registro) se guarda
+  // API_REGISTRO_DIAS (180 por defecto). No es una función de /functions:
+  // index.js la entrega al programar.
+  { nombre: 'purgarRegistroApi', horario: '30 3 * * *', descripcion: 'purga del registro de la API', interna: true },
 ];
 
-async function ejecutar({ nombre, descripcion }) {
+// Las tareas `interna`: código del propio servidor, sin Request ni Response.
+let internas = {};
+
+async function ejecutarInterna({ nombre, descripcion }) {
+  const fn = internas[nombre];
+  if (!fn) return console.error(`[tarea] ${nombre} no fue entregada al programar`);
+  const inicio = Date.now();
+  try {
+    const salida = await fn();
+    console.log(`[tarea] ${nombre} (${descripcion}) ok en ${Date.now() - inicio}ms`, salida);
+  } catch (error) {
+    console.error(`[tarea] ${nombre} reventó:`, error);
+  }
+}
+
+async function ejecutar(tarea) {
+  if (tarea.interna) return ejecutarInterna(tarea);
+  const { nombre, descripcion } = tarea;
   const fn = handlers[nombre];
   if (!fn) return console.error(`[tarea] ${nombre} no existe`);
   const inicio = Date.now();
@@ -42,7 +63,8 @@ async function ejecutar({ nombre, descripcion }) {
   }
 }
 
-export function programarTareas() {
+export function programarTareas(tareasInternas = {}) {
+  internas = tareasInternas;
   if (!process.env.CRON_SECRET) {
     console.warn('[tarea] CRON_SECRET no esta puesto: las tareas programadas quedan apagadas');
     return [];

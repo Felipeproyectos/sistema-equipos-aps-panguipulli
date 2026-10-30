@@ -10,8 +10,24 @@ import { cors } from 'hono/cors';
 import { handlers } from './funciones/index.js';
 import { CABECERA_TAREA } from './base44compat.js';
 import { programarTareas, ejecutarAhora, nombresDeTareas } from './tareas.js';
+import { crearApi, purgarRegistroApi } from './api/index.js';
+import { crearDatosSupabase } from './api/datos.js';
+import { pepperValido } from './api/claves.js';
 
 const app = new Hono();
+
+// API de integración (servidor/api/): otros sistemas entregan información con
+// su propia clave. Va antes del CORS de abajo, que es para el navegador de la
+// aplicación: a esta API la llaman servidores, no páginas.
+const datosApi = crearDatosSupabase({
+  url: process.env.SUPABASE_URL,
+  llaveServicio: process.env.SUPABASE_SERVICE_ROLE_KEY,
+});
+if (!pepperValido(process.env.API_CLAVES_PEPPER)) {
+  console.warn('[api] API_CLAVES_PEPPER no está puesto (mínimo 32 caracteres): /api/v1 responde 503');
+}
+app.route('/api/v1', crearApi({ datos: datosApi, pepper: process.env.API_CLAVES_PEPPER }));
+const diasRegistroApi = Number(process.env.API_REGISTRO_DIAS) > 0 ? Number(process.env.API_REGISTRO_DIAS) : 180;
 
 const origenes = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
 app.use('/*', cors({
@@ -32,6 +48,7 @@ app.get('/salud', (c) => c.json({
   ok: true,
   funciones: Object.keys(handlers).length,
   tareas: nombresDeTareas(),
+  api: pepperValido(process.env.API_CLAVES_PEPPER),
 }));
 
 // Disparar una tarea a mano, sin esperar al horario. Protegido con el mismo
@@ -86,5 +103,7 @@ app.all('/functions/:nombre', async (c) => {
 const port = Number(process.env.PORT) || 3000;
 serve({ fetch: app.fetch, port }, () => {
   console.log(`Escuchando en :${port} — ${Object.keys(handlers).length} funciones`);
-  programarTareas();
+  programarTareas({
+    purgarRegistroApi: async () => ({ borrados: await purgarRegistroApi(datosApi, diasRegistroApi) }),
+  });
 });

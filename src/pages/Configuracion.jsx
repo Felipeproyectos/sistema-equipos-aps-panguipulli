@@ -8,6 +8,7 @@ import BackupSection from "@/components/configuracion/BackupSection";
 import DatosDePruebaSection from "@/components/configuracion/DatosDePruebaSection";
 import ResumenDiarioSection from "@/components/configuracion/ResumenDiarioSection";
 import ModoTurnoSection from "@/components/configuracion/ModoTurnoSection";
+import ApiIntegracionSection from "@/components/configuracion/ApiIntegracionSection";
 import { QRCodeSVG } from "qrcode.react";
 import { useAuth } from "@/lib/AuthContext";
 import { esAdministrador } from "@/lib/roles";
@@ -175,6 +176,9 @@ export default function Configuracion() {
 
         {/* Resumen diario de pendientes por correo */}
         <ResumenDiarioSection />
+
+        {/* Accesos de sistemas externos que entregan información (34_api_integracion.sql) */}
+        <ApiIntegracionSection />
 
         {/* Datos de prueba (migraciones 19 y 22) */}
         <DatosDePruebaSection />

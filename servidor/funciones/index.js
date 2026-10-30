@@ -9,6 +9,7 @@ import exportarBackup from './exportarBackup.js';
 import generarAlertasAutomaticas from './generarAlertasAutomaticas.js';
 import generarDocumentoPrueba from './generarDocumentoPrueba.js';
 import gestionarAcceso from './gestionarAcceso.js';
+import gestionarApiClientes from './gestionarApiClientes.js';
 import getEquiposPorCentro from './getEquiposPorCentro.js';
 import getMonitorData from './getMonitorData.js';
 import getPublicAmbulances from './getPublicAmbulances.js';
@@ -35,6 +36,7 @@ export const handlers = {
   generarAlertasAutomaticas,
   generarDocumentoPrueba,
   gestionarAcceso,
+  gestionarApiClientes,
   getEquiposPorCentro,
   getMonitorData,
   getPublicAmbulances,
