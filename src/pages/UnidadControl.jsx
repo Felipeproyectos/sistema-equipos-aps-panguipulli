@@ -54,6 +54,7 @@ export default function UnidadControl() {
   const [pagos, setPagos] = useState([]);
   const [equipos, setEquipos] = useState([]);
   const [salidas, setSalidas] = useState([]);
+  const [lecturas, setLecturas] = useState([]);
   const [ficha, setFicha] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState("");
@@ -69,14 +70,17 @@ export default function UnidadControl() {
   const cargar = useCallback(async () => {
     setErrorCarga("");
     try {
-      const [c, p, e, s] = await Promise.all([
+      const [c, p, e, s, l] = await Promise.all([
         base44.entities.CargaCombustible.list("-fecha", 5000),
         base44.entities.PagoVehiculo.list("-created_date", 5000),
         base44.entities.Equipo.list("-updated_date", 1000),
         // Sin la migración 33 la bitácora no deja leer: el panel sigue, sin salidas.
         base44.entities.BitacoraFlota.list("-fecha", 5000).catch(() => []),
+        // El último km del GPS de cada vehículo, que llega por la API de
+        // integración. Sin la migración 34 no existe: las fichas siguen sin él.
+        base44.entities.UltimaLecturaOdometro.list("-fecha_lectura", 2000).catch(() => []),
       ]);
-      setCargas(c); setPagos(p); setEquipos(e); setSalidas(s);
+      setCargas(c); setPagos(p); setEquipos(e); setSalidas(s); setLecturas(l);
     } catch (e) {
       setErrorCarga(mensajeDeError(e, "cargar los registros"));
     } finally {
@@ -264,7 +268,7 @@ export default function UnidadControl() {
         )}
 
         {pestana === "vehiculos" && (
-          <FlotaFichas vehiculos={vehiculos} periodo={periodoPorId} venc={vencTodos} cargas={cargas} salidas={salidas}
+          <FlotaFichas vehiculos={vehiculos} periodo={periodoPorId} venc={vencTodos} cargas={cargas} salidas={salidas} lecturas={lecturas}
             quien={user?.full_name || user?.email || ""} onAbrir={setFicha} />
         )}
 
@@ -283,7 +287,7 @@ export default function UnidadControl() {
                     detalle={[`${litrosTexto(c.litros)} ${rotulo(TIPOS_COMBUSTIBLE, c.tipo_combustible)}`, c.km ? `${Number(c.km).toLocaleString("es-CL")} km` : "",
                       c.estacion, c.chofer_nombre ? `Conductor: ${c.chofer_nombre}` : ""].filter(Boolean).join(" · ")}
                     sub={[`Paga ${c.centro_costo || "—"}`, c.documento_numero ? `${rotulo(DOCUMENTOS, c.documento_tipo) || "Doc."} N° ${c.documento_numero}` : "", rotulo(MEDIOS_PAGO, c.medio_pago),
-                      c.origen === "planilla" ? "Desde planilla" : "", c.registrado_por_nombre ? `Registró ${c.registrado_por_nombre}` : ""].filter(Boolean).join(" · ")}
+                      c.origen === "planilla" ? "Desde planilla" : "", c.origen === "api" ? "Recibida por API" : "", c.registrado_por_nombre ? `Registró ${c.registrado_por_nombre}` : ""].filter(Boolean).join(" · ")}
                     avisos={c.estado === "anulado" ? [] : (avisosPorCarga.get(c.id) || [])}
                     comprobante={c.comprobante_url} escribe={escribe}
                     onEditar={() => setFormulario({ tipo: "carga", inicial: c })} onAnular={() => setAnulando({ tipo: "carga", registro: c })} />
@@ -299,7 +303,7 @@ export default function UnidadControl() {
                     detalle={[rotuloVehiculo(porId.get(p.equipo_id)) || p.equipo_label, p.descripcion, p.proveedor,
                       p.vigencia_hasta ? `Vigente hasta ${fecha(p.vigencia_hasta)}` : ""].filter(Boolean).join(" · ")}
                     sub={[`Paga ${p.centro_costo || "—"}`, p.documento_numero ? `${rotulo(DOCUMENTOS, p.documento_tipo) || "Doc."} N° ${p.documento_numero}` : "", rotulo(MEDIOS_PAGO, p.medio_pago),
-                      p.origen === "planilla" ? "Desde planilla" : "", p.registrado_por_nombre ? `Registró ${p.registrado_por_nombre}` : ""].filter(Boolean).join(" · ")}
+                      p.origen === "planilla" ? "Desde planilla" : "", p.origen === "api" ? "Recibido por API" : "", p.registrado_por_nombre ? `Registró ${p.registrado_por_nombre}` : ""].filter(Boolean).join(" · ")}
                     comprobante={p.comprobante_url} escribe={escribe}
                     onEditar={() => setFormulario({ tipo: "pago", inicial: p })} onAnular={() => setAnulando({ tipo: "pago", registro: p })} />
                 ))}
@@ -338,7 +342,7 @@ export default function UnidadControl() {
       </div>
 
       {ficha && porId.get(ficha) && (
-        <FichaVehiculo equipo={porId.get(ficha)} cargas={cargas} pagos={pagos} salidas={salidas} venc={vencTodos}
+        <FichaVehiculo equipo={porId.get(ficha)} cargas={cargas} pagos={pagos} salidas={salidas} lecturas={lecturas} venc={vencTodos}
           periodo={periodoPorId.get(ficha)} onClose={() => setFicha(null)} />
       )}
       {formulario && (

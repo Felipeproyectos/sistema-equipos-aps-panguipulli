@@ -239,16 +239,21 @@ export function kmDeSalida(s) {
   return b - a;
 }
 
-/** El último kilometraje conocido de cada vehículo: Map(equipo_id → { km, fecha }). */
-export function ultimoKm(cargas = [], salidas = []) {
+/**
+ * El último kilometraje conocido de cada vehículo: Map(equipo_id → { km, fecha }).
+ * `lecturas` son las del GPS que llegan por la API de integración
+ * (ultima_lectura_odometro, migracion/34_api_integracion.sql).
+ */
+export function ultimoKm(cargas = [], salidas = [], lecturas = []) {
   const m = new Map();
-  const ver = (id, km, fecha) => {
+  const ver = (id, km, fecha, fuente) => {
     if (!id || km === null || km < 1 || km > 2000000) return;
     const act = m.get(id);
-    if (!act || dia(fecha) > act.fecha || (dia(fecha) === act.fecha && km > act.km)) m.set(id, { km, fecha: dia(fecha) });
+    if (!act || dia(fecha) > act.fecha || (dia(fecha) === act.fecha && km > act.km)) m.set(id, { km, fecha: dia(fecha), fuente });
   };
-  vigentes(cargas).forEach(c => ver(c.equipo_id, numero(c.km), c.fecha));
-  salidas.forEach(s => ver(s.equipo_id, numero(s.km_regreso) ?? numero(s.km_salida), s.fecha));
+  vigentes(cargas).forEach(c => ver(c.equipo_id, numero(c.km), c.fecha, "carga"));
+  salidas.forEach(s => ver(s.equipo_id, numero(s.km_regreso) ?? numero(s.km_salida), s.fecha, "salida"));
+  lecturas.forEach(l => ver(l.equipo_id, numero(l.km), l.fecha || l.fecha_lectura, "gps"));
   return m;
 }
 
@@ -640,6 +645,8 @@ export function _selfCheck() {
   debe(kmRecorridos(cargas, []).get("v1").km === 1100 && kmRecorridos(cargas, []).get("v1").fuente === "odómetro", "sin bitácora, el odómetro");
   const uk = ultimoKm(cargas, salidas);
   debe(uk.get("v1").km === 11100 && uk.get("v1").fecha === "2026-10-10", "último km conocido (la anulada no cuenta)");
+  const ukGps = ultimoKm(cargas, salidas, [{ equipo_id: "v1", km: 11800, fecha: "2026-10-12" }, { equipo_id: "v2", km: 5000, fecha: "2026-10-01" }]);
+  debe(ukGps.get("v1").km === 11800 && ukGps.get("v1").fecha === "2026-10-12" && ukGps.get("v1").fuente === "gps" && ukGps.get("v2").km === 5000, "la lectura del GPS cuenta como último km");
   const pn = panel({ cargas, pagos, salidas, equipos });
   debe(pn.kpis.combustible === 280000 && pn.kpis.pagos === 189000 && pn.kpis.km === 120 && pn.kpis.salidas === 3, "kpis del panel");
   debe(pn.vehiculos.find(v => v.equipo_id === "v1").salidas === 2 && pn.vehiculos.find(v => v.equipo_id === "v2").salidas === 1, "salidas por vehículo");

@@ -27,13 +27,13 @@ const ESTADO_EQUIPO = {
 const CORTO = { permiso_circulacion: "Permiso", revision_tecnica: "Rev. técnica", soap: "SOAP" };
 const tipoTexto = (t) => rotulo(TIPOS_EQUIPO, t) || t || "";
 
-export default function FlotaFichas({ vehiculos, periodo, venc, cargas, salidas, quien, onAbrir }) {
+export default function FlotaFichas({ vehiculos, periodo, venc, cargas, salidas, lecturas = [], quien, onAbrir }) {
   const [q, setQ] = useState("");
   const [centro, setCentro] = useState("todos");
   const [tipo, setTipo] = useState("todos");
   const [docs, setDocs] = useState("todos");
   const [bloqueado, setBloqueado] = useState(false);
-  const km = useMemo(() => ultimoKm(cargas, salidas), [cargas, salidas]);
+  const km = useMemo(() => ultimoKm(cargas, salidas, lecturas), [cargas, salidas, lecturas]);
   const docsDe = useMemo(() => {
     const m = new Map();
     venc.forEach(v => m.set(v.equipo_id, [...(m.get(v.equipo_id) || []), v]));
@@ -134,12 +134,12 @@ function Dato({ v, e, fuerte }) {
 }
 
 /** La ficha completa de un vehículo, con todo su historial (no solo el período). */
-export function FichaVehiculo({ equipo, cargas, pagos, salidas, venc, periodo, onClose }) {
+export function FichaVehiculo({ equipo, cargas, pagos, salidas, lecturas = [], venc, periodo, onClose }) {
   const c = useMemo(() => vigentes(cargas).filter(x => x.equipo_id === equipo.id).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))), [cargas, equipo.id]);
   const p = useMemo(() => vigentes(pagos).filter(x => x.equipo_id === equipo.id).sort((a, b) => String(b.fecha_pago || b.vence_pago || "").localeCompare(String(a.fecha_pago || a.vence_pago || ""))), [pagos, equipo.id]);
   const s = useMemo(() => salidas.filter(x => x.equipo_id === equipo.id).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))), [salidas, equipo.id]);
   const rend = useMemo(() => rendimiento(c), [c]);
-  const uk = ultimoKm(c, s).get(equipo.id);
+  const uk = ultimoKm(c, s, lecturas.filter(x => x.equipo_id === equipo.id)).get(equipo.id);
   const hechos = p.filter(x => (x.estado_pago || "pagado") === "pagado");
   const totalComb = c.reduce((a, x) => a + (Number(x.monto) || 0), 0);
   const totalLitros = c.reduce((a, x) => a + (Number(x.litros) || 0), 0);
@@ -168,7 +168,7 @@ export function FichaVehiculo({ equipo, cargas, pagos, salidas, venc, periodo, o
 
         <div className="p-6 space-y-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <Indicador icono={Gauge} v={uk ? `${numeroTexto(uk.km)} km` : "—"} e={uk ? `último km (${fecha(uk.fecha)})` : "último km"} />
+            <Indicador icono={Gauge} v={uk ? `${numeroTexto(uk.km)} km` : "—"} e={uk ? `último km (${fecha(uk.fecha)}${uk.fuente === "gps" ? " · GPS" : ""})` : "último km"} />
             <Indicador icono={Fuel} v={pesos(totalComb)} e={`combustible · ${litrosTexto(totalLitros)}`} />
             <Indicador icono={Receipt} v={pesos(totalPagos)} e={`pagos · ${hechos.length} registros`} />
             <Indicador icono={Route} v={rend.promedio ? `${numeroTexto(rend.promedio, 1)} km/L` : "—"} e={`rendimiento · ${s.length} salidas`} />

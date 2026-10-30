@@ -63,6 +63,7 @@ ENTIDAD_A_TABLA = {
     "SolicitudStock": "solicitud_stock", "RepuestoCritico": "repuesto_critico",
     "AccesoNoAutorizado": "acceso_no_autorizado",
     "SolicitudRepuestoSalud": "solicitud_repuesto_salud",
+    "ApiCliente": "api_cliente",
 }
 
 # Campos que el cliente agrega solo, no el codigo de cada funcion.

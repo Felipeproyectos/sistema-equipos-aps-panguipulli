@@ -95,7 +95,24 @@ Opcionales, según qué quieras encender:
 RESEND_API_KEY, EMAIL_FROM                                  # correos de alerta
 GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN # subida a Drive
 RESTRINGIR_INSPECCIONES_POR_CENTRO                          # ver PERMISOS.md
+API_CLAVES_PEPPER                                           # API de integración (abajo)
+API_REGISTRO_DIAS                                           # días que se guarda su registro (180)
 ```
+
+### API de integración (otros sistemas entregan información)
+
+`/api/v1` recibe cargas de combustible, lecturas de odómetro del GPS y pagos
+de vehículos desde otros sistemas. La guía para quien la consume está en
+`servidor/API.md`. Para encenderla:
+
+1. Correr `migracion/34_api_integracion.sql` en Supabase (va después de la 32).
+2. En Railway, `API_CLAVES_PEPPER`: al menos 32 caracteres al azar, por
+   ejemplo la salida de `openssl rand -base64 48`. Firma las claves: si
+   cambia, todas dejan de servir. Va solo en Railway, nunca en el frontend.
+3. Base del Sistema crea un acceso por cada sistema externo en
+   *Configuración → API de integración*.
+
+Sin `API_CLAVES_PEPPER`, `/api/v1` responde 503 y `/salud` dice `"api":false`.
 
 Comprobar:
 

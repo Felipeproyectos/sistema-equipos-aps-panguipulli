@@ -51,7 +51,7 @@ def portar(codigo):
 # gestionarAcceso reemplaza a base44.users.inviteUser, que la migracion dejo sin
 # equivalente, asi que nunca va a existir un entry.ts del que salga.
 NATIVAS = ["gestionarAcceso", "borrarDatosDePrueba", "resumenDiarioPendientes", "subirPautaCabina",
-           "turnoVehiculo", "notificarSolicitudMonitor"]
+           "turnoVehiculo", "notificarSolicitudMonitor", "gestionarApiClientes"]
 
 # Funciones que vienen de Base44 pero que despues se corrigieron directo en
 # servidor/funciones/ (Movilizacion, choferes, licencias, la flota en el

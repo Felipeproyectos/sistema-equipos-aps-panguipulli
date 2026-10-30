@@ -9,10 +9,11 @@ autenticación se rehace sobre Supabase Auth.)
 ## Cómo está armado
 
 ```
-index.js            Hono. Una ruta: POST /functions/:nombre
+index.js            Hono. POST /functions/:nombre y la API de /api/v1
 base44compat.js     Imita el SDK de Base44 sobre Supabase
 funciones/*.js      Las 21 funciones — GENERADAS, no editar
 funciones/index.js  Registro nombre -> handler — GENERADO
+api/                API de integración: otros sistemas entregan información
 ```
 
 Las funciones **no se editan a mano**. Se generan desde `base44/functions/*/entry.ts`:
@@ -43,6 +44,33 @@ sin entregar. Decide la disponibilidad con `compartido/turnoFlota.js`, la misma
 regla que muestra la pantalla.
 
 Si Base44 cambia una función, se re-exporta el `.ts` y se corre el portador.
+
+## API de integración (`api/`)
+
+`/api/v1` deja que otros sistemas **entreguen** cargas de combustible,
+lecturas de odómetro del GPS y pagos de vehículos, cada uno con su propia
+clave. La guía para quien la consume: [`API.md`](API.md). El contrato:
+`GET /api/v1/openapi.json`.
+
+```
+api/index.js        Rutas, autenticación, límites, registro de llamadas
+api/recursos.js     Qué se puede enviar: tabla, alcance, campos y reglas
+api/validacion.js   Validación campo por campo
+api/claves.js       Formato y hash (HMAC-SHA256 + API_CLAVES_PEPPER)
+api/limite.js       Límite por minuto y por intentos fallidos (en memoria)
+api/datos.js        Acceso a Supabase con la llave de servicio
+api/openapi.js      El contrato, armado desde recursos.js
+```
+
+Los accesos se administran con `gestionarApiClientes` (nativa, solo Base del
+Sistema), desde *Configuración → API de integración*. Requiere
+`migracion/34_api_integracion.sql` y `API_CLAVES_PEPPER`.
+
+Pruebas, sin Supabase:
+
+```bash
+npm test
+```
 
 ## Equivalencias
 
@@ -86,6 +114,7 @@ Lo que en Base44 disparaba la plataforma, aca corre en este mismo proceso.
 | 03:00 diario | `generarAlertasAutomaticas` — vencimientos de parches y baterias |
 | 07:00 diario | `verificarStockRepuestos` — repuestos bajo el minimo |
 | 08:00 lunes a viernes | `resumenDiarioPendientes` — a cada persona, lo que la espera (solo si hay algo). Se apaga con `RESUMEN_DIARIO=off` |
+| 03:30 diario | `purgarRegistroApi` — borra de `api_registro` lo anterior a `API_REGISTRO_DIAS` (180) |
 
 Necesitan `CRON_SECRET`. Sin esa variable quedan apagadas y el arranque lo avisa.
 Las que mandan correo necesitan además `RESEND_API_KEY` y `EMAIL_FROM`. El

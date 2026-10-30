@@ -45,6 +45,29 @@ jobs:
       - name: Compilar
         run: npx vite build
 
+  servidor:
+    name: Pruebas del servidor
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: servidor
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: servidor/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # La API de integración (servidor/api/) con un doble de la base en
+      # memoria: autenticación, límites, validación y respuestas por registro.
+      - name: Pruebas
+        run: npm test
+
   base_de_datos:
     name: Campos contra el esquema
     runs-on: ubuntu-latest
