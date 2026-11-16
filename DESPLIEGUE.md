@@ -227,3 +227,53 @@ ajustes que solo se hacen en los paneles:
   `anon`.
 - Las funciones `registrarHistorial` y `notificarSolicitudRepuesto` solo
   existen por `/webhooks/…` con `CRON_SECRET`; por `/functions/…` responden 404.
+
+## Pautas, alertas y solicitudes: el recorrido simplificado
+
+`migracion/34_simplificar_flujo.sql` se ejecuta en Supabase (SQL Editor) **antes**
+de desplegar esta versión. Sin ella la aplicación funciona, pero el Encargado no
+puede cerrar una solicitud en el centro (la base lo rechaza con un aviso) y las
+alertas nuevas de parches y baterías no se cierran solas.
+
+Qué cambia para las personas:
+
+| Qué | Antes | Ahora |
+|---|---|---|
+| Pauta sin novedades | Esperaba a que el Encargado la aprobara | Se registra sola en el historial del equipo al llegar |
+| Pauta con fallas | Aprobar en Revisión Bitácora y después completar la solicitud en Solicitudes | El Encargado decide en la misma tarjeta: enviar al Monitor, resuelto en el centro, o sin gestión |
+| Solicitud «Por enviar» | Solo se podía enviar al Monitor | También se cierra en el centro, con el motivo |
+| Alertas | Todas a Calidad; no se cerraban nunca | Cada área ve las suyas; se cierran solas al corregir la fecha en la ficha |
+
+Variables de entorno nuevas en Railway (las dos son opcionales):
+
+- `PAUTAS_REGISTRO_AUTOMATICO=off` vuelve al modo anterior: toda pauta espera al
+  Encargado. Es el interruptor si el registro automático diera problemas.
+- `RESTRINGIR_INSPECCIONES_POR_CENTRO=true` ya existía (ver `PERMISOS.md`).
+
+### La puerta pública de las pautas
+
+Quien llena una pauta no tiene cuenta, y ahora lo que entra puede registrarse
+solo. Estas son las barreras (`src/lib/pautaPublica.js`, `servidor/index.js`):
+
+1. Tope por dirección de red: 20 envíos cada 10 minutos y 60 por hora.
+2. Tamaño (200 KB por pauta) y forma: el tipo de pauta tiene que existir y
+   calzar con el equipo, la fecha tiene que ser razonable y de cada bloque se
+   guarda solo lo que una pauta trae.
+3. La misma pauta dos veces en 10 minutos no se guarda de nuevo.
+4. Tope por equipo y día (6 diarias, 3 semanales, 8 turnos, 3 de cabina).
+5. Freno general: con más de 40 pautas en una hora, ninguna se registra sola
+   —todas quedan para revisión—; con más de 150, deja de recibir.
+6. Un kilometraje que retrocede o salta más de 3.000 km no se registra solo.
+
+**Verificar después de desplegar:** en los registros de Railway, un envío
+bloqueado aparece como `[tope] guardarInspeccionPendiente: demasiados envíos
+desde <dirección>`. Esa dirección tiene que ser la del centro que envía, no
+una interna de Railway. El servidor la toma de `x-real-ip` o del final de
+`x-forwarded-for`; si Railway cambiara eso, el tope por red dejaría de actuar
+(las demás barreras siguen).
+
+**Pendiente, fuera del código:** una verificación «no soy un robot»
+(Cloudflare Turnstile es gratuita) en la página pública. Las barreras de arriba
+acotan el daño de un ataque; la verificación lo evita. Requiere crear la cuenta
+y dos llaves, por eso no viene incluida.
+

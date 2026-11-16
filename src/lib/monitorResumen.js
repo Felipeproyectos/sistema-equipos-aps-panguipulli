@@ -11,6 +11,7 @@ import { asignacionDeHoy, periodosEnTaller, rangosSeTocan } from "./calendarioFl
 import { estaAbierta, necesitaAgenda, resumenCoordinacion } from "./agendaTaller.js";
 import { resumen as resumenBitacora } from "./bitacoraFlota.js";
 import { diaChile } from "./turnoFlota.js";
+import { AREA_SALUD, areaDeAlerta, rotuloAlerta } from "./alertas.js";
 
 const DIA_MS = 86400000;
 const aISO = (d) => d.toISOString().split("T")[0];
@@ -52,14 +53,16 @@ export function areaCalidad({ equipos = [], parches = [], alertas = [], inspecci
   const vencidos = vigentes.filter(p => p.fecha_vencimiento < dia);
   const porVencer = vigentes.filter(p => p.fecha_vencimiento >= dia && p.fecha_vencimiento <= sumar(dia, 30));
   const bateriasVencidas = medicos.filter(e => e.fecha_vencimiento_bateria && e.fecha_vencimiento_bateria < dia);
-  const criticas = alertas.filter(a => a.nivel === "critica");
+  // Solo las de Calidad: las de vehículos y licencias son de Movilización
+  // (src/lib/alertas.js) y acá inflaban el número con lo que Calidad no resuelve.
+  const criticas = alertas.filter(a => a.nivel === "critica" && areaDeAlerta(a, porId.get(a.equipo_id)) === AREA_SALUD);
   const equiposDe = (ps) => [...new Map(ps.map(p => [p.equipo_id, porId.get(p.equipo_id)])).values()].filter(Boolean);
 
   const atencion = [];
   if (fuera.length) atencion.push({ tono: "rojo", titulo: `${plural(fuera.length, "equipo fuera de servicio", "equipos fuera de servicio")}`, detalle: nombres(fuera, rotuloEquipo) });
   if (vencidos.length) atencion.push({ tono: "rojo", titulo: `${plural(vencidos.length, "parche vencido", "parches vencidos")}`, detalle: `En ${nombres(equiposDe(vencidos), rotuloEquipo) || "equipos sin ficha"}.` });
   if (bateriasVencidas.length) atencion.push({ tono: "rojo", titulo: `${plural(bateriasVencidas.length, "batería vencida", "baterías vencidas")}`, detalle: nombres(bateriasVencidas, rotuloEquipo) });
-  if (criticas.length) atencion.push({ tono: "rojo", titulo: `${plural(criticas.length, "alerta crítica", "alertas críticas")}`, detalle: nombres(criticas, a => a.mensaje || a.tipo) });
+  if (criticas.length) atencion.push({ tono: "rojo", titulo: `${plural(criticas.length, "alerta crítica", "alertas críticas")}`, detalle: nombres(criticas, a => a.descripcion || rotuloAlerta(a.tipo)) });
   if (porVencer.length) atencion.push({ tono: "ambar", titulo: `${plural(porVencer.length, "parche vence", "parches vencen")} en los próximos 30 días`, detalle: `En ${nombres(equiposDe(porVencer), rotuloEquipo) || "equipos sin ficha"}.` });
   if (inspecciones.length) atencion.push({ tono: "ambar", titulo: `${plural(inspecciones.length, "bitácora espera", "bitácoras esperan")} revisión de Salud`, detalle: "Pautas de inspección enviadas desde el enlace público." });
   if (enMantencion.length) atencion.push({ tono: "gris", titulo: `${plural(enMantencion.length, "equipo en mantención", "equipos en mantención")}`, detalle: nombres(enMantencion, rotuloEquipo) });

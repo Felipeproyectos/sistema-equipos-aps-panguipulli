@@ -12,7 +12,7 @@
 export const COLUMNAS_NO_TEXTO = {
   acceso_no_autorizado: new Set(["created_date", "fecha_intento", "is_sample", "updated_date"]),
   actividad: new Set(["ambulancia_operativa", "created_date", "fecha", "is_sample", "updated_date"]),
-  alerta: new Set(["created_date", "fecha_resolucion", "is_sample", "notificacion_enviada", "updated_date"]),
+  alerta: new Set(["automatica", "created_date", "fecha_resolucion", "is_sample", "notificacion_enviada", "updated_date"]),
   app_config: new Set(["created_date", "is_sample", "updated_date"]),
   asignacion_chofer: new Set(["created_date", "desde", "hasta", "is_sample", "updated_date"]),
   bitacora_flota: new Set(["combustible_litros", "combustible_monto", "created_date", "fecha", "is_sample", "km_regreso", "km_salida", "updated_date"]),

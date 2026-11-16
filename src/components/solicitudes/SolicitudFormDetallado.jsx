@@ -13,7 +13,8 @@ import {
 // el Monitor Corporativo para resolverla sin llamar al centro.
 //
 // Sirve para dos cosas:
-//   · abrir una nueva (`inicial` vacío);
+//   · abrir una nueva (`inicial` vacío, o sin `id` para traerla ya empezada
+//     desde una alerta);
 //   · completar una que ya existe — la abrió un Usuario, una pauta con fallas o
 //     una alerta — o corregir una que el Monitor devolvió.
 //
@@ -166,6 +167,9 @@ export default function SolicitudFormDetallado({ equipos, user, role, inicial = 
       estado,
       linea_tiempo: [...linea, evento(user, nombreEvento)],
       ...(esNueva ? { usuario_email: user?.email || "" } : {}),
+      // Nace de una alerta (Alertas → «Pedir al Monitor»): al resolverse la
+      // solicitud, la base da por resuelta la alerta que la originó.
+      ...(esNueva && inicial?.alerta_id ? { alerta_id: inicial.alerta_id } : {}),
     };
   };
 

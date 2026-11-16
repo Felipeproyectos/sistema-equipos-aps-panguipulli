@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import useInactivityLogout from "@/hooks/useInactivityLogout";
 import useContadoresMenu from "@/hooks/useContadoresMenu";
+import { centrosDe } from "@/lib/prestamoEquipo";
 import { rotuloContador } from "@/lib/contadoresMenu";
 
 // El número al lado de una opción del menú: cuántas cosas esperan ahí.
@@ -56,7 +57,7 @@ export default function Layout({ children, currentPageName }) {
 
   const effectiveRole = getEffectiveNavRole(user?.role);
   const visibleItems = userLoading ? [] : getNavItemsForRole(effectiveRole);
-  const contadores = useContadoresMenu(userLoading || !user ? null : effectiveRole, user?.email, currentPageName);
+  const contadores = useContadoresMenu(userLoading || !user ? null : effectiveRole, user?.email, currentPageName, centrosDe(user));
   const navigate = useNavigate();
 
   // Ninguna pantalla del menú de otro rol se abre escribiendo su URL.

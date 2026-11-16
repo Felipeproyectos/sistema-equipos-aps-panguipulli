@@ -1,5 +1,6 @@
 import { createClientFromRequest } from '#compat';
 import { CONTADORES, datosParaRol, resumenParaCorreo } from '../compartido/contadoresMenu.js';
+import { centrosDe } from '../compartido/prestamoEquipo.js';
 
 // El resumen de la mañana por correo: a cada persona, lo que la espera en el
 // sistema. Existe porque un pedido puede quedarse detenido días si nadie abre
@@ -13,7 +14,8 @@ import { CONTADORES, datosParaRol, resumenParaCorreo } from '../compartido/conta
 //
 // A quién le llega: a quien tiene algo pendiente en su menú. Si no hay nada,
 // no se manda nada — un correo diario que dice "todo bien" enseña a no abrirlo.
-// Las alertas solas tampoco lo disparan: ya tienen su propio correo.
+// Las alertas solas tampoco lo disparan, salvo los primeros días después de
+// que algo del área de esa persona venció (src/lib/alertas.js).
 // Tampoco a quien no tiene tareas en el menú (choferes, Usuario). El Monitor
 // Corporativo sí: recibe lo que los centros le enviaron y no ha tomado.
 //
@@ -116,7 +118,7 @@ export default async function (req) {
     const sinNada = [];
     const fallidos = [];
     for (const u of destinatarios) {
-      const lineas = resumenParaCorreo(u.role, u.email, datos);
+      const lineas = resumenParaCorreo(u.role, u.email, datos, Date.now(), centrosDe(u));
       if (!lineas.length) { sinNada.push(u.email); continue; }
       const total = lineas.filter((l) => !l.soloInfo).reduce((s, l) => s + l.n, 0);
       try {

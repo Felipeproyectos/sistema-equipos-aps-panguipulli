@@ -66,6 +66,10 @@
     "notificacion_enviada": {
       "type": "boolean",
       "default": false
+    },
+    "automatica": {
+      "type": "boolean",
+      "description": "La creó la tarea nocturna a partir de una fecha de la ficha: se cierra sola al corregirla (34_simplificar_flujo.sql). Las escritas a mano se resuelven a mano."
     }
   },
   "required": [

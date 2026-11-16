@@ -28,8 +28,8 @@ let cache = { clave: null, en: 0, valor: {} };
 let enCurso = null;
 const suscriptores = new Set();
 
-async function cargar(role, email, forzar = false) {
-  const clave = `${role}|${email}`;
+async function cargar(role, email, forzar = false, centros = []) {
+  const clave = `${role}|${email}|${centros.join(",")}`;
   if (!forzar && cache.clave === clave && Date.now() - cache.en < VIGENCIA_MS) return;
   if (enCurso?.clave === clave) return enCurso.promesa;
 
@@ -39,7 +39,7 @@ async function cargar(role, email, forzar = false) {
     // contador en cero; no apaga los demás.
     const filas = await Promise.all(nombres.map(n => PEDIDOS[n]().catch(() => [])));
     const datos = Object.fromEntries(nombres.map((n, i) => [n, filas[i]]));
-    cache = { clave, en: Date.now(), valor: contarPendientes(role, email, datos) };
+    cache = { clave, en: Date.now(), valor: contarPendientes(role, email, datos, centros) };
     suscriptores.forEach(fn => fn(cache.valor));
   })().finally(() => { enCurso = null; });
 
@@ -52,8 +52,10 @@ export function avisarCambioEnPendientes() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENTO));
 }
 
-export default function useContadoresMenu(role, email, pagina) {
-  const clave = `${role}|${email}`;
+/** `centros`: los del usuario (centrosDe); acotan lo que cuenta el Encargado de Salud. */
+export default function useContadoresMenu(role, email, pagina, centros = []) {
+  const lista = centros.join(",");
+  const clave = `${role}|${email}|${lista}`;
   const [valor, setValor] = useState(() => (cache.clave === clave ? cache.valor : {}));
 
   useEffect(() => {
@@ -61,10 +63,11 @@ export default function useContadoresMenu(role, email, pagina) {
     const fn = (v) => setValor(v);
     suscriptores.add(fn);
     if (cache.clave === clave) setValor(cache.valor);
-    cargar(role, email);
+    const misCentros = lista ? lista.split(",") : [];
+    cargar(role, email, false, misCentros);
 
-    const forzar = () => cargar(role, email, true);
-    const alVolver = () => { if (document.visibilityState === "visible") cargar(role, email); };
+    const forzar = () => cargar(role, email, true, misCentros);
+    const alVolver = () => { if (document.visibilityState === "visible") cargar(role, email, false, misCentros); };
     const intervalo = setInterval(forzar, 90000);
     window.addEventListener(EVENTO, forzar);
     document.addEventListener("visibilitychange", alVolver);
@@ -74,10 +77,10 @@ export default function useContadoresMenu(role, email, pagina) {
       window.removeEventListener(EVENTO, forzar);
       document.removeEventListener("visibilitychange", alVolver);
     };
-  }, [role, email, clave]);
+  }, [role, email, clave, lista]);
 
   // Cambiar de pantalla es la señal más común de "quiero ver lo último".
-  useEffect(() => { if (role) cargar(role, email); }, [pagina, role, email]);
+  useEffect(() => { if (role) cargar(role, email, false, lista ? lista.split(",") : []); }, [pagina, role, email, lista]);
 
   return cache.clave === clave ? valor : {};
 }

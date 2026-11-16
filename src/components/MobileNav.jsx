@@ -4,6 +4,7 @@ import { getNavItemsForRole } from "@/lib/navPermissions";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import { useAuth } from "@/lib/AuthContext";
 import useContadoresMenu from "@/hooks/useContadoresMenu";
+import { centrosDe } from "@/lib/prestamoEquipo";
 import { rotuloContador } from "@/lib/contadoresMenu";
 
 export default function MobileNav() {
@@ -22,7 +23,7 @@ export default function MobileNav() {
   }, []);
 
   const items = role === null ? [] : getNavItemsForRole(getEffectiveNavRole(role)).slice(0, 4);
-  const contadores = useContadoresMenu(role === null ? null : getEffectiveNavRole(role), user?.email, location.pathname);
+  const contadores = useContadoresMenu(role === null ? null : getEffectiveNavRole(role), user?.email, location.pathname, centrosDe(user));
 
   const handleTap = (e, item, isActive) => {
     e.preventDefault();

@@ -1,7 +1,7 @@
 import { MapPin, Monitor, User, Package, CalendarClock, AlertTriangle, MessageSquareText, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { TIPOS_EQUIPO } from "@/lib/centros";
-import { CATEGORIAS, PRIORIDADES, OPERATIVIDAD, ESTADOS, rotulo, fichaEnTexto } from "@/lib/solicitudesMonitor";
+import { CATEGORIAS, PRIORIDADES, OPERATIVIDAD, ESTADOS, rotulo, rotuloEstado, fichaEnTexto } from "@/lib/solicitudesMonitor";
 
 // El detalle completo de una solicitud, igual para el centro y para el
 // Monitor Corporativo: qué es, dónde está el equipo, cuál equipo, quién la
@@ -19,9 +19,10 @@ const fecha = (f) => {
   return d ? `${d}/${m}/${y}` : "";
 };
 
-export function EstadoBadge({ estado }) {
-  const cfg = ESTADOS[estado || "pendiente"] || ESTADOS.pendiente;
-  return <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: cfg.color, background: cfg.bg }}>{cfg.label}</span>;
+/** Con `solicitud` distingue lo que el centro cerró por su cuenta («Resuelta en el centro»). */
+export function EstadoBadge({ estado, solicitud }) {
+  const cfg = ESTADOS[(solicitud?.estado ?? estado) || "pendiente"] || ESTADOS.pendiente;
+  return <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: cfg.color, background: cfg.bg }}>{solicitud ? rotuloEstado(solicitud) : cfg.label}</span>;
 }
 
 export function PrioridadBadge({ prioridad }) {
@@ -136,7 +137,7 @@ export default function FichaSolicitud({ solicitud, equipo, mostrarLinea = true 
 
       {s.resolucion && (
         <div className="rounded-xl border p-3" style={{ background: "#eef2ff", borderColor: "#c7d2fe" }}>
-          <p className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 mb-1"><MessageSquareText className="w-3.5 h-3.5" /> Respuesta del Monitor Corporativo</p>
+          <p className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 mb-1"><MessageSquareText className="w-3.5 h-3.5" /> {s.cerrada_en === "centro" ? "Cierre en el centro" : "Respuesta del Monitor Corporativo"}</p>
           <p className="text-sm text-indigo-900 whitespace-pre-line break-words">{s.resolucion}</p>
         </div>
       )}

@@ -2,15 +2,23 @@
 //
 // El recorrido
 // ────────────
-//   pendiente  → la abrió alguien del centro (un Usuario, una pauta con fallas,
-//                una alerta). El Encargado de Salud la revisa, completa el
-//                detalle y la envía.
+//   pendiente  → la abrió alguien del centro (un Usuario, una alerta, o una
+//                pauta que se aprobó sin decidir). El Encargado de Salud la
+//                completa y la envía, o la cierra ahí mismo: «resuelta en el
+//                centro» o «no requiere gestión», con el motivo.
 //   derivada   → está en la bandeja del Monitor Corporativo, sin tomar.
 //   en_proceso → el Monitor la tomó y la está gestionando.
 //   devuelta   → el Monitor pidió más información: vuelve al Encargado, que la
 //                corrige y la reenvía (vuelve a "derivada").
-//   finalizada → el Monitor la resolvió, con su resolución por escrito.
-//   rechazada  → el Monitor la cerró porque no procede, con el motivo.
+//   finalizada → resuelta, con la resolución por escrito: por el Monitor o,
+//                si nunca hizo falta enviarla, por el centro.
+//   rechazada  → cerrada sin gestión, con el motivo: el Monitor dice que no
+//                procede, o el centro que no requiere gestión.
+// `cerrada_en` ('monitor' | 'centro') dice quién la cerró; lo anota la base.
+//
+// Las pautas con fallas normalmente no pasan por «pendiente»: el Encargado
+// decide al revisarlas (src/lib/fallasPauta.js, DECISIONES) y la solicitud
+// nace ya enviada al Monitor.
 //
 // Las de vehículos (ambulancias y resto de la flota) NO pasan por acá: esas
 // las resuelven Movilización y el Taller (esSolicitudDeFlota en panelFlota.js).
@@ -49,6 +57,17 @@ export const ESTADOS = {
 };
 
 export const ESTADOS_CERRADOS = ["finalizada", "rechazada"];
+export const ESTADOS_EN_CENTRO = ["pendiente", "devuelta"];
+
+/** El estado en palabras, distinguiendo lo que el centro cerró por su cuenta. */
+export function rotuloEstado(s) {
+  if (s?.cerrada_en === "centro") return s.estado === "finalizada" ? "Resuelta en el centro" : "Sin gestión";
+  return (ESTADOS[s?.estado || "pendiente"] || ESTADOS.pendiente).label;
+}
+
+// Las acciones de cada lado, para que cada bandeja muestre solo las suyas.
+export const ACCIONES_DEL_CENTRO = ["enviar", "cerrar_centro", "sin_gestion"];
+export const ACCIONES_DEL_MONITOR = ["tomar", "resolver", "devolver", "rechazar"];
 export const ESTADOS_EN_MONITOR = ["derivada", "en_proceso"];
 
 /** Lo que se muestra cuando el detalle viene de una solicitud vieja, sin categoría. */
@@ -122,8 +141,11 @@ export function accionesPara(role, s, { esFlota = false } = {}) {
   if (esFlota) return [];
   const e = estadoDe(s);
   const out = [];
-  if (puedeEnviarAlMonitor(role) && (e === "pendiente" || e === "devuelta")) {
+  if (puedeEnviarAlMonitor(role) && ESTADOS_EN_CENTRO.includes(e)) {
     out.push({ clave: "enviar", estado: "derivada", etiqueta: e === "devuelta" ? "Corregir y reenviar" : "Completar y enviar al Monitor" });
+    // Lo que no hace falta enviar se cierra acá, con el motivo.
+    out.push({ clave: "cerrar_centro", estado: "finalizada", etiqueta: "Resuelto en el centro", pideTexto: true, campoTexto: "Cómo se resolvió en el centro" });
+    out.push({ clave: "sin_gestion", estado: "rechazada", etiqueta: "No requiere gestión", pideTexto: true, campoTexto: "Por qué no requiere gestión" });
   }
   if (puedeResolverComoMonitor(role)) {
     if (e === "derivada") out.push({ clave: "tomar", estado: "en_proceso", etiqueta: "Tomar solicitud", pideTexto: false });
@@ -144,6 +166,8 @@ export function cambiosDeAccion(accion, s, user, nota = "") {
     resolver: "Resuelta",
     devolver: "Devuelta al centro",
     rechazar: "Cerrada: no procede",
+    cerrar_centro: "Resuelta en el centro",
+    sin_gestion: "Cerrada en el centro: no requiere gestión",
   }[accion.clave] || accion.etiqueta;
   return {
     estado: accion.estado,
@@ -249,7 +273,18 @@ export function _selfCheck() {
   debe(faltantesParaEnviar({}).length >= 9, "vacía: falta todo");
 
   const enviar = accionesPara("encargado_salud", { estado: "pendiente" });
-  debe(enviar.length === 1 && enviar[0].estado === "derivada", "el Encargado envía la pendiente");
+  debe(enviar.map(a => a.clave).join() === "enviar,cerrar_centro,sin_gestion" && enviar[0].estado === "derivada",
+    "el Encargado envía la pendiente, o la cierra en el centro");
+  debe(accionesPara("encargado_salud", { estado: "devuelta" }).some(a => a.clave === "sin_gestion"), "la devuelta también se puede cerrar en el centro");
+  const cierre = cambiosDeAccion(enviar[1], { linea_tiempo: [] }, { email: "e@x", full_name: "Elena" }, "Se cambiaron las pilas.");
+  debe(cierre.estado === "finalizada" && cierre.resolucion === "Se cambiaron las pilas." && cierre.linea_tiempo[0].evento === "Resuelta en el centro",
+    "cerrar en el centro deja el motivo y el evento");
+  debe(rotuloEstado({ estado: "finalizada", cerrada_en: "centro" }) === "Resuelta en el centro"
+    && rotuloEstado({ estado: "rechazada", cerrada_en: "centro" }) === "Sin gestión"
+    && rotuloEstado({ estado: "rechazada", cerrada_en: "monitor" }) === "No procede"
+    && rotuloEstado({}) === "Por enviar al Monitor", "rótulo del estado según quién cerró");
+  debe(accionesPara("super_admin", { estado: "derivada" }).every(a => ACCIONES_DEL_MONITOR.includes(a.clave))
+    && enviar.every(a => ACCIONES_DEL_CENTRO.includes(a.clave)), "cada acción es de un lado");
   debe(accionesPara("encargado_salud", { estado: "derivada" }).length === 0, "el Encargado no resuelve");
   debe(accionesPara("encargado_salud", { estado: "devuelta" })[0]?.etiqueta === "Corregir y reenviar", "el Encargado reenvía la devuelta");
   debe(accionesPara("monitor_corporativo", { estado: "pendiente" }).length === 0, "el Monitor no toca lo que no le llegó");
