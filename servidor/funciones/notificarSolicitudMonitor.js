@@ -4,6 +4,7 @@ import { createClientFromRequest } from '#compat';
 // (migracion/31_solicitudes_monitor.sql):
 //   · llega al Monitor Corporativo (derivada) → a cada Monitor Corporativo
 //   · el Monitor la devuelve o la cierra      → a quien la envió y a quien la pidió
+//   · el centro la cierra sin enviarla        → a nadie
 //
 // Solo la dispara el trigger de Postgres, por /webhooks (con el secreto; ver
 // SOLO_WEBHOOK en servidor/index.js). No se confía en lo que trae el cuerpo:
@@ -99,6 +100,10 @@ export default async function (req) {
         intro: `${s.derivada_por_nombre || 'El Encargado de Salud'} envió esta solicitud para tu gestión.`,
         s, enlace: `${url}/SolicitudesMonitor`,
       });
+    } else if (RESULTADO[s.estado] && s.cerrada_en === 'centro') {
+      // La cerró el propio centro sin enviarla (34_simplificar_flujo.sql):
+      // quien la cerró ya lo sabe, y el Monitor no tiene nada que responder.
+      return Response.json({ ok: true, sinAviso: true });
     } else if (RESULTADO[s.estado]) {
       destinatarios = [...new Set([s.derivada_por_email, s.usuario_email].filter(Boolean).map((e) => e.toLowerCase()))];
       asunto = `Solicitud ${s.numero_solicitud || ''} ${RESULTADO[s.estado]}`.replace(/\s+/g, ' ').trim();

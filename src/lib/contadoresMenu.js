@@ -10,6 +10,7 @@
 // reparación no es tarea del Jefe de Taller hasta que vuelve a él.
 import { esperaRespuesta, estaAbierta, necesitaAgenda } from "./agendaTaller.js";
 import { esSolicitudDeFlota } from "./panelFlota.js";
+import { alertasDelRol, criticasRecientes } from "./alertas.js";
 
 const R = {
   SUPER_ADMIN: "super_admin",
@@ -39,15 +40,17 @@ export const CONTADORES = {
   ComprasSaludTablero: { roles: [R.SUPER_ADMIN, R.ENCARGADO_COMPRAS_SALUD], datos: ["repuestosSalud"],
     etiqueta: "Tablero de Compras Salud", frase: "compras aprobadas por hacer" },
   SolicitudesV2: { roles: [R.SUPER_ADMIN, R.ADMIN, R.ENCARGADO_SALUD, R.ENCARGADO_COMPRAS_SALUD], datos: ["solicitudes", "equipos"],
-    etiqueta: "Solicitudes", frase: "solicitudes por completar y enviar al Monitor Corporativo, o que el Monitor devolvió" },
+    etiqueta: "Solicitudes", frase: "solicitudes por enviar al Monitor Corporativo o cerrar en el centro, o que el Monitor devolvió" },
   SolicitudesMonitor: { roles: [R.SUPER_ADMIN, R.MONITOR_CORPORATIVO], datos: ["solicitudes", "equipos"],
     etiqueta: "Solicitudes de Centros", frase: "solicitudes de los centros sin tomar" },
-  RevisionInspecciones: { roles: [R.SUPER_ADMIN, R.ENCARGADO_SALUD], datos: ["inspecciones"],
-    etiqueta: "Revisión Bitácora", frase: "bitácoras por revisar" },
-  // Las alertas ya tienen su propio correo (enviarAlertasCESFAM), y casi
-  // siempre hay alguna activa: por sí solas no justifican el resumen diario.
-  AlertasV2: { roles: [R.SUPER_ADMIN, R.ADMIN, R.ENCARGADO_SALUD], datos: ["alertas"],
-    etiqueta: "Alertas", frase: "alertas activas", fueraDelCorreo: true },
+  RevisionInspecciones: { roles: [R.SUPER_ADMIN, R.ENCARGADO_SALUD], datos: ["inspecciones", "equipos"],
+    etiqueta: "Revisión Bitácora", frase: "pautas con novedades por revisar" },
+  // Cada rol cuenta las de su área (src/lib/alertas.js): Calidad las de los
+  // equipos médicos, Movilización las de vehículos y licencias. Casi siempre
+  // hay alguna activa, así que por sí solas no justifican el resumen diario,
+  // salvo cuando acaba de vencer algo (resumenParaCorreo).
+  AlertasV2: { roles: [R.SUPER_ADMIN, R.ADMIN, R.ENCARGADO_SALUD, R.ENCARGADO_MOVILIZACION], datos: ["alertas", "equipos"],
+    etiqueta: "Alertas", frase: "vencimientos por atender", fueraDelCorreo: true },
 };
 
 /** Qué conjuntos de datos hay que traer para este rol. */
@@ -59,18 +62,35 @@ export function datosParaRol(role) {
 
 const pendiente = (s) => (s.estado || "pendiente") === "pendiente";
 
+/** El centro que tenía el equipo al hacer la pauta, y el dueño. */
+function centrosDePauta(insp, porId) {
+  let datos = {};
+  try { datos = insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { datos = {}; }
+  return [datos.prestamo?.centro_destino, datos.equipo?.centro_principal || porId.get(insp.equipo_id)?.centro_principal].filter(Boolean);
+}
+
 /**
  * { pagina: número } para el rol. Solo trae las páginas con algo (> 0).
  * `email` es el de quien mira: el mecánico cuenta sus órdenes, y en la
  * aprobación de repuestos no se cuenta lo que uno mismo pidió.
+ * `centros` son los del Encargado de Salud: sus pantallas le muestran lo de
+ * sus centros, y el número tiene que contar lo mismo. Vacío = todos.
  */
-export function contarPendientes(role, email, d = {}) {
+export function contarPendientes(role, email, d = {}, centros = []) {
   const {
     solicitudes = [], ordenes = [], equipos = [], repuestos = [],
     repuestosSalud = [], inspecciones = [], alertas = [],
   } = d;
   const porId = new Map(equipos.map(e => [e.id, e]));
   const deFlota = (s) => esSolicitudDeFlota(s, porId.get(s.equipo_id));
+  const misCentros = role === R.ENCARGADO_SALUD ? centros.filter(Boolean) : [];
+  // Igual que Solicitudes: la que no tiene centro no se le esconde a nadie.
+  const solicitudMia = (s) => {
+    const centro = s.centro || porId.get(s.equipo_id)?.centro_principal || "";
+    return !misCentros.length || !centro || misCentros.includes(centro);
+  };
+  // Igual que Revisión Bitácora: la del centro dueño o la del que la tenía prestada.
+  const pautaMia = (i) => !misCentros.length || centrosDePauta(i, porId).some(c => misCentros.includes(c));
 
   const reglas = {
     // Lo que Salud informó y nadie revisó, las fechas del Taller sin
@@ -95,11 +115,11 @@ export function contarPendientes(role, email, d = {}) {
     ComprasSaludTablero: () => repuestosSalud.filter(s => s.estado === "aprobada").length,
     // Las de vehículos no: esas las resuelve Movilización. Las que el
     // Monitor devolvió vuelven a ser tarea del centro.
-    SolicitudesV2: () => solicitudes.filter(s => (pendiente(s) || s.estado === "devuelta") && !deFlota(s)).length,
+    SolicitudesV2: () => solicitudes.filter(s => (pendiente(s) || s.estado === "devuelta") && !deFlota(s) && solicitudMia(s)).length,
     // Lo que los centros enviaron y el Monitor no ha tomado.
     SolicitudesMonitor: () => solicitudes.filter(s => s.estado === "derivada" && !deFlota(s)).length,
-    RevisionInspecciones: () => inspecciones.filter(i => (i.estado || "pendiente") === "pendiente").length,
-    AlertasV2: () => alertas.filter(a => a.estado === "activa").length,
+    RevisionInspecciones: () => inspecciones.filter(i => (i.estado || "pendiente") === "pendiente" && pautaMia(i)).length,
+    AlertasV2: () => alertasDelRol(role, alertas.filter(a => a.estado === "activa"), porId, centros).length,
   };
 
   const out = {};
@@ -113,14 +133,23 @@ export function contarPendientes(role, email, d = {}) {
 
 /**
  * Lo que va en el resumen diario por correo de esa persona: las pantallas con
- * algo pendiente, en el orden del menú. Vacío si no hay nada que la espere
- * (las alertas solas no cuentan: tienen su propio correo).
+ * algo pendiente, en el orden del menú. Vacío si no hay nada que la espere.
+ *
+ * Las alertas solas no lo disparan —siempre hay alguna y el correo se
+ * volvería ruido—, salvo los primeros días después de que algo de su área
+ * venció: ese es el único aviso por correo que tiene una alerta.
  */
-export function resumenParaCorreo(role, email, datos) {
-  const cuentas = contarPendientes(role, email, datos);
+export function resumenParaCorreo(role, email, datos, ahora = Date.now(), centros = []) {
+  const cuentas = contarPendientes(role, email, datos, centros);
+  const recienVencidas = cuentas.AlertasV2
+    ? criticasRecientes(alertasDelRol(role, datos?.alertas || [], datos?.equipos || [], centros), ahora).length
+    : 0;
   const lineas = Object.entries(CONTADORES)
     .filter(([pagina]) => cuentas[pagina])
-    .map(([pagina, c]) => ({ pagina, etiqueta: c.etiqueta, frase: c.frase, n: cuentas[pagina], soloInfo: !!c.fueraDelCorreo }));
+    .map(([pagina, c]) => ({
+      pagina, etiqueta: c.etiqueta, frase: c.frase, n: cuentas[pagina],
+      soloInfo: !!c.fueraDelCorreo && !(pagina === "AlertasV2" && recienVencidas > 0),
+    }));
   return lineas.some(l => !l.soloInfo) ? lineas : [];
 }
 
@@ -191,6 +220,35 @@ export function _selfCheck() {
     "solo alertas no manda correo");
   debe(resumenParaCorreo("monitor_corporativo", "", { solicitudes, ordenes, equipos }).map(l => l.pagina).join() === "SolicitudesMonitor",
     "el Monitor recibe el resumen de su bandeja");
+
+  // El Encargado cuenta lo de sus centros, como sus pantallas.
+  const porCentro = {
+    equipos: [{ id: "da", tipo: "dea", centro_principal: "CESFAM A" }, { id: "db", tipo: "dea", centro_principal: "CESFAM B" }],
+    solicitudes: [{ id: "1", equipo_id: "da", estado: "pendiente", centro: "CESFAM A" }, { id: "2", equipo_id: "db", estado: "pendiente" }, { id: "3", estado: "pendiente", tipo: "otros" }],
+    inspecciones: [
+      { estado: "pendiente", equipo_id: "da", datos_json: JSON.stringify({ equipo: { centro_principal: "CESFAM A" } }) },
+      { estado: "pendiente", equipo_id: "db" },
+      { estado: "pendiente", equipo_id: "db", datos_json: JSON.stringify({ equipo: { centro_principal: "CESFAM B" }, prestamo: { centro_destino: "CESFAM A" } }) },
+    ],
+  };
+  const deA = contarPendientes("encargado_salud", "", porCentro, ["CESFAM A"]);
+  debe(deA.SolicitudesV2 === 2, `el Encargado cuenta las solicitudes de su centro y las sin centro, dio ${deA.SolicitudesV2}`);
+  debe(deA.RevisionInspecciones === 2, `y las pautas de su centro o prestadas a su centro, dio ${deA.RevisionInspecciones}`);
+  debe(contarPendientes("encargado_salud", "", porCentro).SolicitudesV2 === 3, "sin centro asignado ve todo");
+  debe(contarPendientes("super_admin", "", porCentro, ["CESFAM A"]).RevisionInspecciones === 3, "los centros solo acotan al Encargado");
+
+  // Cada área cuenta sus alertas, y solo lo recién vencido dispara el correo.
+  const ahora = new Date("2026-11-16T12:00:00Z").getTime();
+  const conAlertas = { equipos, alertas: [
+    { estado: "activa", tipo: "revision_tecnica_vencida", equipo_id: "v1", nivel: "critica", created_date: "2026-11-15T06:00:00Z" },
+    { estado: "activa", tipo: "parche_por_vencer", equipo_id: "m1", nivel: "advertencia", created_date: "2026-11-15T06:00:00Z" },
+  ] };
+  debe(contarPendientes("encargado_salud", "", conAlertas).AlertasV2 === 1, "Calidad cuenta solo las alertas de equipos médicos");
+  debe(contarPendientes("encargado_movilizacion", "", conAlertas).AlertasV2 === 1, "Movilización cuenta las de vehículos");
+  debe(contarPendientes("super_admin", "", conAlertas).AlertasV2 === 2, "Base del Sistema las cuenta todas");
+  debe(resumenParaCorreo("encargado_movilizacion", "", conAlertas, ahora).map(l => l.pagina).join() === "AlertasV2", "algo recién vencido sí manda correo");
+  debe(resumenParaCorreo("encargado_salud", "", conAlertas, ahora).length === 0, "una alerta por vencer, sola, no manda correo");
+  debe(resumenParaCorreo("encargado_movilizacion", "", conAlertas, ahora + 10 * 86400000).length === 0, "pasados unos días deja de insistir");
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("contadoresMenu: autotest ok");

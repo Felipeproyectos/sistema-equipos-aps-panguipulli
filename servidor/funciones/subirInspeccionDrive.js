@@ -417,6 +417,58 @@ function htmlMantenimientoExterno(equipo, revisor) {
   return html;
 }
 
+// ── La pauta revisada, como PDF en la carpeta de su centro ──────────────────
+// Aparte del handler porque la usan dos caminos: el Encargado al aprobar
+// (aprobarInspeccion) y la recepción pública cuando la pauta llega sin
+// novedades y se registra sola (guardarInspeccionPendiente), donde no hay una
+// persona con sesión. Devuelve el archivo creado, o null si la pauta no existe.
+export async function subirPautaADrive(base44, inspeccion_id, revisor = {}) {
+  const insp = await base44.asServiceRole.entities.InspeccionPendiente.get(inspeccion_id);
+  if (!insp) return null;
+
+  const { accessToken } = await base44.asServiceRole.connectors.getConnection('googledrive');
+  // Carpeta raíz: BITÁCORA
+  const rootDriveId = await obtenerRootDriveId(accessToken);
+  const raizId = await obtenerOCrearCarpeta('BITÁCORA', rootDriveId, accessToken);
+
+  const datos = (() => { try { return insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { return {}; } })();
+  const equipo = datos.equipo || {};
+
+  // Si estaba prestada, el PDF va a la carpeta del centro que la tenía: es
+  // el que la revisó y el que la va a buscar en una auditoría.
+  const centroACargo = datos.prestamo?.centro_destino || equipo.centro_principal;
+  const establecimiento = normalizarEstablecimiento(centroACargo) || 'Sin Establecimiento';
+  const categoriaEquipo = TIPO_FORMULARIO_LABEL[insp.tipo_formulario] === 'Turno Chofer'
+    ? 'Turno Chofer'
+    : TIPO_EQUIPO_CATEGORIA[equipo.tipo] || equipo.tipo || 'Otros';
+
+  // Determinar mes desde fecha de inspección
+  const fechaObj = insp.fecha ? new Date(insp.fecha + 'T12:00:00') : new Date();
+  const mesLabel = MESES[fechaObj.getMonth()];
+  const anio = fechaObj.getFullYear();
+
+  // Estructura: BITÁCORA / [Cesfam X] / [Categoría] / [Mes Año]
+  const establecimientoId = await obtenerOCrearCarpeta(establecimiento, raizId, accessToken);
+  const categoriaCarpetaId = await obtenerOCrearCarpeta(categoriaEquipo, establecimientoId, accessToken);
+  const mesCarpetaId = await obtenerOCrearCarpeta(`${mesLabel} ${anio}`, categoriaCarpetaId, accessToken);
+
+  const tipoLabel = TIPO_FORMULARIO_LABEL[insp.tipo_formulario] || insp.tipo_formulario;
+  const nombreArchivo = `${tipoLabel} - ${insp.equipo_label || insp.equipo_id} - ${insp.fecha || 'sin-fecha'}`
+    + (datos.prestamo?.centro_destino ? ` (prestada por ${equipo.centro_principal || datos.prestamo.centro_origen || ''})` : '');
+
+  const revisorInfo = { full_name: insp.revisor_nombre || revisor.full_name, email: insp.revisor_email || revisor.email };
+  const htmlContent = htmlInspeccion(insp, revisorInfo);
+  const archivo = await subirHtmlComoPDF(nombreArchivo, htmlContent, mesCarpetaId, accessToken);
+
+  // Guardar link en la inspección
+  if (archivo.id) {
+    await base44.asServiceRole.entities.InspeccionPendiente.update(inspeccion_id, {
+      nota_revision: (insp.nota_revision ? insp.nota_revision + ' | ' : '') + `Drive: ${archivo.webViewLink || archivo.id}`,
+    });
+  }
+  return archivo;
+}
+
 // ── Handler principal ────────────────────────────────────────────────────────
 
 export default async function (req) {
@@ -427,57 +479,17 @@ export default async function (req) {
 
     const { tipo, inspeccion_id, equipo_id } = await req.json();
 
-    const { accessToken } = await base44.asServiceRole.connectors.getConnection('googledrive');
-
-    // Carpeta raíz: BITÁCORA
-    const rootDriveId = await obtenerRootDriveId(accessToken);
-    const raizId = await obtenerOCrearCarpeta('BITÁCORA', rootDriveId, accessToken);
-
     if (tipo === 'inspeccion') {
       // ── Subir PDF de inspección aprobada ──
-      const insp = await base44.asServiceRole.entities.InspeccionPendiente.get(inspeccion_id);
-      if (!insp) return Response.json({ error: 'Inspección no encontrada' }, { status: 404 });
-
-      const datos = (() => { try { return insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { return {}; } })();
-      const equipo = datos.equipo || {};
-
-      // Si estaba prestada, el PDF va a la carpeta del centro que la tenía: es
-      // el que la revisó y el que la va a buscar en una auditoría.
-      const centroACargo = datos.prestamo?.centro_destino || equipo.centro_principal;
-      const establecimiento = normalizarEstablecimiento(centroACargo) || 'Sin Establecimiento';
-      const categoriaEquipo = TIPO_FORMULARIO_LABEL[insp.tipo_formulario] === 'Turno Chofer'
-        ? 'Turno Chofer'
-        : TIPO_EQUIPO_CATEGORIA[equipo.tipo] || equipo.tipo || 'Otros';
-
-      // Determinar mes desde fecha de inspección
-      const fechaObj = insp.fecha ? new Date(insp.fecha + 'T12:00:00') : new Date();
-      const mesLabel = MESES[fechaObj.getMonth()];
-      const anio = fechaObj.getFullYear();
-
-      // Estructura: BITÁCORA / [Cesfam X] / [Categoría] / [Mes Año]
-      const establecimientoId = await obtenerOCrearCarpeta(establecimiento, raizId, accessToken);
-      const categoriaCarpetaId = await obtenerOCrearCarpeta(categoriaEquipo, establecimientoId, accessToken);
-      const mesCarpetaId = await obtenerOCrearCarpeta(`${mesLabel} ${anio}`, categoriaCarpetaId, accessToken);
-
-      const tipoLabel = TIPO_FORMULARIO_LABEL[insp.tipo_formulario] || insp.tipo_formulario;
-      const nombreArchivo = `${tipoLabel} - ${insp.equipo_label || insp.equipo_id} - ${insp.fecha || 'sin-fecha'}`
-        + (datos.prestamo?.centro_destino ? ` (prestada por ${equipo.centro_principal || datos.prestamo.centro_origen || ''})` : '');
-
-      const revisorInfo = { full_name: insp.revisor_nombre || user.full_name, email: insp.revisor_email || user.email };
-      const htmlContent = htmlInspeccion(insp, revisorInfo);
-      const archivo = await subirHtmlComoPDF(nombreArchivo, htmlContent, mesCarpetaId, accessToken);
-
-      // Guardar link en la inspección
-      if (archivo.id) {
-        await base44.asServiceRole.entities.InspeccionPendiente.update(inspeccion_id, {
-          nota_revision: (insp.nota_revision ? insp.nota_revision + ' | ' : '') + `Drive: ${archivo.webViewLink || archivo.id}`,
-        });
-      }
-
+      const archivo = await subirPautaADrive(base44, inspeccion_id, user);
+      if (!archivo) return Response.json({ error: 'Inspección no encontrada' }, { status: 404 });
       return Response.json({ ok: true, archivo });
 
     } else if (tipo === 'mantenimiento_externo') {
       // ── Subir copia del informe de mantenimiento externo ──
+      const { accessToken } = await base44.asServiceRole.connectors.getConnection('googledrive');
+      const rootDriveId = await obtenerRootDriveId(accessToken);
+      const raizId = await obtenerOCrearCarpeta('BITÁCORA', rootDriveId, accessToken);
       const equipo = await base44.asServiceRole.entities.Equipo.get(equipo_id);
       if (!equipo) return Response.json({ error: 'Equipo no encontrado' }, { status: 404 });
 

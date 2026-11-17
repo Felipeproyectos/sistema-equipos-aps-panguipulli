@@ -17,6 +17,8 @@ import { useAuth } from "@/lib/AuthContext";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import { getNavItemsForRole } from "@/lib/navPermissions";
 import { avisosSalud } from "@/lib/paraHoy";
+import { alertasDelRol } from "@/lib/alertas";
+import { centrosDe } from "@/lib/prestamoEquipo";
 import ParaHoy from "@/components/ParaHoy";
 
 const TIPO_ACT_LABEL = {
@@ -95,7 +97,9 @@ export default function Dashboard() {
     setActividades(a);
     setParches(eq.parches || []);
     setSolicitudes(sols);
-    setAlertas(alts);
+    // Las del área de quien mira: las de vehículos y licencias son de
+    // Movilización (src/lib/alertas.js).
+    setAlertas(alertasDelRol(effectiveRole, alts, eq.equipos || [], centrosDe(user)));
     setBitacorasPendientes(insps);
   }, [user, effectiveRole]);
 

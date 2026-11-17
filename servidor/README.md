@@ -83,7 +83,7 @@ Lo que en Base44 disparaba la plataforma, aca corre en este mismo proceso.
 
 | Cuando | Que |
 |---|---|
-| 03:00 diario | `generarAlertasAutomaticas` — vencimientos de parches y baterias |
+| 03:00 diario | `generarAlertasAutomaticas` — deja las alertas iguales a las fechas de las fichas: crea las que faltan y cierra las que ya no corresponden |
 | 07:00 diario | `verificarStockRepuestos` — repuestos bajo el minimo |
 | 08:00 lunes a viernes | `resumenDiarioPendientes` — a cada persona, lo que la espera (solo si hay algo). Se apaga con `RESUMEN_DIARIO=off` |
 

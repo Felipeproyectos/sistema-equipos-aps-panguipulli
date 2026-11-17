@@ -41,7 +41,7 @@ export default function TurnoChoferForm({ equipos, loading, onSuccess, equipoFij
         observaciones: form.observaciones || `KM Inicial: ${form.km_inicial}`,
       });
       setSaving(false);
-      onSuccess("Registro de turno enviado para revisión.");
+      onSuccess("Registro de turno enviado.");
     } catch (err) {
       setSaving(false);
       setError(`Error al guardar: ${err?.message || "Intenta de nuevo."}`);

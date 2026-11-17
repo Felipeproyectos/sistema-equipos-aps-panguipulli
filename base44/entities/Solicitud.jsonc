@@ -197,6 +197,14 @@
         "vehiculo"
       ],
       "description": "Solo ambulancias: 'cabina' = cabina sanitaria (Calidad → Monitor Corporativo); 'vehiculo' o vacío = el vehículo (Movilización)"
+    },
+    "cerrada_en": {
+      "type": "string",
+      "enum": [
+        "monitor",
+        "centro"
+      ],
+      "description": "Quién la cerró: el Monitor Corporativo, o el centro sin enviarla (resuelta ahí, o no requiere gestión). Lo anota la base (34_simplificar_flujo.sql)."
     }
   },
   "required": [

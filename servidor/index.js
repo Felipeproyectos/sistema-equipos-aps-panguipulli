@@ -7,9 +7,11 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { bodyLimit } from 'hono/body-limit';
 import { handlers } from './funciones/index.js';
 import { CABECERA_TAREA } from './base44compat.js';
 import { programarTareas, ejecutarAhora, nombresDeTareas } from './tareas.js';
+import { crearTope } from './compartido/pautaPublica.js';
 
 const app = new Hono();
 
@@ -69,8 +71,48 @@ app.post('/webhooks/:nombre', async (c) => {
 // notificarSolicitudMonitor, lo mismo: avisa al Monitor y a los centros.
 const SOLO_WEBHOOK = new Set(['registrarHistorial', 'notificarSolicitudRepuesto', 'notificarSolicitudMonitor']);
 
+// ── Barreras de lo que entra sin sesión ────────────────────────────────────
+// Las pautas se llenan desde un enlace público, sin cuenta. Antes de tocar la
+// base, cada dirección de red tiene un tope de envíos (holgado para un centro
+// entero que sale por la misma dirección, estrecho para un programa). Lo que
+// pasa de acá todavía enfrenta los topes por equipo y el freno general de
+// src/lib/pautaPublica.js.
+const RECIBEN_SIN_SESION = new Set(['guardarInspeccionPendiente', 'subirPautaCabina']);
+const topePorRed = crearTope();
+
+// La dirección de quien llama. Railway pone delante un proxy que la entrega en
+// x-real-ip y la agrega al final de x-forwarded-for; lo que venga antes en esa
+// cadena lo escribió quien llama y no se cree. Las direcciones internas (las
+// de los propios proxies) se saltan. Si no se puede saber, devuelve '' y ese
+// envío no cuenta para el tope por red: es preferible eso a que todos los
+// centros compartan un mismo contador y se bloqueen entre sí. Igual lo frenan
+// los topes por equipo y el freno general.
+const ES_INTERNA = /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|::1$|f[cd]|fe80:)/i;
+function direccionDeRed(c) {
+  const limpia = (d) => String(d || '').trim().replace(/^::ffff:/i, '');
+  const candidatas = [
+    c.req.header('x-real-ip'),
+    ...(c.req.header('x-forwarded-for') || '').split(',').reverse(),
+    c.env?.incoming?.socket?.remoteAddress,
+  ].map(limpia).filter(Boolean);
+  return candidatas.find((d) => !ES_INTERNA.test(d)) || '';
+}
+
+// Ningún cuerpo legítimo pasa de esto: lo más pesado es la Pauta de Cabina,
+// hasta 20 MB de archivos que en base64 son unos 27.
+app.use('/functions/*', bodyLimit({
+  maxSize: 30 * 1024 * 1024,
+  onError: (c) => c.json({ error: 'El envío es demasiado grande' }, 413),
+}));
+
 app.all('/functions/:nombre', async (c) => {
   const nombre = c.req.param('nombre');
+  const origen = c.req.method === 'POST' && RECIBEN_SIN_SESION.has(nombre) ? direccionDeRed(c) : '';
+  if (origen && !topePorRed.permitir(origen)) {
+    console.warn(`[tope] ${nombre}: demasiados envíos desde ${origen}`);
+    c.header('Retry-After', '600');
+    return c.json({ error: 'Se enviaron demasiadas pautas desde esta conexión. Espera unos minutos y vuelve a intentarlo.' }, 429);
+  }
   const fn = SOLO_WEBHOOK.has(nombre) ? null : handlers[nombre];
   if (!fn) return c.json({ error: `Funcion no encontrada: ${nombre}` }, 404);
   try {

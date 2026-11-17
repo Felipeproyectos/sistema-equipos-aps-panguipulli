@@ -7,8 +7,9 @@ import { esSolicitudDeFlota } from "@/lib/panelFlota";
 import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
 import { mensajeDeError } from "@/lib/mensajesDeError";
 import FichaSolicitud, { EstadoBadge, PrioridadBadge, conDatosDelEquipo } from "@/components/solicitudes/FichaSolicitud";
+import AccionConTexto from "@/components/solicitudes/AccionConTexto";
 import {
-  CATEGORIAS, ESTADOS_CERRADOS, GRUPOS_INFORME, accionesPara, cambiosDeAccion, filtrarParaInforme, ordenarBandeja, rotulo,
+  CATEGORIAS, ESTADOS_CERRADOS, GRUPOS_INFORME, ACCIONES_DEL_MONITOR, accionesPara, cambiosDeAccion, filtrarParaInforme, ordenarBandeja, rotulo,
 } from "@/lib/solicitudesMonitor";
 import { generarPDFSolicitudesMonitor } from "@/utils/generarPDFSolicitudesMonitor";
 import { useToast } from "@/components/ui/use-toast";
@@ -65,10 +66,12 @@ export default function SolicitudesMonitor() {
 
   const porId = useMemo(() => new Map(equipos.map(e => [e.id, e])), [equipos]);
 
-  // Solo lo que le llegó: lo enviado alguna vez por un centro, nunca vehículos.
+  // Solo lo que le llegó: lo enviado alguna vez por un centro, nunca vehículos,
+  // ni lo que un centro cerró por su cuenta sin enviarlo.
   const delMonitor = useMemo(() => solicitudes.filter(s =>
     !esSolicitudDeFlota(s, porId.get(s.equipo_id))
-    && (s.fecha_derivacion || ["derivada", "en_proceso", "devuelta", "rechazada"].includes(s.estado))),
+    && (s.fecha_derivacion || ["derivada", "en_proceso", "devuelta"].includes(s.estado)
+      || (s.estado === "rechazada" && s.cerrada_en !== "centro"))),
   [solicitudes, porId]);
 
   const centros = useMemo(() => [...new Set(delMonitor.map(s => s.centro).filter(Boolean))].sort(), [delMonitor]);
@@ -207,7 +210,8 @@ export default function SolicitudesMonitor() {
               const eq = porId.get(s.equipo_id);
               const c = conDatosDelEquipo(s, eq);
               const expandida = abierta === s.id;
-              const acciones = accionesPara(role, s);
+              // Acá solo lo del Monitor; completar y reenviar es de la bandeja del centro.
+              const acciones = accionesPara(role, s).filter(a => ACCIONES_DEL_MONITOR.includes(a.clave));
               return (
                 <div key={s.id} className="bg-white rounded-2xl border" style={{ ...sombra, borderColor: s._atrasada ? "#fecaca" : "#f1f5f9" }}>
                   <button type="button" onClick={() => setAbierta(expandida ? null : s.id)} aria-expanded={expandida}
@@ -215,7 +219,7 @@ export default function SolicitudesMonitor() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <span className="text-xs font-bold text-slate-400">{s.numero_solicitud || "Sin N°"}</span>
-                        <EstadoBadge estado={s.estado} />
+                        <EstadoBadge solicitud={s} />
                         <PrioridadBadge prioridad={s.prioridad} />
                         <span className="text-xs font-semibold text-slate-600">{rotulo(CATEGORIAS, s.categoria) || "Sin tipo"}</span>
                         {s.operatividad === "fuera_de_servicio" && (
@@ -286,50 +290,11 @@ export default function SolicitudesMonitor() {
         <AccionConTexto
           {...accion}
           ocupado={ocupado === accion.solicitud.id}
+          pie="Le llega por correo a quien la envió y a quien la pidió."
           onCerrar={() => setAccion(null)}
           onConfirmar={(nota) => aplicar(accion.solicitud, accion.accion, nota)}
         />
       )}
-    </div>
-  );
-}
-
-function AccionConTexto({ solicitud, accion, ocupado, onCerrar, onConfirmar }) {
-  const [nota, setNota] = useState("");
-  const [aviso, setAviso] = useState("");
-  const confirmar = async () => {
-    if (nota.trim().length < 10) {
-      setAviso("Escribe al menos 10 caracteres: el centro lo va a leer.");
-      return;
-    }
-    setAviso("");
-    await onConfirmar(nota);
-  };
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white sm:rounded-3xl rounded-t-3xl shadow-2xl w-full max-w-md">
-        <div className="px-6 pt-6 pb-3 border-b border-slate-100 flex items-center justify-between">
-          <div className="min-w-0">
-            <h2 className="text-lg font-bold text-slate-900">{accion.etiqueta}</h2>
-            <p className="text-xs text-slate-500 truncate">{solicitud.numero_solicitud} · {solicitud.centro}</p>
-          </div>
-          <button type="button" onClick={onCerrar} aria-label="Cerrar"><X className="w-5 h-5 text-slate-400" /></button>
-        </div>
-        <div className="px-6 py-5 space-y-3">
-          <label className="text-xs font-semibold text-slate-600 block">{accion.campoTexto} *</label>
-          <textarea rows={5} value={nota} onChange={e => setNota(e.target.value)} maxLength={4000} autoFocus
-            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-          <p className="text-[11px] text-slate-400">Le llega por correo a quien la envió y a quien la pidió.</p>
-          {aviso && <p className="text-xs text-red-600">{aviso}</p>}
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onCerrar} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-slate-600 border border-slate-200">Cancelar</button>
-            <button type="button" onClick={confirmar} disabled={ocupado}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#4F46E5" }}>
-              {ocupado && <Loader2 className="w-4 h-4 animate-spin" />} Confirmar
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

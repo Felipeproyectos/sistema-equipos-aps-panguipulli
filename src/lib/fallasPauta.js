@@ -15,13 +15,19 @@
 // Lo usan Revisión Bitácora y el servidor (aprobarInspeccion.js, vía la copia
 // de servidor/compartido/). `node src/lib/fallasPauta.js` corre el autotest.
 //
-// Qué pasa con las fallas al aprobar
-// ──────────────────────────────────
-// Antes se abría una OT directo en la fila del taller. Ahora se abre una
-// SOLICITUD, y la decide quien corresponde: Movilización en «Solicitudes al
-// Taller» si es un vehículo (la deriva al taller o la cierra), Salud en
-// «Solicitudes» si es un equipo. Si el equipo ya tiene una solicitud de pauta
-// sin revisar, la falla nueva se suma a esa en vez de abrir otra.
+// Qué pasa con una pauta al llegar
+// ────────────────────────────────
+// Sin novedades (ningún ítem malo y nada escrito a mano: `sinNovedades`) se
+// registra sola en el historial del equipo: no espera a nadie. Con novedades
+// queda para el Encargado en Revisión Bitácora, que decide en la misma
+// tarjeta (DECISIONES): enviarla al Monitor Corporativo, dejarla como
+// resuelta en el centro, o registrarla sin gestión.
+//
+// Lo de los vehículos no lo decide Salud: abre una SOLICITUD para
+// Movilización en «Solicitudes al Taller» (la deriva al taller o la cierra).
+// Si el equipo ya tiene una solicitud de pauta abierta del mismo lado —por
+// enviar, en el Monitor o en el taller—, la falla nueva se suma a esa en vez
+// de abrir otra (`solicitudAbiertaDePauta`).
 //
 // La ambulancia se parte en dos: la CABINA SANITARIA (equipos médicos,
 // oxígeno, camilla, botiquín, limpieza y desechos clínicos) es 100% de
@@ -140,6 +146,55 @@ export function pautaConFallas(insp, datos) {
   return /Incorrectos:|Fallas[^:|]*:|Daños/.test(obs) || fallasDeInspeccion(datos).length > 0;
 }
 
+const texto = (v) => String(v ?? "").trim();
+
+/** ¿Trae algún ítem respondido, del formulario que sea? */
+export function tieneItems(datos) {
+  return BLOQUES_PAUTA.some(b => {
+    const o = datos?.[b];
+    return o && typeof o === "object" && Object.values(o).some(v => estadoDe(v));
+  });
+}
+
+/**
+ * ¿La pauta no trae nada que alguien tenga que mirar? Sin ítems malos, sin
+ * daños y sin nada escrito a mano. Las que se llenan sin ítems (un resultado
+ * general, la Pauta de Cabina con sus archivos) siempre las mira una persona;
+ * el Turno Chofer solo si el chofer escribió algo.
+ */
+export function sinNovedades(insp, datos) {
+  if (insp?.tipo_formulario === "pauta_cabina") return false;
+  if (pautaConFallas(insp, datos)) return false;
+  if (texto(datos?.descripcion) || texto(datos?.problemasDetectados)) return false;
+  if (tieneItems(datos)) return true;
+  const obs = texto(insp?.observaciones);
+  return insp?.tipo_formulario === "turno_chofer" && (!obs || /^KM Inicial: \d+$/i.test(obs));
+}
+
+// ── Lo que el Encargado decide sobre una pauta con fallas de Calidad ────
+export const DECISIONES = [
+  { value: "enviar_monitor", label: "Enviar al Monitor Corporativo", ayuda: "Necesita gestión de la Corporación: reparación, mantención o compra." },
+  { value: "resuelto_centro", label: "Resuelto en el centro", ayuda: "Ya se solucionó acá. Queda anotado en el historial del equipo." },
+  { value: "sin_gestion", label: "No requiere gestión", ayuda: "Observación menor o ya conocida. Queda anotada, sin solicitud." },
+];
+export const NOTA_MINIMA = 10;
+
+const ESTADOS_ABIERTOS = ["pendiente", "derivada", "en_proceso", "devuelta"];
+
+/**
+ * La solicitud de pauta que este equipo ya tiene abierta del mismo lado
+ * (cabina sanitaria / resto), en el estado que esté. La falla que se repite
+ * se suma a esa: una solicitud nueva cada día por la misma falla solo hace
+ * ruido a quien ya la está gestionando.
+ */
+export function solicitudAbiertaDePauta(solicitudes = [], ambito) {
+  const mismoLado = (x) => (ambito === AMBITO_CABINA ? x.ambito === AMBITO_CABINA : x.ambito !== AMBITO_CABINA);
+  const peso = (x) => ESTADOS_ABIERTOS.indexOf(x.estado || "pendiente");
+  return solicitudes
+    .filter(x => x.origen === ORIGEN_PAUTA && mismoLado(x) && peso(x) >= 0)
+    .sort((a, b) => peso(a) - peso(b))[0] || null;
+}
+
 /** ¿Trae ítems con los que mostrar la pauta? */
 export function tieneChecklistPlano(datos) {
   const conAlgo = (o) => o && typeof o === "object" && Object.values(o).some(v => estadoDe(v));
@@ -189,6 +244,28 @@ export function _selfCheck() {
   debe(ss.cabina.map(f => f.item).join() === "Camilla,Oxígeno" && ss.vehiculo.map(f => f.item).join() === "Baliza", "semanal: camilla y oxígeno son de la cabina");
   debe(textoSolicitudDePauta({ insp: { tipo_formulario: "inspeccion_diaria", fecha: "2026-10-13" }, datos: diaria, fallas: sd.cabina })
     .split("\n").filter(l => l.startsWith("- ")).length === 3, "el texto lleva solo las fallas que se le pasan");
+
+  debe(sinNovedades({ tipo_formulario: "inspeccion_semanal", observaciones: "Sin observaciones" }, { checklist: { a: "ok", b: "na" } }), "todo ok y nada escrito: sin novedades");
+  debe(!sinNovedades({ tipo_formulario: "inspeccion_semanal", observaciones: "Sin observaciones" }, dea), "un ítem malo es novedad");
+  debe(!sinNovedades({ tipo_formulario: "inspeccion_semanal" }, { checklist: { a: "ok" }, descripcion: " pantalla rayada " }), "lo escrito a mano es novedad");
+  debe(!sinNovedades({ tipo_formulario: "inspeccion_diaria" }, { exterior: { a: { estado: "correcto" } }, problemasDetectados: "ruido" }), "problemas detectados es novedad");
+  debe(!sinNovedades({ tipo_formulario: "inspeccion_semanal", observaciones: "Resultado: aprobado." }, {}), "sin ítems la mira una persona");
+  debe(!sinNovedades({ tipo_formulario: "pauta_cabina" }, { checklist: { a: "ok" } }), "la Pauta de Cabina la mira una persona");
+  debe(sinNovedades({ tipo_formulario: "turno_chofer", observaciones: "KM Inicial: 120500" }, {}), "turno sin comentario: sin novedades");
+  debe(!sinNovedades({ tipo_formulario: "turno_chofer", observaciones: "frenos largos" }, {}), "turno con comentario: novedad");
+  debe(!sinNovedades({ tipo_formulario: "inspeccion_semanal", observaciones: "[LUCES] Fallas: baliza" }, {}), "pauta antigua con texto de fallas");
+
+  const sols = [
+    { id: "1", origen: ORIGEN_PAUTA, estado: "finalizada" },
+    { id: "2", origen: ORIGEN_PAUTA, estado: "derivada" },
+    { id: "3", origen: ORIGEN_PAUTA, estado: "pendiente", ambito: AMBITO_CABINA },
+    { id: "4", estado: "pendiente" },
+    { id: "5", origen: ORIGEN_PAUTA, estado: "en_proceso", ambito: AMBITO_VEHICULO },
+  ];
+  debe(solicitudAbiertaDePauta(sols, undefined)?.id === "2", "la que está en el Monitor cuenta como abierta");
+  debe(solicitudAbiertaDePauta(sols, AMBITO_CABINA)?.id === "3", "la cabina tiene la suya");
+  debe(solicitudAbiertaDePauta([sols[0], sols[3]], undefined) === null, "cerrada o manual: no hay dónde sumar");
+  debe(solicitudAbiertaDePauta([sols[4], { id: "6", origen: ORIGEN_PAUTA }], AMBITO_VEHICULO)?.id === "6", "sin estado es pendiente, y va primero");
 
   if (fallos.length) { console.error("FALLOS:\n  " + fallos.join("\n  ")); return false; }
   console.log("fallasPauta: autotest ok");

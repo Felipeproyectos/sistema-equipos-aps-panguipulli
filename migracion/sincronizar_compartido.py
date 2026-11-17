@@ -29,8 +29,14 @@ DESTINO = os.path.join(RAIZ, "servidor", "compartido")
 # fallas que muestra Revisión Bitácora.
 # prestamoEquipo.js lo usan las funciones que reparten equipos y pautas por
 # centro: una ambulancia prestada cuenta también en el centro que la tiene.
+# solicitudesMonitor.js lo usa aprobarInspeccion.js: la solicitud que sale de
+# una pauta hacia el Monitor lleva los mismos campos que la del formulario.
+# pautaPublica.js lo usan guardarInspeccionPendiente.js e index.js: las
+# barreras de la recepción pública de pautas.
+# alertas.js lo usan generarAlertasAutomaticas.js y contadoresMenu.js: qué
+# alerta es de qué área y cuáles se cierran solas.
 ARCHIVOS = ["agendaTaller.js", "calendarioFlota.js", "panelFlota.js", "contadoresMenu.js", "turnoFlota.js",
-            "fallasPauta.js", "prestamoEquipo.js"]
+            "fallasPauta.js", "prestamoEquipo.js", "solicitudesMonitor.js", "pautaPublica.js", "alertas.js"]
 
 CABECERA = ("// Copia de src/lib/{nombre}, generada por migracion/sincronizar_compartido.py.\n"
             "// No editar a mano: se edita el original y se vuelve a correr el script.\n\n")

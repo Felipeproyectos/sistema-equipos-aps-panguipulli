@@ -68,8 +68,11 @@ export const NAV_ITEMS = [
   { label: "Equipos", page: "Equipos2", path: "/Equipos2", icon: Monitor,
     roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.ENCARGADO_SALUD, ROLES.ENCARGADO_COMPRAS_SALUD, ROLES.USER] },
 
+  // Cada área ve las suyas (src/lib/alertas.js): Calidad las de los equipos
+  // médicos; Movilización las de vehículos, licencias y préstamos, que antes
+  // solo le aparecían a Calidad.
   { label: "Alertas", page: "AlertasV2", path: "/AlertasV2", icon: Bell,
-    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.ENCARGADO_SALUD, ROLES.ENCARGADO_COMPRAS_SALUD, ROLES.USER] },
+    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.ENCARGADO_SALUD, ROLES.ENCARGADO_COMPRAS_SALUD, ROLES.USER, ROLES.ENCARGADO_MOVILIZACION] },
 
   { label: "Solicitudes", page: "SolicitudesV2", path: "/SolicitudesV2", icon: ClipboardList,
     roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.ENCARGADO_SALUD, ROLES.ENCARGADO_COMPRAS_SALUD, ROLES.USER] },
@@ -124,7 +127,7 @@ const ROLE_ORDER = {
   [ROLES.MONITOR_CORPORATIVO]: ["MonitorCorporativo", "SolicitudesMonitor"],
   // En el orden en que se usa: lo de hoy, programar, la flota, los choferes,
   // la bitácora, y al final la bandeja del taller.
-  [ROLES.ENCARGADO_MOVILIZACION]: ["PanelFlota", "Calendario", "Flota", "Choferes", "BitacoraFlota", "Movilizacion"],
+  [ROLES.ENCARGADO_MOVILIZACION]: ["PanelFlota", "Calendario", "Flota", "Choferes", "BitacoraFlota", "Movilizacion", "AlertasV2"],
   // "Mi turno" primero: es lo que hace todos los dias, y si la licencia no
   // esta vigente lo dice ahi mismo y lo lleva a "Mi licencia".
   [ROLES.CHOFER]: ["MiTurno", "MiBitacora", "MiLicencia"],

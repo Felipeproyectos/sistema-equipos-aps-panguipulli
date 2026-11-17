@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { ClipboardList, Plus, Search, ChevronDown, Truck, Send } from "lucide-react";
+import { ClipboardList, Plus, Search, ChevronDown, Truck, Send, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { getEffectiveNavRole } from "@/lib/roleSimulator";
 import { puedeEliminar } from "@/lib/roles";
@@ -10,15 +10,25 @@ import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
 import SeguimientoTaller from "@/components/salud/SeguimientoTaller";
 import FichaSolicitud, { EstadoBadge, PrioridadBadge, conDatosDelEquipo } from "@/components/solicitudes/FichaSolicitud";
 import SolicitudFormDetallado from "@/components/solicitudes/SolicitudFormDetallado";
-import { CATEGORIAS, ESTADOS_CERRADOS, ESTADOS_EN_MONITOR, accionesPara, rotulo } from "@/lib/solicitudesMonitor";
+import AccionConTexto from "@/components/solicitudes/AccionConTexto";
+import {
+  CATEGORIAS, ESTADOS_CERRADOS, ESTADOS_EN_MONITOR, ACCIONES_DEL_CENTRO, accionesPara, cambiosDeAccion, puedeEnviarAlMonitor, rotulo,
+} from "@/lib/solicitudesMonitor";
+import { centrosDe } from "@/lib/prestamoEquipo";
+import { useToast } from "@/components/ui/use-toast";
 
 // Las solicitudes del centro.
 //
 // Las de equipos vitales las resuelve el Monitor Corporativo: acá el Encargado
 // de Salud las completa con todo el detalle y se las envía, y ve en qué va
 // cada una. Si el Monitor la devuelve, vuelve a esta bandeja para corregirla.
+// Lo que no hace falta enviar lo cierra acá mismo —«resuelto en el centro» o
+// «no requiere gestión»—, con el motivo por escrito.
 // Las de vehículos siguen yendo a Movilización y al Taller (pestaña Vehículos).
 // El recorrido está en src/lib/solicitudesMonitor.js.
+//
+// Las pautas con fallas ya no pasan por «Por enviar»: el Encargado decide al
+// revisarlas en Revisión Bitácora y la solicitud nace enviada.
 
 // "Gestiona" (ve todas): Base del Sistema, Administrador, Encargado Salud y
 // Encargado Compras Salud. El Usuario ve y edita solo las suyas.
@@ -52,6 +62,9 @@ export default function SolicitudesV2() {
   const [pestana, setPestana] = useState(null);
   const [busqueda, setBusqueda] = useState("");
   const [abierta, setAbierta] = useState(null);
+  const [accion, setAccion] = useState(null);
+  const [ocupado, setOcupado] = useState(null);
+  const { toast } = useToast();
 
   const cargar = useCallback(() => Promise.all([
     base44.entities.Solicitud.list("-created_date", 500),
@@ -61,15 +74,24 @@ export default function SolicitudesV2() {
     setSolicitudes(sol);
     setEquipos(eq);
     setOrdenes(ots);
-  }).catch(() => {}).finally(() => setLoading(false)), []);
+    return sol;
+  }).catch(() => null).finally(() => setLoading(false)), []);
 
   useEffect(() => { cargar(); }, [cargar]);
 
   const porId = useMemo(() => new Map(equipos.map(e => [e.id, e])), [equipos]);
   const veTodas = ROLES_VEN_TODAS.includes(role);
-  const visibles = useMemo(
-    () => (veTodas ? solicitudes : solicitudes.filter(s => s.usuario_email === user?.email)),
-    [solicitudes, veTodas, user?.email]);
+  // El Encargado de Salud ve las de sus centros, igual que en Revisión
+  // Bitácora. Sin centro asignado ve todas, para que no se quede sin bandeja.
+  const misCentros = useMemo(() => (role === "encargado_salud" ? centrosDe(user) : []), [role, user]);
+  const visibles = useMemo(() => {
+    if (!veTodas) return solicitudes.filter(s => s.usuario_email === user?.email);
+    if (!misCentros.length) return solicitudes;
+    return solicitudes.filter(s => {
+      const centro = s.centro || porId.get(s.equipo_id)?.centro_principal || "";
+      return !centro || misCentros.includes(centro);
+    });
+  }, [solicitudes, veTodas, user?.email, misCentros, porId]);
   const esFlota = useCallback((s) => esSolicitudDeFlota(s, porId.get(s.equipo_id)), [porId]);
   const cuenta = (clave) => visibles.filter(s => PESTANAS.find(p => p.clave === clave).filtro(s, esFlota(s))).length;
 
@@ -99,10 +121,31 @@ export default function SolicitudesV2() {
     if (!confirm(pregunta)) return;
     try {
       await base44.entities.Solicitud.delete(sol.id);
-      setSolicitudes(prev => prev.filter(s => s.id !== sol.id));
+      // Se vuelve a leer en vez de quitarla de la lista a mano: si la base no
+      // dejó borrarla, no responde con error —simplemente no borra—, y antes
+      // la solicitud desaparecía de la pantalla para volver al recargar.
+      const quedan = await cargar();
+      if (quedan?.some(s => s.id === sol.id)) {
+        toast({ title: "No se pudo eliminar", description: "Tu perfil no puede eliminar esta solicitud.", variant: "destructive" });
+      }
       avisarCambioEnPendientes();
     } catch {
       // El motivo ya lo mostró base44Client.
+    }
+  };
+
+  // Cerrar en el centro: resuelta acá, o no requiere gestión (con el motivo).
+  const aplicar = async (sol, acc, nota) => {
+    setOcupado(sol.id);
+    try {
+      await base44.entities.Solicitud.update(sol.id, cambiosDeAccion(acc, sol, user, nota));
+      setAccion(null);
+      await cargar();
+      avisarCambioEnPendientes();
+    } catch {
+      // El motivo ya lo mostró base44Client.
+    } finally {
+      setOcupado(null);
     }
   };
 
@@ -174,9 +217,9 @@ export default function SolicitudesV2() {
             const flota = esFlota(sol);
             const c = conDatosDelEquipo(sol, equipo);
             const expandida = abierta === sol.id;
-            // Acá solo lo del centro: completar y enviar. Lo del Monitor se hace
-            // en su bandeja (Solicitudes de Centros).
-            const acciones = accionesPara(role, sol, { esFlota: flota }).filter(a => a.clave === "enviar");
+            // Acá solo lo del centro: enviar al Monitor o cerrarla acá. Lo del
+            // Monitor se hace en su bandeja (Solicitudes de Centros).
+            const acciones = accionesPara(role, sol, { esFlota: flota }).filter(a => ACCIONES_DEL_CENTRO.includes(a.clave));
             const propiaPendiente = sol.usuario_email === user?.email && (sol.estado || "pendiente") === "pendiente";
             const fc = ESTADO_FLOTA[sol.estado] || ESTADO_FLOTA.pendiente;
             return (
@@ -188,7 +231,7 @@ export default function SolicitudesV2() {
                       {sol.numero_solicitud && <span className="text-xs font-bold text-slate-400">{sol.numero_solicitud}</span>}
                       {flota
                         ? <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: fc.color, background: fc.bg }}><Truck className="w-3 h-3 inline mr-1" />{fc.label}</span>
-                        : <EstadoBadge estado={sol.estado} />}
+                        : <EstadoBadge solicitud={sol} />}
                       <PrioridadBadge prioridad={sol.prioridad} />
                       <span className="text-xs text-slate-500">{rotulo(CATEGORIAS, sol.categoria) || rotuloOrigenSolicitud(sol)}</span>
                     </div>
@@ -214,13 +257,21 @@ export default function SolicitudesV2() {
 
                 {(acciones.length > 0 || propiaPendiente || puedeEliminar(role, "solicitud")) && (
                   <div className="px-5 pb-4 flex flex-wrap gap-2">
-                    {acciones.map(a => (
+                    {acciones.map(a => (a.clave === "enviar" ? (
                       <button key={a.clave} type="button" onClick={() => setFormulario({ inicial: sol })}
                         className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white"
                         style={{ background: "linear-gradient(135deg, #4F46E5, #312E81)" }}>
                         <Send className="w-3.5 h-3.5" /> {a.etiqueta}
                       </button>
-                    ))}
+                    ) : (
+                      <button key={a.clave} type="button" disabled={ocupado === sol.id} onClick={() => setAccion({ solicitud: sol, accion: a })}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border disabled:opacity-60"
+                        style={a.clave === "cerrar_centro"
+                          ? { background: "#f0fdf4", color: "#15803d", borderColor: "#bbf7d0" }
+                          : { background: "white", color: "#475569", borderColor: "#e2e8f0" }}>
+                        {a.clave === "cerrar_centro" && <CheckCircle2 className="w-3.5 h-3.5" />} {a.etiqueta}
+                      </button>
+                    )))}
                     {/* Quien la pidió completa su detalle mientras su Encargado no la envíe. */}
                     {propiaPendiente && !acciones.length && !flota && (
                       <button type="button" onClick={() => setFormulario({ inicial: sol })}
@@ -228,8 +279,9 @@ export default function SolicitudesV2() {
                         Editar detalle
                       </button>
                     )}
-                    {/* El propio solicitante puede cancelar mientras siga "pendiente" */}
-                    {propiaPendiente && (
+                    {/* El propio solicitante puede cancelar mientras siga "pendiente".
+                        El Encargado no la borra: la cierra con el motivo. */}
+                    {propiaPendiente && !puedeEnviarAlMonitor(role) && (
                       <button type="button" onClick={() => borrar(sol, "¿Cancelar esta solicitud?")}
                         className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50">
                         Cancelar
@@ -237,7 +289,7 @@ export default function SolicitudesV2() {
                     )}
                     {/* Borrar cualquiera (policy `solicitud_delete`). No se duplica
                         en las que ya ofrecen "Cancelar". */}
-                    {puedeEliminar(role, "solicitud") && !propiaPendiente && (
+                    {puedeEliminar(role, "solicitud") && (
                       <button type="button"
                         onClick={() => borrar(sol, `¿Eliminar la solicitud ${sol.numero_solicitud || ""} de ${sol.usuario_nombre || sol.usuario_email}? No se puede deshacer.`)}
                         className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50">
@@ -251,6 +303,17 @@ export default function SolicitudesV2() {
           })}
         </div>
       </div>
+
+      {accion && (
+        <AccionConTexto
+          {...accion}
+          color="#1565c0"
+          ocupado={ocupado === accion.solicitud.id}
+          pie="Queda en el recorrido de la solicitud, a tu nombre. No se envía al Monitor Corporativo."
+          onCerrar={() => setAccion(null)}
+          onConfirmar={(nota) => aplicar(accion.solicitud, accion.accion, nota)}
+        />
+      )}
 
       {formulario && (
         <SolicitudFormDetallado

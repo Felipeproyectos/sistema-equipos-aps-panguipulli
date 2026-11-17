@@ -1,5 +1,6 @@
 import { createClientFromRequest } from '#compat';
 import { prestamoVigente } from '../compartido/prestamoEquipo.js';
+import { decidirRecepcion } from '../compartido/pautaPublica.js';
 
 // Recibe la Pauta de Cabina de una ambulancia desde la pagina publica de
 // pautas (o desde la ficha del vehiculo): los archivos que la persona subio
@@ -73,6 +74,17 @@ export default async function (req) {
     let equipo = null;
     try { equipo = await base44.asServiceRole.entities.Equipo.get(datos.equipo_id); } catch { equipo = null; }
     if (!equipo || equipo.tipo !== 'ambulancia') return responder({ error: 'La Pauta de Cabina es solo para ambulancias' }, 400);
+
+    // Las mismas barreras que las demás pautas públicas (src/lib/pautaPublica.js),
+    // antes de guardar ningún archivo: la misma pauta dos veces, demasiadas de
+    // la misma ambulancia en el día, o un volumen que no es de personas.
+    const desde = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const recientes = await base44.asServiceRole.entities.InspeccionPendiente
+      .filter({ created_date: { $gte: desde } }, '-created_date', 400);
+    const recepcion = decidirRecepcion(
+      { equipo_id: equipo.id, tipo_formulario: 'pauta_cabina', fecha, conductor: nombre, momento: null }, recientes);
+    if (recepcion.accion === 'repetida') return responder({ ok: true, id: recepcion.id, repetida: true });
+    if (recepcion.accion === 'rechazar') return responder({ error: recepcion.motivo }, recepcion.status);
 
     // Validar todos antes de guardar el primero: si uno no sirve, no queda
     // nada a medias en el Storage.

@@ -53,7 +53,11 @@ import { generarPDFPautas } from "@/utils/generarPDFPautas";
 import { TIPO_FORMULARIO as TIPO_CABINA, leerPautaCabina, tieneAvisos } from "@/lib/pautaCabina";
 import DetallePautaCabina from "@/components/bitacora/DetallePautaCabina";
 import ChecklistPlano from "@/components/equipos2/ChecklistPlano";
-import { pautaConFallas, tieneChecklistPlano } from "@/lib/fallasPauta";
+import {
+  pautaConFallas, tieneChecklistPlano, fallasDeInspeccion, separarFallas, sinNovedades, DECISIONES, NOTA_MINIMA,
+} from "@/lib/fallasPauta";
+import { CATEGORIAS, PRIORIDADES, OPERATIVIDAD } from "@/lib/solicitudesMonitor";
+import { avisarCambioEnPendientes } from "@/hooks/useContadoresMenu";
 import { TIPOS_VEHICULO } from "@/lib/turnoFlota";
 import { prestamoEnFecha } from "@/lib/prestamoEquipo";
 import { descargarPautasExcel } from "@/utils/exportarPautasExcel";
@@ -75,10 +79,24 @@ const TIPO_EQUIPO_LABEL = {
 };
 
 const ESTADO_CFG = {
-  pendiente: { label: "Pendiente", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A" },
-  aprobado: { label: "Aprobado", color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0" },
-  rechazado: { label: "Rechazado", color: "#DC2626", bg: "#FEF2F2", border: "#FECACA" },
+  pendiente: { label: "Por revisar", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A" },
+  aprobado: { label: "Registrada", color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0" },
+  rechazado: { label: "Anulada", color: "#DC2626", bg: "#FEF2F2", border: "#FECACA" },
 };
+
+// Las pautas sin novedades las registra el servidor al recibirlas
+// (servidor/lib/registroPauta.js): no las revisó una persona.
+const REGISTRO_AUTOMATICO = "Registro automático";
+const esAutomatica = (insp) => insp.revisor_nombre === REGISTRO_AUTOMATICO && !insp.revisor_email;
+const rotuloRevision = (insp) => (insp.estado === "aprobado"
+  ? (esAutomatica(insp) ? "Registrada sola: llegó sin novedades" : `Registrada por ${insp.revisor_nombre || insp.revisor_email}`)
+  : `Anulada por ${insp.revisor_nombre || insp.revisor_email}`);
+
+const leerDatos = (insp) => { try { return insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { return {}; } };
+
+// Lo que se guarda al enviar al Monitor desde la tarjeta: lo demás sale de la
+// ficha del equipo y de la propia pauta (servidor/funciones/aprobarInspeccion.js).
+const COLOR_DECISION = { enviar_monitor: "#4F46E5", resuelto_centro: "#16A34A", sin_gestion: "#475569" };
 
 function imprimirPautas(lista, toast) {
   if (!lista.length) {
@@ -227,15 +245,15 @@ function InspeccionCard({ insp, onActualizar }) {
   const [expanded, setExpanded] = useState(false);
   const [nota, setNota] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [decision, setDecision] = useState("");
+  const [detalle, setDetalle] = useState({ prioridad: "", operatividad: "", categoria: "" });
+  const [aviso, setAviso] = useState("");
 
   const estado = ESTADO_CFG[insp.estado] || ESTADO_CFG.pendiente;
   const esCabina = insp.tipo_formulario === TIPO_CABINA;
   const cabina = esCabina ? leerPautaCabina(insp) : null;
 
-  // Parsear datos_json
-  const datos = (() => {
-    try { return insp.datos_json ? JSON.parse(insp.datos_json) : {}; } catch { return {}; }
-  })();
+  const datos = leerDatos(insp);
   const hasFallas = !esCabina && pautaConFallas(insp, datos);
   // Los monitores, desfibriladores y DEA guardan un checklist plano; las
   // ambulancias, sus bloques (luces, motor…). Ver src/lib/fallasPauta.js.
@@ -254,47 +272,84 @@ function InspeccionCard({ insp, onActualizar }) {
   const esVehiculo = TIPOS_VEHICULO.includes(equipo.tipo)
     || insp.tipo_formulario === "turno_chofer" || insp.tipo_formulario === "inspeccion_diaria";
   const IconoEquipo = esVehiculo ? Car : Stethoscope;
-  const rotuloNota = esCabina ? "Nota para quien la subió (opcional)"
-    : esVehiculo ? "Nota al conductor (opcional)" : "Nota para el responsable (opcional)";
+  // La nota queda en el registro de la pauta (pantalla, PDF y Drive). Antes
+  // decía «Nota al conductor», pero a quien llenó la pauta no le llega nada.
+  const rotuloNota = "Nota de la revisión (opcional)";
   const ejemploNota = esCabina ? "Ej: la foto no se lee, súbela de nuevo..."
     : esVehiculo ? "Ej: KM no coincide con el anterior registro..."
     : "Ej: falta indicar la fecha de vencimiento de los electrodos...";
 
+  // De quién son las fallas (misma regla que el servidor, src/lib/fallasPauta.js):
+  // lo de Calidad —equipos médicos y cabina sanitaria— lo decide el Encargado
+  // acá mismo; lo del vehículo va solo a Movilización.
+  const tipoEquipo = equipo.tipo || "";
+  const esVehiculoReal = TIPOS_VEHICULO.includes(tipoEquipo);
+  const partes = hasFallas && tipoEquipo === "ambulancia" ? separarFallas(fallasDeInspeccion(datos)) : null;
+  const deCalidad = esCabina ? tieneAvisos(cabina)
+    : hasFallas && (partes ? partes.cabina.length > 0 : !!tipoEquipo && !esVehiculoReal);
+  const deMovilizacion = hasFallas && !esCabina
+    && (partes ? partes.vehiculo.length > 0 || !partes.cabina.length : esVehiculoReal || (!tipoEquipo && esVehiculo));
+
   const handleAccion = async (accion) => {
+    setAviso("");
+    const texto = nota.trim();
+    if (accion === "rechazar" && texto.length < NOTA_MINIMA) {
+      setAviso(`Para anular la pauta escribe el motivo (al menos ${NOTA_MINIMA} caracteres).`);
+      return;
+    }
+    if (accion === "aprobar" && deCalidad) {
+      if (!decision) { setAviso("Elige qué se hace con las fallas."); return; }
+      if (decision === "enviar_monitor" && (!detalle.prioridad || !detalle.operatividad)) {
+        setAviso("Para enviarla al Monitor indica la prioridad y en qué estado quedó el equipo.");
+        return;
+      }
+      if (decision === "resuelto_centro" && texto.length < NOTA_MINIMA) {
+        setAviso(`Cuenta cómo se resolvió en el centro (al menos ${NOTA_MINIMA} caracteres).`);
+        return;
+      }
+    }
     setProcessing(true);
     try {
       const res = await base44.functions.invoke("aprobarInspeccion", {
         inspeccion_id: insp.id,
         accion,
-        nota,
+        nota: texto,
+        ...(accion === "aprobar" && deCalidad ? { decision, detalle } : {}),
       });
       const data = res.data || res;
+      if (data?.error) throw new Error(data.error);
       const creadas = data?.solicitudes_creadas?.length ? data.solicitudes_creadas
         : data?.solicitud_creada ? [data.solicitud_creada] : [];
-      if (accion === "aprobar" && esCabina && !creadas.length) {
-        toast({ title: "Pauta de Cabina aprobada", description: "Quedó en el historial de la ambulancia." });
-      } else if (accion === "aprobar" && creadas.length) {
-        // Las fallas no van directo al taller: las decide Movilización (el
-        // vehículo) o Salud (equipos y cabina sanitaria, que después envía al
-        // Monitor Corporativo). Ver src/lib/fallasPauta.js.
-        const aQuien = (c) => (c.area === "movilizacion" ? "Movilización (Solicitudes al Taller)" : "Calidad (Solicitudes)");
-        toast({
-          title: esCabina ? "Pauta de Cabina aprobada con avisos" : "Pauta aprobada con fallas",
-          description: creadas.map(c => (c.nueva
-            ? `Se abrió una solicitud en ${aQuien(c)}.`
-            : `Se sumó a la solicitud que ${aQuien(c)} ya tenía abierta.`)).join(" "),
-        });
-      } else if (accion === "aprobar") {
-        toast({ title: "Inspección aprobada", description: "Sin fallas." });
+      if (accion === "rechazar") {
+        toast({ title: "Pauta anulada", description: texto });
       } else {
-        toast({ title: "Inspección rechazada", description: nota || "Quedó registrada como rechazada." });
+        // Las fallas no van directo al taller: las del vehículo las decide
+        // Movilización; las de Calidad, lo que el Encargado eligió acá.
+        const frases = creadas.map(c => {
+          if (c.repetida) return `La falla se sumó a la solicitud que ${c.area === "movilizacion" ? "Movilización" : "el Monitor Corporativo"} ya tiene abierta.`;
+          if (c.enviada) return "Se envió al Monitor Corporativo.";
+          if (c.area === "movilizacion") return c.nueva ? "Lo del vehículo quedó informado a Movilización." : "Lo del vehículo se sumó a lo que Movilización ya tenía por revisar.";
+          return c.nueva ? "Quedó una solicitud por enviar en Solicitudes." : "Se sumó a la solicitud por enviar que ya había.";
+        });
+        if (deCalidad && decision === "resuelto_centro") frases.unshift("Quedó anotado como resuelto en el centro.");
+        if (deCalidad && decision === "sin_gestion") frases.unshift("Quedó anotada, sin solicitud.");
+        toast({ title: "Pauta registrada en el historial del equipo", description: frases.join(" ") || "Sin fallas." });
       }
+      avisarCambioEnPendientes();
     } catch (err) {
-      toast({ title: "Error", description: err.message || "No se pudo procesar", variant: "destructive" });
+      toast({ title: "No se pudo guardar", description: err.message || "Inténtalo de nuevo.", variant: "destructive" });
     }
     setProcessing(false);
     onActualizar();
   };
+
+  const campo = "w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white";
+  const rotulo = "text-xs font-semibold text-slate-600 block mb-1";
+  const rotuloNotaDecision = !deCalidad ? rotuloNota
+    : decision === "enviar_monitor" ? "Nota para el Monitor Corporativo (opcional)"
+    : decision === "resuelto_centro" ? "Cómo se resolvió en el centro *"
+    : decision === "sin_gestion" ? "Por qué no requiere gestión (opcional)"
+    : "Nota (opcional)";
 
   return (
     <div className="bg-white rounded-2xl overflow-hidden" style={{ border: `1px solid ${estado.border}`, boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
@@ -402,7 +457,7 @@ function InspeccionCard({ insp, onActualizar }) {
                 }}>
                 <User className="w-3 h-3 flex-shrink-0" style={{ color: insp.estado === "aprobado" ? "#16A34A" : "#DC2626" }} />
                 <span className="text-xs font-semibold" style={{ color: insp.estado === "aprobado" ? "#15803D" : "#DC2626" }}>
-                  {insp.estado === "aprobado" ? "Aprobado" : "Rechazado"} por {insp.revisor_nombre || insp.revisor_email}
+                  {rotuloRevision(insp)}
                 </span>
                 {insp.fecha_revision && (
                   <span className="text-xs" style={{ color: insp.estado === "aprobado" ? "#86EFAC" : "#FECACA" }}>
@@ -516,44 +571,109 @@ function InspeccionCard({ insp, onActualizar }) {
           {insp.estado !== "pendiente" && (
             <div className="p-3 rounded-xl text-sm" style={{ background: estado.bg, border: `1px solid ${estado.border}` }}>
               <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: estado.color }}>
-                {insp.estado === "aprobado" ? "✓ Aprobado" : "✗ Rechazado"} por {insp.revisor_nombre || insp.revisor_email}
+                {insp.estado === "aprobado" ? "✓" : "✗"} {rotuloRevision(insp)}
                 {insp.fecha_revision && ` · ${formatFecha(insp.fecha_revision)}`}
               </p>
               {insp.nota_revision && <p className="text-xs" style={{ color: estado.color }}>{insp.nota_revision}</p>}
             </div>
           )}
 
-          {/* Acciones (solo pendientes) */}
+          {/* Qué se hace con la pauta (solo las que esperan revisión) */}
           {insp.estado === "pendiente" && (
             <div className="space-y-3">
+              {deCalidad && (
+                <fieldset className="space-y-2">
+                  <legend className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">
+                    {esCabina ? "¿Qué se hace con los avisos de la cabina?" : "¿Qué se hace con las fallas?"}
+                  </legend>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {DECISIONES.map(d => {
+                      const activa = decision === d.value;
+                      return (
+                        <button key={d.value} type="button" aria-pressed={activa}
+                          onClick={() => { setDecision(d.value); setAviso(""); }}
+                          className="text-left rounded-xl border-2 px-3 py-2.5 transition-all bg-white"
+                          style={{ borderColor: activa ? COLOR_DECISION[d.value] : "#E2E8F0", background: activa ? `${COLOR_DECISION[d.value]}0D` : "white" }}>
+                          <span className="block text-sm font-bold" style={{ color: activa ? COLOR_DECISION[d.value] : "#1E293B" }}>{d.label}</span>
+                          <span className="block text-[11px] text-slate-500 leading-snug mt-0.5">{d.ayuda}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {decision === "enviar_monitor" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-xl p-3" style={{ background: "#EEF2FF", border: "1px solid #C7D2FE" }}>
+                      <div>
+                        <label className={rotulo} htmlFor={`prio-${insp.id}`}>Prioridad *</label>
+                        <select id={`prio-${insp.id}`} className={campo} value={detalle.prioridad}
+                          onChange={e => { setDetalle(x => ({ ...x, prioridad: e.target.value })); setAviso(""); }}>
+                          <option value="">Seleccionar...</option>
+                          {PRIORIDADES.map(o => <option key={o.value} value={o.value}>{o.label} — {o.ayuda}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={rotulo} htmlFor={`oper-${insp.id}`}>Estado del equipo hoy *</label>
+                        <select id={`oper-${insp.id}`} className={campo} value={detalle.operatividad}
+                          onChange={e => { setDetalle(x => ({ ...x, operatividad: e.target.value })); setAviso(""); }}>
+                          <option value="">Seleccionar...</option>
+                          {OPERATIVIDAD.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={rotulo} htmlFor={`cat-${insp.id}`}>Tipo de solicitud</label>
+                        <select id={`cat-${insp.id}`} className={campo} value={detalle.categoria || (esCabina ? "compra_insumo" : "desperfecto_tecnico")}
+                          onChange={e => setDetalle(x => ({ ...x, categoria: e.target.value }))}>
+                          {CATEGORIAS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                      <p className="sm:col-span-3 text-[11px] text-indigo-900">
+                        El equipo, su ubicación, la fecha y el detalle de las fallas salen de la ficha y de esta pauta: no hay que volver a escribirlos.
+                      </p>
+                    </div>
+                  )}
+                </fieldset>
+              )}
+
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">{rotuloNota}</label>
-                <textarea rows={2} placeholder={ejemploNota}
+                <label className={rotulo} htmlFor={`nota-${insp.id}`}>{rotuloNotaDecision}</label>
+                <textarea id={`nota-${insp.id}`} rows={2} placeholder={deCalidad ? "" : ejemploNota} maxLength={2000}
                   value={nota} onChange={e => setNota(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
+                  className={`${campo} resize-none`} />
               </div>
-              <div className="flex gap-2">
+
+              {deMovilizacion && (
+                <p className="text-xs text-slate-500 flex items-start gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
+                  {deCalidad ? "Lo del vehículo" : "Las fallas"} le {deCalidad ? "llega" : "llegan"} a Movilización (Solicitudes al Taller), que decide si va al taller.
+                </p>
+              )}
+              {aviso && <p role="alert" className="text-xs font-semibold text-red-600">{aviso}</p>}
+
+              <div className="flex flex-col-reverse sm:flex-row gap-2">
                 <button
                   onClick={() => handleAccion("rechazar")}
                   disabled={processing}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                  title="La pauta está mal hecha o repetida: no queda en el historial del equipo"
+                  className="sm:w-auto px-4 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
                   style={{ background: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA" }}>
-                  <XCircle className="w-4 h-4" /> Rechazar
+                  <XCircle className="w-4 h-4" /> Anular pauta
                 </button>
                 <button
                   onClick={() => handleAccion("aprobar")}
                   disabled={processing}
                   className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50"
-                  style={{ background: "#16A34A" }}>
-                  <CheckCircle className="w-4 h-4" /> Aprobar y Sincronizar
+                  style={{ background: deCalidad && decision ? COLOR_DECISION[decision] : "#16A34A" }}>
+                  <CheckCircle className="w-4 h-4" />
+                  {!deCalidad ? "Registrar en el historial"
+                    : decision === "enviar_monitor" ? "Registrar y enviar al Monitor"
+                    : decision === "resuelto_centro" ? "Registrar como resuelta en el centro"
+                    : decision === "sin_gestion" ? "Registrar sin gestión"
+                    : "Registrar"}
                 </button>
               </div>
-              {hasFallas && (
-                <p className="text-xs text-slate-500 flex items-start gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
-                  Al aprobarla, las fallas le llegan a {esVehiculo ? "Movilización (Solicitudes al Taller)" : "Salud (Solicitudes)"}, que decide si va al taller.
-                </p>
-              )}
+              <p className="text-[11px] text-slate-400">
+                «Anular» es para una pauta mal hecha o repetida: no queda en el historial del equipo y exige el motivo.
+              </p>
             </div>
           )}
         </div>
@@ -575,6 +695,7 @@ export default function RevisionInspecciones() {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [soloPrestadas, setSoloPrestadas] = useState(false);
+  const [registrando, setRegistrando] = useState(false);
   const { toast } = useToast();
 
   // Antes: list("-created_date", 100) sobre 259 registros. Las inspecciones
@@ -631,6 +752,33 @@ export default function RevisionInspecciones() {
     .filter(i => filtro === "todos" || i.estado === filtro)
     .filter(i => tipoSeleccionado === "todos" || i.tipo_formulario === tipoSeleccionado);
   const pendientes = enAlcance.filter(i => i.estado === "pendiente").length;
+  // Las que quedaron esperando sin traer nada que mirar: las de antes de que
+  // se registraran solas, o las que llegaron con el registro automático en
+  // pausa. Se registran todas de una vez.
+  const sinNovedad = enAlcance.filter(i => i.estado === "pendiente" && sinNovedades(i, leerDatos(i)));
+
+  const registrarSinNovedades = async () => {
+    if (!confirm(`¿Registrar en el historial las ${sinNovedad.length} pautas que no traen novedades?`)) return;
+    setRegistrando(true);
+    let hechas = 0;
+    let fallidas = 0;
+    for (const i of sinNovedad) {
+      try {
+        const res = await base44.functions.invoke("aprobarInspeccion", { inspeccion_id: i.id, accion: "aprobar", nota: "" });
+        if ((res.data || res)?.error) fallidas++; else hechas++;
+      } catch {
+        fallidas++;
+      }
+    }
+    setRegistrando(false);
+    toast({
+      title: `${hechas} ${hechas === 1 ? "pauta registrada" : "pautas registradas"}`,
+      description: fallidas ? `${fallidas} no se pudieron registrar: revísalas una por una.` : "Quedaron en el historial de cada equipo.",
+      ...(fallidas ? { variant: "destructive" } : {}),
+    });
+    avisarCambioEnPendientes();
+    cargar();
+  };
   const cabinasEnVista = enAlcance
     .filter(i => (filtro === "todos" || i.estado === filtro) && i.tipo_formulario === TIPO_CABINA).length;
 
@@ -653,15 +801,29 @@ export default function RevisionInspecciones() {
         {/* Header */}
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold text-slate-900">Revisión de Inspecciones</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Revisión Bitácora</h1>
             {pendientes > 0 && (
               <span className="text-xs font-bold px-2.5 py-1 rounded-full text-white" style={{ background: "#EF4444" }}>
-                {pendientes} pendiente{pendientes > 1 ? "s" : ""}
+                {pendientes} por revisar
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-500">Revisa y aprueba los formularios enviados desde la bitácora pública antes de sincronizarlos al sistema.</p>
+          <p className="text-sm text-slate-500">
+            Acá llegan las pautas que traen novedades: una falla, un daño o algo escrito a mano. Las que llegan sin novedades se registran solas en el historial del equipo y quedan en «Registradas».
+          </p>
         </div>
+
+        {sinNovedad.length > 1 && (
+          <div className="flex flex-wrap items-center gap-3 mb-5 p-3 rounded-2xl" style={{ background: "#F0FDF4", border: "1px solid #BBF7D0" }}>
+            <p className="text-sm text-green-900 flex-1 min-w-[12rem]">
+              <strong>{sinNovedad.length} pautas</strong> esperan revisión pero no traen novedades.
+            </p>
+            <button onClick={registrarSinNovedades} disabled={registrando}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white disabled:opacity-60" style={{ background: "#16A34A" }}>
+              <CheckCircle className="w-4 h-4" /> {registrando ? "Registrando..." : `Registrar las ${sinNovedad.length}`}
+            </button>
+          </div>
+        )}
 
         {/* Reporte diario / semanal: se elige el tipo y se imprime todo junto */}
         <div className="flex flex-wrap items-center gap-2 mb-5 p-3 rounded-2xl bg-white" style={{ border: "1px solid #E2E8F0" }}>
@@ -726,10 +888,10 @@ export default function RevisionInspecciones() {
         {/* Filtros */}
         <div className="flex gap-2 mb-5 flex-wrap">
           {[
-            { value: "pendiente", label: "Pendientes" },
-            { value: "aprobado", label: "Aprobados" },
-            { value: "rechazado", label: "Rechazados" },
-            { value: "todos", label: "Todos" },
+            { value: "pendiente", label: "Por revisar" },
+            { value: "aprobado", label: "Registradas" },
+            { value: "rechazado", label: "Anuladas" },
+            { value: "todos", label: "Todas" },
           ].map(f => (
             <button key={f.value} onClick={() => setFiltro(f.value)}
               className="px-4 py-2 rounded-xl text-sm font-semibold transition-all"
@@ -766,7 +928,7 @@ export default function RevisionInspecciones() {
         ) : centrosAMostrar.length === 0 ? (
           <div className="text-center py-16">
             <ClipboardCheck className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-            <p className="text-slate-400 text-sm">No hay registros {filtro !== "todos" ? `con estado "${filtro}"` : ""}.</p>
+            <p className="text-slate-400 text-sm">{filtro === "pendiente" ? "No hay pautas con novedades por revisar." : "No hay pautas en esta vista."}</p>
           </div>
         ) : (
           <div className="space-y-6">
